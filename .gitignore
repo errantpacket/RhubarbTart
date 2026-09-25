@@ -1,0 +1,8 @@
+cache/
+out/
+vendor/**/*.pkg
+vendor/**/*.cer
+*.part
+__pycache__/
+.ruff_cache/
+.toolchain/

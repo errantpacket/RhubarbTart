@@ -54,6 +54,9 @@ rbt-<id>-<inputs12>-unverified ─▶ smoke-test.sh (throwaway clone) ─▶ tar
 | External proof | `scripts/smoke-test.sh` |
 | Runtime enrollment | `scripts/enroll.sh` |
 | Regression guard | `tools/check.sh` |
+| Clone management CLI | `./rhubarb` → `tools/rhubarb_cli.py` → `tools/rhubarb/cli.py` |
+| Clone records (StrictModes-style store, audit log) | `tools/rhubarb/clones.py` |
+| tart / keychain / SSH ops, per-clone password rotation | `tools/rhubarb/hostops.py` (`ROTATE_SCRIPT`) |
 
 ## Credentials
 
@@ -97,6 +100,17 @@ existed as a hash.
 - Keychain service `RhubarbTart`, account = VM name (and the vanilla name for macOS).
   Enrollment secrets use service `RhubarbTart-enroll`.
 
+## Clones and records
+
+`rhubarb new` clones a verified image (from the profile's committed lock, or `--image`), then
+writes `~/Library/Application Support/RhubarbTart/clones/NAME.json` with the clone's profile,
+family, source image, username, Rosetta flag, `password_account` and enrollments. It then boots
+the clone headless and runs `ROTATE_SCRIPT` over SSH. stdin carries the current and new
+passwords; macOS uses `dscl -passwd`, NixOS writes a new yescrypt hash to
+`/var/lib/rhubarbtart/password.hash` and applies it with `chpasswd -e`, and Kali uses `chpasswd`.
+The script proves the change via `sudo -v`. On success `password_account` becomes the clone's
+name. Every mutating command appends to `events.log`.
+
 ## Testing off-Mac
 
 - **Resolvers:** `uv run tools/resolve.py plan <profile>` (no downloads), then
@@ -118,3 +132,6 @@ existed as a hash.
   `nix-prefetch-url --unpack <url>` followed by `nix hash convert --to sri`.
 - **Shell transports** (for example `enroll.sh`): run the embedded scripts with stub `sudo` and
   tool binaries on PATH, and assert what the stubs received and that temp secrets are gone.
+- **rhubarb CLI:** `tools/test_rhubarb.py` drives the real CLI against stand-in `tart`,
+  `security` and `ssh` programs (`test_cli_lifecycle`), and the rotation script against a
+  simulated guest for all three OS paths (`test_rotation_script`). Both run in `check.sh`.

@@ -40,6 +40,11 @@ present it to the user as a trade-off, not an implementation detail.
    timestamps).
 8. **Secrets for enrollment never touch the repo, a profile or an image.** They go host keychain
    → SSH stdin → 0600 temp file → shred.
+9. **Clone records hold no secrets and are trusted only when safe** (StrictModes-style: 0700
+   dir, 0600 regular file, owned by you, strict schema, name matches file). `rhubarb` acts only
+   on clones it recorded, never on `rbt-…` images, and passwords only move keychain →
+   subprocess stdin. Keep new commands inside those rules, and add a case to `test_records` /
+   `test_cli_lifecycle` for each.
 
 `./tools/check.sh` greps for regressions of most of these. When you add a guarantee, add a
 `check` line for it too, and prove it fires by planting the regression in a *scratch copy* of
@@ -82,7 +87,10 @@ the repo.
    - Resolver changes: `uv run tools/resolve.py plan <profile>` against live upstream, and add
      self-test cases for any crypto or parsing.
    - NixOS changes: the Docker evaluation recipe in `references/architecture.md`.
-   - Guest shell transport changes: simulate with stub commands, as was done for `enroll.sh`.
+   - Guest shell transport changes: simulate with stub commands, as was done for `enroll.sh`
+     and the rotation script (`test_rotation_script`). Stubs must behave like the real tool.
+     For example, `sudo -S` reads the password byte by byte and leaves the rest of stdin for the
+     command it runs.
 5. Report precisely: what you verified (and how) versus what only a real build on the Mac can
    confirm (keystroke timing, provisioning API, installer flows, sshd/launchd/systemd runtime
    state).

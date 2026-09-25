@@ -23,9 +23,9 @@ ok() { echo "  ok    $*"; }
 bad() { echo "  FAIL  $*"; failures=$((failures + 1)); }
 skip() { echo "  SKIP  $*"; skipped=$((skipped + 1)); }
 
-SH_FILES=(tools/bootstrap.sh tools/check.sh scripts/*.sh guest/*/*.sh)
-INV_SH=(tools/bootstrap.sh scripts/*.sh guest/*/*.sh)   # invariant scans skip this file's own patterns
-MACOS_BASH=(tools/bootstrap.sh scripts/*.sh guest/macos/*.sh)   # run by macOS /bin/bash 3.2
+SH_FILES=(rhubarb tools/bootstrap.sh tools/check.sh scripts/*.sh guest/*/*.sh)
+INV_SH=(rhubarb tools/bootstrap.sh scripts/*.sh guest/*/*.sh)   # invariant scans skip this file's own patterns
+MACOS_BASH=(rhubarb tools/bootstrap.sh scripts/*.sh guest/macos/*.sh)   # run by macOS /bin/bash 3.2
 HCL_FILES=(packer/*/*.pkr.hcl)
 
 echo "== syntax & lint"
@@ -48,10 +48,10 @@ if command -v packer >/dev/null; then
 else skip "packer (run tools/bootstrap.sh)"; fi
 
 if command -v uv >/dev/null; then
-  if uv run --quiet --no-project python -m py_compile tools/resolve.py tools/serve_preseed.py tools/rhubarb/*.py
+  if uv run --quiet --no-project python -m py_compile tools/resolve.py tools/rhubarb_cli.py tools/serve_preseed.py tools/rhubarb/*.py
   then ok "python sources compile"; else bad "python syntax"; fi
   if uv run --quiet --no-project python tools/test_rhubarb.py >/dev/null
-  then ok "self-tests (ed25519 RFC 8032, NAR vs Nix, dpkg ordering)"
+  then ok "self-tests (ed25519, NAR, dpkg, clone records, rhubarb CLI, password rotation)"
   else bad "self-tests (run: uv run tools/test_rhubarb.py)"; fi
   if out="$(uv run --quiet --no-project python tools/resolve.py list)" && ! grep -q INVALID <<<"$out"
   then ok "all profiles load ($(wc -l <<<"$out" | tr -d ' '))"; else bad "profile config"; echo "$out"; fi

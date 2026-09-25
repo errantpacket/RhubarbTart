@@ -1,0 +1,17 @@
+{
+  "family": "macos",
+  "description": "macOS 27 Golden Gate (Virtualization.framework provisioning API; needs a macOS 27 host)",
+  "ipsw": {
+    "device": "VirtualMac2,1",
+    "major": 27,
+    "pin_build": null
+  },
+  "setup": "provisioning",
+  "requires_host_major": 27,
+  "packer": "packer/macos/vanilla-27.pkr.hcl",
+  "vm": {
+    "cpu": 4,
+    "memory_gb": 8,
+    "disk_gb": 80
+  }
+}

@@ -2,7 +2,8 @@
 # Prove the hardening of a built image from the OUTSIDE, on a throwaway clone
 # (the image itself is never booted, so it stays exactly as built).
 #
-#   RHUBARB_SSH_ENABLED=1 ./scripts/smoke-test.sh <vm>
+#   RHUBARB_FAMILY=macos|nixos|kali RHUBARB_SSH_ENABLED=1|0 ./scripts/smoke-test.sh <vm>
+#   (scripts/build.sh sets these; RHUBARB_USER and RHUBARB_ROSETTA=true are optional)
 #
 # With SSH enabled, the private key for one of the authorized keys must be
 # available to ssh (agent or default identity).
@@ -14,6 +15,13 @@ source "$(dirname "$0")/env.sh"
 VM="${1:?vm name}"
 USER_NAME="${RHUBARB_USER:-admin}"
 SSH_ENABLED="${RHUBARB_SSH_ENABLED:?set to 1 or 0}"
+FAMILY="${RHUBARB_FAMILY:?set to macos, nixos or kali}"
+RUN_ARGS=(--no-graphics)
+IP_ARGS=(--wait 300)
+if [[ "$FAMILY" != macos ]]; then
+  IP_ARGS+=(--resolver arp)
+  [[ "${RHUBARB_ROSETTA:-false}" == true ]] && RUN_ARGS+=(--rosetta=rosetta)
+fi
 SMOKE="$VM-smoke-$$"
 WORK="$(mktemp -d)"
 log() { echo "[smoke] $*"; }
@@ -28,9 +36,9 @@ cleanup() {
 trap cleanup EXIT
 
 tart clone "$VM" "$SMOKE"
-tart run --no-graphics "$SMOKE" >"$WORK/run.log" 2>&1 &
+tart run "${RUN_ARGS[@]}" "$SMOKE" >"$WORK/run.log" 2>&1 &
 RUN_PID=$!
-IP="$(tart ip --wait 180 "$SMOKE")" || fail "no IP within 180s"
+IP="$(tart ip "${IP_ARGS[@]}" "$SMOKE")" || fail "no IP within 300s"
 log "clone $SMOKE booted at $IP"
 
 port_open() { nc -z -G 3 "$IP" "$1" >/dev/null 2>&1; }
@@ -59,10 +67,11 @@ if [[ "$SSH_ENABLED" == 1 ]]; then
   "${SSH[@]}" true || fail "key login failed (key in agent? RHUBARB_SSH_FROM correct?)"
   log "ok: key login"
 
-  # 3. In-guest posture (no sudo needed; sudo -n must fail: no NOPASSWD).
-  "${SSH[@]}" 'bash -s' <<'EOF' || fail "in-guest posture checks failed"
+  # 3. In-guest posture (no sudo needed; `sudo -n` must fail: no NOPASSWD).
+  #    (`! cmd` never trips set -e, so negative checks use explicit ifs.)
+  if [[ "$FAMILY" == macos ]]; then
+    "${SSH[@]}" 'bash -s' <<'EOF' || fail "in-guest posture checks failed"
 set -e
-# (`! cmd` never trips set -e, so negative checks use explicit ifs)
 if sudo -n true 2>/dev/null; then echo "passwordless sudo works" >&2; exit 1; fi
 if defaults read /Library/Preferences/com.apple.loginwindow autoLoginUser >/dev/null 2>&1; then
   echo "auto-login configured" >&2; exit 1
@@ -72,10 +81,26 @@ spctl --status | grep -qx 'assessments enabled'
 /usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate | grep -q 'State = [12]'
 /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode | grep -Eiq 'stealth mode (is )?(on|enabled)'
 test ! -e /etc/kcpassword
-test -f /Library/RhubarbTart/sources.lock.json
+test -f /Library/RhubarbTart/lock.json
 cat /Library/RhubarbTart/installed.txt
 EOF
-  log "ok: SIP, Gatekeeper, firewall on; no auto-login; no passwordless sudo"
+    log "ok: SIP, Gatekeeper, firewall on; no auto-login; no passwordless sudo"
+  else
+    "${SSH[@]}" "FAMILY=$FAMILY ROSETTA=${RHUBARB_ROSETTA:-false} bash -s" <<'EOF' || fail "in-guest posture checks failed"
+set -e
+if sudo -n true 2>/dev/null; then echo "passwordless sudo works" >&2; exit 1; fi
+if grep -rEqs '^[[:space:]]*autologin-user[[:space:]]*=[[:space:]]*[^[:space:]]' /etc/lightdm; then
+  echo "display-manager auto-login configured" >&2; exit 1
+fi
+if [[ "$FAMILY" == kali ]]; then systemctl is-active --quiet nftables; else systemctl is-active --quiet firewall; fi
+test -s /etc/machine-id                         # regenerated for this clone
+test -s /var/lib/rhubarbtart/installed.txt
+if [[ "$ROSETTA" == true ]]; then test -e /proc/sys/fs/binfmt_misc/rosetta; fi
+[[ "$FAMILY" == nixos ]] && nixos-version
+echo "packages recorded: $(wc -l < /var/lib/rhubarbtart/installed.txt)"
+EOF
+    log "ok: no passwordless sudo, no auto-login, firewall active, fresh machine-id"
+  fi
 else
   sleep 60  # let launchd settle so a closed port means disabled, not "not yet up"
   port_open 22 && fail "SSH reachable but should be disabled"

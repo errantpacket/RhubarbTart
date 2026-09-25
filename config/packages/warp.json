@@ -1,0 +1,27 @@
+{
+  "description": "Cloudflare One Client (WARP)",
+  "variants": {
+    "macos": {
+      "resolver": "warp-mac",
+      "kind": "pkg",
+      "team_id": "68WVV388M8",
+      "app": "Cloudflare WARP.app"
+    },
+    "kali": {
+      "resolver": "apt",
+      "kind": "deb",
+      "repo": "https://pkg.cloudflareclient.com",
+      "suite": "trixie",
+      "component": "main",
+      "package": "cloudflare-warp",
+      "arch": "arm64",
+      "key": "cloudflare-pkg-C068A2B5.asc",
+      "key_fpr": "C068A2B5771775193CBE1F2F6E2DD2174FA1C3BA"
+    },
+    "nixos": {
+      "resolver": "nix",
+      "module": "cloudflare-warp",
+      "unfree": true
+    }
+  }
+}

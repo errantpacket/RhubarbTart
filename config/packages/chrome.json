@@ -1,0 +1,29 @@
+{
+  "description": "Google Chrome",
+  "variants": {
+    "macos": {
+      "resolver": "chrome-mac",
+      "kind": "pkg",
+      "pkg_ref": "com.google.Chrome",
+      "team_id": "EQHXZ8M8AV",
+      "url": "https://dl.google.com/dl/chrome/mac/universal/stable/gcem/GoogleChrome.pkg",
+      "app": "Google Chrome.app"
+    },
+    "kali": {
+      "resolver": "apt",
+      "kind": "deb",
+      "repo": "https://dl.google.com/linux/chrome/deb",
+      "suite": "stable",
+      "component": "main",
+      "package": "google-chrome-stable",
+      "arch": "arm64",
+      "key": "google-linux-EB4C1BFD.asc",
+      "key_fpr": "EB4C1BFD4F042F6DDDCCEC917721F63BD38B4796"
+    },
+    "nixos": {
+      "resolver": "nix",
+      "attr": "google-chrome",
+      "unfree": true
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "family": "nixos",
+  "description": "NixOS 26.05 (aarch64), whole OS pinned to the channel's nixpkgs commit",
+  "nixos": {
+    "channel": "nixos-26.05"
+  },
+  "packer": "packer/linux/nixos.pkr.hcl",
+  "vm": {
+    "cpu": 4,
+    "memory_gb": 8,
+    "disk_gb": 60
+  }
+}

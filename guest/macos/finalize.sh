@@ -104,6 +104,12 @@ rm -rf "$USER_HOME"/Library/Caches/* /Library/Caches/* 2>/dev/null || true
 rm -f "$USER_HOME"/.zsh_history "$USER_HOME"/.bash_history /var/root/.zsh_history
 rm -rf "$USER_HOME"/.zsh_sessions /var/root/.zsh_sessions
 rm -rf /var/db/sudo/ts/* 2>/dev/null || true      # cached sudo credentials from the build
+# VPN identity must be created per clone (scripts/enroll.sh), never baked: WARP keeps its
+# registration/config here (the registration secret itself lives in the keychain, which
+# no build step populates); Tailscale was never started or logged in during the build.
+rm -f "/Library/Application Support/Cloudflare/"{conf.json,conf-active.json,warp.db,settings.json,reg_mdm_orgs.json,consumer-settings.json,mdm.xml} 2>/dev/null || true
+rm -f "/Library/Managed Preferences/com.cloudflare.warp.plist" 2>/dev/null || true
+defaults delete /Library/Preferences/io.tailscale.ipn.macsys AuthKey 2>/dev/null || true
 rm -f /tmp/script_*.sh 2>/dev/null || true        # Packer's uploaded provisioner scripts
 log erase --all >/dev/null 2>&1 || true
 

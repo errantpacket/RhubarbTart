@@ -12,7 +12,7 @@ set -euo pipefail
 source "$(dirname "$0")/env.sh"
 
 VM="${1:?vm name}"; shift
-IP="$(tart ip --wait 60 "$VM")"
+IP="$(tart ip --wait 60 "$VM" 2>/dev/null || tart ip --wait 60 --resolver arp "$VM")"   # arp: Linux guests
 exec ssh \
   -o HostKeyAlias="$VM" \
   -o UserKnownHostsFile="$HOME/.ssh/known_hosts_rhubarbtart" \

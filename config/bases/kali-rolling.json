@@ -1,0 +1,16 @@
+{
+  "family": "kali",
+  "description": "Kali Linux (arm64 installer, GPG-signed SHA256SUMS)",
+  "kali": {
+    "iso_pattern": "kali-linux-[0-9.]+[a-z]?-installer-arm64\\.iso",
+    "pin_version": null,
+    "key": "kali-archive-2025-827C8569.asc",
+    "key_fpr": "827C8569F2518CC677FECA1AED65462EC8D5E4C5"
+  },
+  "packer": "packer/linux/kali.pkr.hcl",
+  "vm": {
+    "cpu": 4,
+    "memory_gb": 8,
+    "disk_gb": 80
+  }
+}

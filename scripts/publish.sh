@@ -1,7 +1,7 @@
 #!/bin/bash
 # DRAFT — push a built VM to an OCI registry and sign it + attach provenance with cosign.
 #
-#   ./scripts/publish.sh rbt-tahoe-25G83-0123456789ab ghcr.io/errantpacket/rhubarb-tahoe
+#   ./scripts/publish.sh rbt-tahoe-research-0123456789ab ghcr.io/errantpacket/rhubarb-tahoe-research
 #
 # Requires: tart, cosign, crane (for digest lookup). Consumers should verify with
 #   cosign verify <ref>@<digest> --certificate-identity ... --certificate-oidc-issuer ...

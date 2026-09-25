@@ -1,0 +1,18 @@
+{
+  "id": "kali-research",
+  "description": "Kali research workstation",
+  "base": "kali-rolling",
+  "packages": [
+    "chrome",
+    "zap",
+    "warp",
+    "tailscale"
+  ],
+  "options": {
+    "desktop": "xfce",
+    "rosetta": true,
+    "kali_metapackages": [
+      "kali-linux-default"
+    ]
+  }
+}

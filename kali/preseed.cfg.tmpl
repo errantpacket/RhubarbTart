@@ -1,0 +1,64 @@
+### RhubarbTart Kali preseed (rendered by scripts/build.sh; never committed rendered).
+# @USER@ / @BOOTSTRAP@ / @PACKAGES@ are substituted per build. The bootstrap password is
+# random and rotated to the keychain-held password before the image is sealed
+# (guest/kali/finalize.sh), so only a dead password ever passes through this file.
+
+d-i debian-installer/locale string en_US.UTF-8
+d-i keyboard-configuration/xkb-keymap select us
+d-i netcfg/choose_interface select auto
+d-i netcfg/get_hostname string rhubarb
+d-i netcfg/get_domain string local
+d-i netcfg/hostname string rhubarb
+
+# Packages come from Kali's archive; apt verifies every index against the Kali archive
+# key. HTTPS for confidentiality; integrity comes from the signatures.
+d-i mirror/country string manual
+d-i mirror/protocol string https
+d-i mirror/https/hostname string http.kali.org
+d-i mirror/https/directory string /kali
+d-i mirror/https/proxy string
+d-i mirror/suite string kali-rolling
+d-i mirror/codename string kali-rolling
+d-i apt-setup/use_mirror boolean true
+d-i apt-setup/disable-cdrom-entries boolean true
+d-i apt-setup/non-free-firmware boolean true
+d-i apt-setup/contrib boolean true
+d-i apt-setup/non-free boolean true
+
+# Accounts: no root login, one admin user (sudo requires its password).
+d-i passwd/root-login boolean false
+d-i passwd/user-fullname string RhubarbTart
+d-i passwd/username string @USER@
+d-i passwd/user-password password @BOOTSTRAP@
+d-i passwd/user-password-again password @BOOTSTRAP@
+d-i user-setup/allow-password-weak boolean false
+d-i user-setup/encrypt-home boolean false
+
+d-i clock-setup/utc boolean true
+d-i time/zone string UTC
+d-i clock-setup/ntp boolean true
+
+# Whole virtual disk, one ext4 root (+ ESP); host FileVault protects the VM bundle.
+d-i partman-auto/disk string /dev/vda
+d-i partman-auto/method string regular
+d-i partman-auto/choose_recipe select atomic
+d-i partman-partitioning/confirm_write_new_label boolean true
+d-i partman/choose_partition select finish
+d-i partman/confirm boolean true
+d-i partman/confirm_nooverwrite boolean true
+d-i partman-efi/non_efi_system boolean true
+
+tasksel tasksel/first multiselect standard
+d-i pkgsel/include string openssh-server nftables @PACKAGES@
+d-i pkgsel/upgrade select full-upgrade
+popularity-contest popularity-contest/participate boolean false
+
+# Tart keeps its own NVRAM; also install GRUB to the removable-media fallback path.
+d-i grub-installer/only_debian boolean true
+d-i grub-installer/force-efi-extra-removable boolean true
+d-i grub-installer/bootdev string default
+
+# sshd must be up after the first reboot so Packer can continue (password auth is only
+# allowed until guest/kali/finalize.sh installs the key-only policy).
+d-i preseed/late_command string in-target systemctl enable ssh
+d-i finish-install/reboot_in_progress note

@@ -1,78 +1,88 @@
 ---
 name: rhubarb-dev
-description: Safely modify RhubarbTart's code (the Packer templates, guest/install.sh and guest/finalize.sh, scripts/*.sh, tools/bootstrap.sh, tools/resolve.py, tools/check.sh) without breaking its security and provenance guarantees. Explains the invariants and why they exist, where each concern lives, macOS bash 3.2 and BSD-tool pitfalls, the ordering constraints in the seal step, and how to validate changes with tools/check.sh. Use this for any edit, refactor, review or new feature in this repo's build code (hardening changes, SSH/password handling, new checks, Setup Assistant boot_command fixes, adapting to a new macOS release), even small ones, and before approving someone else's diff to these files.
+description: Safely change RhubarbTart's build code (resolvers and verification, Packer templates, in-guest install and seal scripts, NixOS modules, Kali preseed, build/smoke-test/enroll scripts, check.sh) without breaking its security and provenance guarantees. Explains the invariants and why they exist, where each concern lives, per-family pitfalls (macOS bash 3.2, `! cmd` under set -e, password handling, seal ordering) and how to validate a change (check.sh, self-tests, Docker NixOS evaluation, stub simulations). Use this for any code edit, bug fix, refactor or new feature in this repo, for hardening changes, adapting to a new macOS/NixOS/Kali release, fixing a failing check, or reviewing someone's diff or doing a security review of the pipeline, even for small changes.
 ---
 
 # Changing RhubarbTart safely
 
-This repo's value is its guarantees: known inputs, verified twice, and a sealed image whose
-hardening is proven from outside. Most "simplifications" of this code quietly remove one of
-those guarantees, so before changing behavior, know which guarantee the code serves. The map
-of what lives where, the data flow, and the ordering constraints are in
-`references/architecture.md`. Read it before touching the build/seal logic.
+The value of this repo is its guarantees: known inputs verified twice, images sealed without
+secrets or shared identity, and hardening proven from outside before an image is named. Most
+"simplifications" quietly remove one of those, so before changing behavior, know which guarantee
+the code serves. The map of where things live, the data flow and the ordering constraints are in
+`references/architecture.md`. Read it before touching resolve, build, guest or seal logic.
 
 ## Invariants (and why they exist)
 
-Keep all of these true. If a task seems to require breaking one, stop and discuss it with the
-user. Present it as a trade-off, not an implementation detail.
+Keep all of these true for **every family**. If a task seems to require breaking one, stop and
+present it to the user as a trade-off, not an implementation detail.
 
-1. **No prebuilt images; the IPSW comes only from `updates.cdn-apple.com`, with a hash from Apple.**
-   The whole provenance chain starts here. `--from-ipsw=latest` is also banned: Apple's
-   "latest" already points at the next major release.
-2. **Every input is verified by hash plus signature, on the host *and* in the guest.** The host
-   check protects the cache; the guest check protects what's actually installed. Pins are
-   derived by the tools (`resolve`, `toolchain-pin`), never hand-typed.
-3. **Toolchain only from `.toolchain/`** (no Homebrew, no `packer init`, `CHECKPOINT_DISABLE=1`).
-   Otherwise unpinned binaries or plugins enter the build.
-4. **No default or reused credentials.** The password is generated per vanilla install, kept in
-   the host keychain, and reaches Packer only via `PKR_VAR_password` (env, never argv). No
-   `NOPASSWD` sudoers is ever written: provisioning pipes the password to `sudo -S`, so there's
-   nothing to forget to remove.
-5. **The final image has no auto-login, and key-only SSH (or none).** It has no Screen Sharing,
-   has firewall and stealth mode on, keeps SIP and Gatekeeper on, and has no SSH host keys (each
-   clone regenerates its own).
-6. **The seal step asserts, and the smoke test proves from outside.** Every hardening change
-   needs an assertion in `guest/finalize.sh` *and*, where observable, a check in
-   `scripts/smoke-test.sh`. Only a smoke-passed image gets the final name.
-7. **The VM name is derived from the inputs** (`inputs_sha256`: artifact hashes + Team IDs,
-   no timestamps), so identical inputs give an identical name.
+1. **Only vendor installers.** No prebuilt VM images. Apple IPSW only from
+   `updates.cdn-apple.com`; NixOS ISO from `releases.nixos.org`; Kali ISO from `cdimage.kali.org`.
+   Never trust a floating "latest" (`--from-ipsw=latest` already means a different macOS major).
+2. **Every input is hash-pinned by a tool, never by hand, and re-verified in the guest.** Signed
+   sources need both a pinned key *file* and a pinned *fingerprint* (`gpg.py` checks the
+   VALIDSIG primary fingerprint). HTTPS only (`common.py` refuses anything else).
+3. **Toolchain only from `.toolchain/`.** No Homebrew, no `packer init`, `CHECKPOINT_DISABLE=1`,
+   and uv's own pinned Python.
+4. **No reusable credentials.** Passwords are random per build, kept in the host keychain, and
+   delivered via env (`PKR_VAR_*`) or 0600 uploaded files, never host argv. Anywhere a
+   vendor/tool forces argv (the macOS 27 provisioning API, installer preseeds), use a random
+   **bootstrap** password, rotate it, and prove it's dead. No `NOPASSWD` in any image: provisioning
+   uses `sudo -S`. The one sanctioned exception is the NixOS *live ISO's* own passwordless sudo
+   for the throwaway `nixos` user. It exists only in the installer session, and nothing from it
+   reaches the installed system.
+5. **Sealed images have no auto-login, key-only SSH (or none), a firewall on, no shared
+   identity** (host keys, machine-id, VPN state), and no build residue.
+6. **The seal asserts; the smoke test proves from outside.** Each posture change needs an
+   assertion in that family's `finalize.sh` (or the `nix/` declaration plus a finalize check) and,
+   where observable, a smoke-test check. Only a smoke-passed image gets the final name.
+7. **VM names derive from inputs** (`inputs_sha256`: profile + artifact hashes + signers, no
+   timestamps).
+8. **Secrets for enrollment never touch the repo, a profile or an image.** They go host keychain
+   → SSH stdin → 0600 temp file → shred.
 
-`./tools/check.sh` greps for regressions of most of these. When you add a new guarantee, add a
-`check` line for it too.
+`./tools/check.sh` greps for regressions of most of these. When you add a guarantee, add a
+`check` line for it too, and prove it fires by planting the regression in a *scratch copy* of
+the repo.
 
 ## Pitfalls that have already bitten this repo
 
-- **macOS `/bin/bash` is 3.2** (host scripts and guest scripts). There are no associative
-  arrays, `mapfile`, `${x,,}`, `|&` or `&>>`. `printf -v` and `[[ =~ ]]` are fine.
-- **`! cmd` never trips `set -e`.** A negative check written as `! grep …` silently passes. Use
-  `if cmd; then die …; fi` or `cmd || die` (check.sh flags bare `!` lines).
-- **Don't name a helper `log()`** in guest scripts: it shadows macOS `log(1)`, and
-  `log erase` silently becomes an echo. The repo uses `say()`.
-- **BSD vs GNU tools.** macOS `sed -i` needs `''`, and BSD `grep` wants options before the
-  pattern. Use `plutil -extract … raw` for JSON in shell (no python needed), and `security -i`
-  to keep secrets out of argv.
-- **Loose status greps.** `grep enabled` also matches unrelated status lines. Match Apple's
-  exact wording (`status: enabled\.`, `grep -x 'assessments enabled'`, `State = [12]`).
-  When Apple changes wording in a new build, update the pattern to the new exact text; don't
-  widen it into something that can also match a disabled state.
-- **Credentials in shell.** The password is letters and digits only (HCL validation), because
-  it's typed over VNC and embedded in single quotes. Keep that validation if you touch it.
-- **Packer HCL** must be `packer fmt`-clean, and the plugin version must match
-  `PACKER_PLUGIN_TART_VERSION` (check.sh enforces both).
+- **macOS `/bin/bash` is 3.2** for host scripts and `guest/macos/*`. That rules out associative
+  arrays, `mapfile`, `${x,,}`, `|&` and `&>>`. Linux guest scripts may use modern bash.
+- **`! cmd` never trips `set -e`.** Write `if cmd; then die …; fi` or `cmd || die`.
+- **Don't name a helper `log()` in `guest/macos/*`**: it shadows macOS `log(1)`, and the seal
+  step runs `log erase`. Those scripts use `say()`. Host scripts (`build.sh`, `smoke-test.sh`) may
+  keep `log()`, because they never call `log(1)`. check.sh guards the guest scripts.
+- **Loose status greps** (`grep enabled` also matches unrelated lines). Match exact vendor wording,
+  and update the pattern *exactly* when a release changes it.
+- **Tools that print raw bytes** (gpg status lines carry non-UTF-8 user IDs): decode leniently
+  and compare only the structured fields.
+- **Plugin/tool behavior assumptions:**
+  - The Tart plugin runs `tart ip` before typing `boot_command` when Packer's HTTP server is on,
+    which is why Kali uses `tools/serve_preseed.py`.
+  - The plugin's shutdown uses `sudo -S` with the SSH password, so once a password is rotated
+    the guest must power itself off.
+  - Read the plugin or Tart source before relying on a behavior.
+- **NixOS:**
+  - Files the config reads must exist when the config is evaluated.
+  - Anything under `/nix/store` is world-readable, so keep secrets (password hash) outside it.
+  - The Rosetta mount must be `nofail`.
 
 ## Workflow for a change
 
-1. Read the relevant file(s) and `references/architecture.md`, and name which invariant or
-   stage the change touches.
-2. Make the change in the style of the surrounding code: short comments that explain *why*,
-   `die`/`fail` with a specific message, no new dependencies on the host beyond stock macOS +
-   `.toolchain/`.
-3. If behavior or posture changed, update the assertion in finalize.sh, the smoke test, and the
-   README tables (Security posture / Provenance / Configuration). The README is the spec that
-   users and these skills rely on, so it must not drift.
-4. Run `./tools/check.sh` (works on Linux; Packer checks need `.toolchain/` or `packer` on PATH).
-   To confirm a new invariant check really catches something, plant the regression in a scratch
-   copy of the repo, not in the working tree.
-5. Report precisely: what check.sh verified, and what still needs a real build on the Mac.
-   Setup Assistant timing, sshd behavior, launchd state and `socketfilterfw` output can only be
-   confirmed there. Don't claim those as verified.
+1. Read the relevant files plus `references/architecture.md`, and name the invariant or stage
+   the change touches.
+2. Change in the surrounding style: short *why* comments, `die`/`fail` with specific messages, no
+   new host dependencies beyond stock macOS plus `.toolchain/`.
+3. If posture or provenance changed, update the finalize assertion, the smoke test, and the
+   README tables (Security posture, Provenance, Profiles, Configuration). The README is the spec
+   users and these skills rely on.
+4. Validate:
+   - `./tools/check.sh`. It works on Linux; Packer checks need `packer` on PATH.
+   - Resolver changes: `uv run tools/resolve.py plan <profile>` against live upstream, and add
+     self-test cases for any crypto or parsing.
+   - NixOS changes: the Docker evaluation recipe in `references/architecture.md`.
+   - Guest shell transport changes: simulate with stub commands, as was done for `enroll.sh`.
+5. Report precisely: what you verified (and how) versus what only a real build on the Mac can
+   confirm (keystroke timing, provisioning API, installer flows, sshd/launchd/systemd runtime
+   state).

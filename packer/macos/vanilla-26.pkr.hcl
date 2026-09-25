@@ -26,6 +26,21 @@ variable "vm_name" {
   type = string
 }
 
+variable "cpu_count" {
+  type    = number
+  default = 4
+}
+
+variable "memory_gb" {
+  type    = number
+  default = 8
+}
+
+variable "disk_gb" {
+  type    = number
+  default = 80
+}
+
 # No defaults on purpose: scripts/build.sh supplies both via PKR_VAR_* env vars.
 # Letters and digits only: the password is typed over VNC and embedded in shell.
 variable "username" {
@@ -48,9 +63,9 @@ variable "password" {
 source "tart-cli" "vanilla" {
   from_ipsw    = var.ipsw_path
   vm_name      = var.vm_name
-  cpu_count    = 4
-  memory_gb    = 8
-  disk_size_gb = 80
+  cpu_count    = var.cpu_count
+  memory_gb    = var.memory_gb
+  disk_size_gb = var.disk_gb
   ssh_username = var.username
   ssh_password = var.password
   ssh_timeout  = "300s"

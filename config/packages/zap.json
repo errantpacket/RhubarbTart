@@ -1,0 +1,20 @@
+{
+  "description": "OWASP ZAP",
+  "variants": {
+    "macos": {
+      "resolver": "zap-mac",
+      "kind": "dmg",
+      "arch": "aarch64",
+      "app": "ZAP.app",
+      "team_id": null
+    },
+    "kali": {
+      "resolver": "distro",
+      "package": "zaproxy"
+    },
+    "nixos": {
+      "resolver": "nix",
+      "attr": "zap"
+    }
+  }
+}

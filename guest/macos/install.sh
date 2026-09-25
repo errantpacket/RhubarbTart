@@ -5,7 +5,7 @@
 # usage: install.sh <stage-dir>
 #   <stage-dir>/SHA256SUMS         sha256 manifest from the host lock
 #   <stage-dir>/packages.tsv       id  kind  file  team_id  app
-#   <stage-dir>/sources.lock.json  copied into the image for audit
+#   <stage-dir>/lock.json          the profile lock, copied into the image for audit
 
 set -euo pipefail
 
@@ -61,22 +61,32 @@ while IFS=$'\t' read -r id kind file team app; do
   esac
 done < packages.tsv
 
-# Post-install: the installed bundles must still verify with the locked Team IDs.
+# Post-install: every installed bundle must still verify with its locked Team ID. The
+# bundle name comes from config/packages/<id>.json ("app"); Perimeter 81's has varied
+# across releases (Perimeter 81 / Harmony SASE), so it is found by pattern.
 while IFS=$'\t' read -r id kind file team app; do
-  case "$id" in
-    chrome) verify_app chrome "/Applications/Google Chrome.app" "$team" ;;
-    zap) verify_app zap "/Applications/$app" "$team" ;;
-    perimeter81)
-      # Bundle name has varied across Perimeter 81 / Harmony SASE releases.
-      p81=$(find /Applications -maxdepth 1 \( -iname '*perimeter*81*.app' -o -iname '*harmony*sase*.app' \) | head -n1)
-      [[ -n "$p81" ]] || die "perimeter81: no app bundle found in /Applications after install"
-      verify_app perimeter81 "$p81" "$team" ;;
-  esac
+  [[ -z "$id" ]] && continue
+  if [[ "$app" == "-" && "$id" == perimeter81 ]]; then
+    app="$(find /Applications -maxdepth 1 \( -iname '*perimeter*81*.app' -o -iname '*harmony*sase*.app' \) \
+             -exec basename {} \; | head -n1)"
+  fi
+  [[ -n "$app" && "$app" != "-" ]] || die "$id: installed app bundle unknown (set \"app\" in config/packages/$id.json)"
+  [[ -d "/Applications/$app" ]] || die "$id: /Applications/$app missing after install"
+  verify_app "$id" "/Applications/$app" "$team"
 done < packages.tsv
+
+# Vendor self-updaters would change the image after it was verified; updates are a
+# re-resolve + rebuild. (Chrome's GoogleUpdater: see README "Known gaps".)
+if launchctl print system/com.cloudflare.warp.updater >/dev/null 2>&1 || \
+   [[ -e /Library/LaunchDaemons/com.cloudflare.warp.updater.plist ]]; then
+  say "warp: disabling the WARP self-updater"
+  launchctl bootout system/com.cloudflare.warp.updater 2>/dev/null || true
+  launchctl disable system/com.cloudflare.warp.updater
+fi
 
 say "recording installed versions"
 mkdir -p "$RECORD_DIR"
-install -m 644 sources.lock.json "$RECORD_DIR/sources.lock.json"
+install -m 644 lock.json "$RECORD_DIR/lock.json"
 {
   sw_vers
   for app in /Applications/*.app; do

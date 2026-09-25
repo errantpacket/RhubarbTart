@@ -1,19 +1,19 @@
 #!/bin/bash
-# Build the RhubarbTart image from sources.lock.json.
+# Build a RhubarbTart guest from its profile and reviewed lock.
 #
-#   RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh
-#   REBUILD_VANILLA=1 ./scripts/build.sh       force a fresh install from the IPSW
+#   RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh <profile>
+#   REBUILD_VANILLA=1 ./scripts/build.sh <macos-profile>   reinstall macOS from the IPSW
+#   ./scripts/build.sh --list                               available profiles
 #
 # Environment:
-#   RHUBARB_USER          guest admin account name (default: admin)
-#   RHUBARB_SSH_PUBKEYS   file of public keys allowed into the final image.
-#                           Unset => Remote Login is disabled in the image.
-#   RHUBARB_SSH_FROM      authorized_keys from= pattern (default: 192.168.64.1,
-#                           Tart's shared-NAT host address); set empty to omit.
-#   RHUBARB_CACHE         artifact cache (default: ./cache)
+#   RHUBARB_SSH_PUBKEYS   file of public keys allowed into the image. Unset => SSH disabled.
+#   RHUBARB_SSH_FROM      authorized_keys from= pattern (default 192.168.64.1, Tart's
+#                         shared-NAT host); set empty to omit. Also where the Kali
+#                         preseed server binds.
+#   RHUBARB_CACHE         artifact cache (default ./cache)
 #
-# The guest password is generated per vanilla install and kept only in the
-# host's login keychain (service "RhubarbTart", account = VM name):
+# Passwords are generated here and kept only in the host login keychain
+# (service "RhubarbTart", account = VM name):
 #   security find-generic-password -s RhubarbTart -a <vm> -w
 
 set -euo pipefail
@@ -26,10 +26,12 @@ log() { echo "[build] $*"; }
 die() { echo "[build] FAILED: $*" >&2; exit 1; }
 KEYCHAIN_SERVICE=RhubarbTart
 
+if [[ "${1:-}" == --list ]]; then exec uv run --quiet tools/resolve.py list; fi
+PROFILE="${1:?usage: build.sh <profile>  (see: build.sh --list)}"
+
 # --- preflight --------------------------------------------------------------
 [[ "$(uname -s)" == Darwin && "$(uname -m)" == arm64 ]] || die "Tart requires macOS on Apple silicon"
-for bin in tart packer uv ssh-keygen security; do command -v "$bin" >/dev/null || die "$bin not found"; done
-[[ -f sources.lock.json ]] || die "no sources.lock.json; run: uv run tools/resolve.py resolve"
+for bin in tart packer uv ssh-keygen security plutil; do command -v "$bin" >/dev/null || die "$bin not found"; done
 uv run --quiet tools/resolve.py preflight
 if [[ -n "$(git status --porcelain 2>/dev/null)" ]]; then
   log "WARNING: working tree is dirty; provenance will record git_dirty=true"
@@ -38,9 +40,17 @@ fi
 py() { uv run --quiet --no-project python -c "$@"; }
 json_field() { plutil -extract "$1" raw -o - - <<<"$2"; }   # macOS plutil reads JSON
 vm_exists() { tart get "$1" >/dev/null 2>&1; }
+random_password() { py 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(32)))'; }
+keychain_get() { security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$1" -w 2>/dev/null; }
+keychain_put() { # <account> <password>; `security -i` keeps the secret out of argv
+  printf 'add-generic-password -U -s %s -a %s -w %s\n' "$KEYCHAIN_SERVICE" "$1" "$2" | security -i >/dev/null
+  [[ "$(keychain_get "$1")" == "$2" ]] || die "could not store password in keychain for $1"
+}
 
 WORK="$(mktemp -d)"
-trap 'rm -rf "$WORK"' EXIT
+SERVER_PID=""
+cleanup() { [[ -n "$SERVER_PID" ]] && kill "$SERVER_PID" 2>/dev/null; rm -rf "$WORK"; }
+trap cleanup EXIT
 chmod 700 "$WORK"
 
 # --- SSH authorized keys (validated on the host) -------------------------------
@@ -60,68 +70,111 @@ if [[ -n "${RHUBARB_SSH_PUBKEYS:-}" ]]; then
   [[ -s "$AUTH_KEYS" ]] || die "no usable keys in $RHUBARB_SSH_PUBKEYS"
   log "SSH: $(wc -l < "$AUTH_KEYS" | tr -d ' ') key(s) authorized"
 else
-  log "SSH: RHUBARB_SSH_PUBKEYS unset -> Remote Login will be DISABLED in the image"
+  log "SSH: RHUBARB_SSH_PUBKEYS unset -> SSH will be DISABLED in the image"
 fi
-
 SSH_FROM="${RHUBARB_SSH_FROM-192.168.64.1}"
 [[ "$SSH_FROM" =~ ^[0-9A-Fa-f.:/*?,!]*$ ]] || die "RHUBARB_SSH_FROM has unexpected characters"
 
-export PKR_VAR_username="${RHUBARB_USER:-admin}"
-export PKR_VAR_authorized_keys_path="$AUTH_KEYS"
-export PKR_VAR_ssh_from="$SSH_FROM"
-
 # --- verify inputs & stage ----------------------------------------------------
-log "verifying cached inputs against sources.lock.json"
-info="$(uv run --quiet tools/resolve.py verify)"
-IPSW="$(json_field ipsw_path "$info")"
+log "verifying cached inputs against locks/$PROFILE.lock.json"
+info="$(uv run --quiet tools/resolve.py verify "$PROFILE")"
+FAMILY="$(json_field family "$info")"
+BASE_ID="$(json_field base_id "$info")"
+IMAGE="$(json_field image_path "$info")"
 STAGE="$(json_field stage_dir "$info")"
-BUILD="$(json_field macos_build "$info")"
+OS_BUILD="$(json_field os_build "$info")"
 INPUTS_SHA="$(json_field inputs_sha256 "$info")"
+ROSETTA="$(json_field rosetta "$info")"
+export PKR_VAR_username PKR_VAR_cpu_count PKR_VAR_memory_gb PKR_VAR_disk_gb
+PKR_VAR_username="$(json_field username "$info")"
+PKR_VAR_cpu_count="$(json_field cpu "$info")"
+PKR_VAR_memory_gb="$(json_field memory_gb "$info")"
+PKR_VAR_disk_gb="$(json_field disk_gb "$info")"
+export PKR_VAR_authorized_keys_path="$AUTH_KEYS" PKR_VAR_ssh_from="$SSH_FROM"
+BASE_JSON="$(cat "config/bases/$BASE_ID.json")"
+BASE_PACKER="$(json_field packer "$BASE_JSON")"            # stage-1 / install template
+[[ "$BASE_PACKER" =~ ^packer/(macos|linux)/[a-z0-9.-]+\.pkr\.hcl$ && -f "$BASE_PACKER" ]] \
+  || die "config/bases/$BASE_ID.json: packer template '$BASE_PACKER' missing or outside packer/"
 
-BASE_VM="rbt-tahoe-${BUILD}-vanilla"
-VM="rbt-tahoe-${BUILD}-${INPUTS_SHA:0:12}"   # same artifacts => same name
+VM="rbt-${PROFILE}-${INPUTS_SHA:0:12}"       # same inputs => same name
 CANDIDATE="$VM-unverified"                  # renamed to $VM only after the smoke test passes
-
-# --- password handling (keychain only; env, never argv, for packer) -----------------
-keychain_get() { security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$1" -w 2>/dev/null; }
-keychain_put() { # <account> <password>; `security -i` keeps the secret out of argv
-  printf 'add-generic-password -U -s %s -a %s -w %s\n' "$KEYCHAIN_SERVICE" "$1" "$2" | security -i >/dev/null
-  [[ "$(keychain_get "$1")" == "$2" ]] || die "could not store password in keychain for $1"
-}
-
-# --- stage 1: vanilla from IPSW -----------------------------------------------
-if [[ "${REBUILD_VANILLA:-0}" == 1 ]] && vm_exists "$BASE_VM"; then
-  tart delete "$BASE_VM"
-fi
-if vm_exists "$BASE_VM"; then
-  PKR_VAR_password="$(keychain_get "$BASE_VM")" \
-    || die "$BASE_VM exists but its password is not in the keychain; rerun with REBUILD_VANILLA=1"
-  export PKR_VAR_password
-  log "reusing $BASE_VM (set REBUILD_VANILLA=1 to reinstall from IPSW)"
-else
-  PKR_VAR_password="$(py 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(32)))')"
-  export PKR_VAR_password
-  keychain_put "$BASE_VM" "$PKR_VAR_password"
-  log "installing macOS from $IPSW -> $BASE_VM (password stored in keychain)"
-  packer build -var "ipsw_path=$IPSW" -var "vm_name=$BASE_VM" packer/01-vanilla.pkr.hcl
-fi
-
-# --- stage 2: apps + hardening ---------------------------------------------------
 if vm_exists "$CANDIDATE"; then tart delete "$CANDIDATE"; fi
-log "building $CANDIDATE from $BASE_VM"
-packer build -var "base_vm=$BASE_VM" -var "vm_name=$CANDIDATE" -var "stage_dir=$STAGE" \
-  packer/02-apps.pkr.hcl
+
+PASSWORD_FILE="$WORK/password"
+write_password_file() { umask 077; printf '%s' "$1" > "$PASSWORD_FILE"; }
+
+case "$FAMILY" in
+  macos)
+    SETUP="$(json_field setup "$BASE_JSON")"
+    BASE_VM="rbt-${BASE_ID}-${OS_BUILD}-vanilla"
+    if [[ "$SETUP" == provisioning ]]; then
+      need="$(json_field requires_host_major "$BASE_JSON")"
+      have="$(sw_vers -productVersion | cut -d. -f1)"
+      ((have >= need)) || die "$BASE_ID needs a macOS $need host (this host: $(sw_vers -productVersion))"
+    fi
+    if [[ "${REBUILD_VANILLA:-0}" == 1 ]] && vm_exists "$BASE_VM"; then tart delete "$BASE_VM"; fi
+    if vm_exists "$BASE_VM"; then
+      PKR_VAR_password="$(keychain_get "$BASE_VM")" \
+        || die "$BASE_VM exists but its password is not in the keychain; rerun with REBUILD_VANILLA=1"
+      export PKR_VAR_password
+      log "reusing $BASE_VM (REBUILD_VANILLA=1 reinstalls from the IPSW)"
+    else
+      PKR_VAR_password="$(random_password)"
+      export PKR_VAR_password
+      keychain_put "$BASE_VM" "$PKR_VAR_password"
+      log "installing macOS $OS_BUILD from $IMAGE -> $BASE_VM ($SETUP)"
+      if [[ "$SETUP" == provisioning ]]; then
+        write_password_file "$PKR_VAR_password"
+        PKR_VAR_bootstrap_password="$(random_password)" PKR_VAR_password_file="$PASSWORD_FILE" \
+          packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER"
+      else
+        packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER"
+      fi
+    fi
+    log "building $CANDIDATE from $BASE_VM"
+    packer build -var "base_vm=$BASE_VM" -var "vm_name=$CANDIDATE" -var "stage_dir=$STAGE" \
+      packer/macos/apps.pkr.hcl
+    ;;
+
+  nixos|kali)
+    # Linux guests are installed from scratch each build: fresh final password, plus a
+    # throwaway bootstrap password for the installer session only.
+    PKR_VAR_password="$(random_password)"
+    export PKR_VAR_password
+    write_password_file "$PKR_VAR_password"
+    export PKR_VAR_password_file="$PASSWORD_FILE"
+    PKR_VAR_bootstrap_password="$(random_password)"
+    export PKR_VAR_bootstrap_password
+    keychain_put "$VM" "$PKR_VAR_password"
+    if [[ "$FAMILY" == kali ]]; then
+      [[ -n "$SSH_FROM" && "$SSH_FROM" =~ ^[0-9.]+$ ]] \
+        || die "Kali needs RHUBARB_SSH_FROM to be the vmnet host IPv4 (preseed server binds there)"
+      pkgs="$(py 'import json,sys; o=json.load(open(sys.argv[1]))["options"]; d={"xfce":["kali-desktop-xfce"]}.get(o.get("desktop"),[]); print(" ".join(o.get("kali_metapackages",[])+d))' "$STAGE/profile.json")"
+      (umask 077; sed -e "s|@USER@|$PKR_VAR_username|" -e "s|@PACKAGES@|$pkgs|" kali/preseed.cfg.tmpl \
+        | BOOT="$PKR_VAR_bootstrap_password" py 'import os,sys; sys.stdout.write(sys.stdin.read().replace("@BOOTSTRAP@", os.environ["BOOT"]))' \
+        > "$WORK/preseed.cfg")
+      port=$((20000 + RANDOM % 20000))
+      uv run --quiet tools/serve_preseed.py "$WORK/preseed.cfg" "$SSH_FROM" "$port" &
+      SERVER_PID=$!
+      export PKR_VAR_preseed_url="http://$SSH_FROM:$port/preseed.cfg"
+    fi
+    log "installing $FAMILY ($OS_BUILD) from $IMAGE -> $CANDIDATE"
+    packer build -var "iso_path=$IMAGE" -var "vm_name=$CANDIDATE" -var "stage_dir=$STAGE" \
+      "$BASE_PACKER"
+    ;;
+  *) die "unknown family $FAMILY" ;;
+esac
 
 # --- prove the hardening on a throwaway clone; only then give it the real name --------
+RHUBARB_FAMILY="$FAMILY" RHUBARB_USER="$PKR_VAR_username" RHUBARB_ROSETTA="$ROSETTA" \
 RHUBARB_SSH_ENABLED="$([[ -s "$AUTH_KEYS" ]] && echo 1 || echo 0)" \
   ./scripts/smoke-test.sh "$CANDIDATE" \
   || die "smoke test failed; unverified image left as $CANDIDATE for inspection"
 if vm_exists "$VM"; then tart delete "$VM"; fi
 tart rename "$CANDIDATE" "$VM"
 keychain_put "$VM" "$PKR_VAR_password"
-unset PKR_VAR_password
+unset PKR_VAR_password PKR_VAR_bootstrap_password
 
-# --- provenance ----------------------------------------------------------------
-record="$(uv run --quiet tools/resolve.py provenance "$VM")"
+record="$(uv run --quiet tools/resolve.py provenance "$PROFILE" "$VM")"
 log "done: $VM"
 log "provenance: $record"

@@ -1,0 +1,76 @@
+{
+  "schema": 2,
+  "profile": "nixos-research",
+  "family": "nixos",
+  "base_id": "nixos-26.05",
+  "profile_sha256": "ccb4650533487426901e657135e9758a298fe2e5c3d87f345938d878c83668cc",
+  "resolved_at": "2026-09-25T18:06:29+00:00",
+  "resolved_on": {
+    "host_os": "Linux-7.2.6-zen2-1-zen-x86_64-with-glibc2.44"
+  },
+  "base": {
+    "channel": "nixos-26.05",
+    "release": "nixos-26.05.10529.c508844df6c2",
+    "image": {
+      "url": "https://releases.nixos.org/nixos/26.05/nixos-26.05.10529.c508844df6c2/nixos-minimal-26.05.10529.c508844df6c2-aarch64-linux.iso",
+      "file": "nixos-minimal-26.05.10529.c508844df6c2-aarch64-linux.iso",
+      "sha256": "27fdea08c17b41a35797ce784a90a1bbf10fb982f1783a8c2154613c9eb79d51",
+      "large": true,
+      "hash_sources": [
+        "releases.nixos.org nixos-minimal-26.05.10529.c508844df6c2-aarch64-linux.iso.sha256 (HTTPS)"
+      ]
+    },
+    "nixpkgs": {
+      "rev": "c508844df6c28fa6dabc1b6af70f3ccbd65c5201",
+      "url": "https://github.com/NixOS/nixpkgs/archive/c508844df6c28fa6dabc1b6af70f3ccbd65c5201.tar.gz",
+      "file": "nixpkgs-c508844df6c2.tar.gz",
+      "sha256": "675ab386c5f70fef1e4e6cdb849b91c56fbf2e1e7b0da7629c2787725ecadb50",
+      "nar_sha256": "sha256-6e4Na3z008XpdVyOXgfasXIn1aN+z8AXFG+jXdQSyuI=",
+      "hash_sources": [
+        "tofu:downloaded (github archive of the channel's git-revision)",
+        "nar_sha256 re-verified by nix in the guest"
+      ],
+      "size": 51155831
+    }
+  },
+  "packages": {
+    "chrome": {
+      "nix": {
+        "attr": "google-chrome",
+        "unfree": true
+      },
+      "hash_sources": [
+        "nixpkgs pinned by base (rev + nar_sha256)"
+      ],
+      "kind": "nix"
+    },
+    "zap": {
+      "nix": {
+        "attr": "zap"
+      },
+      "hash_sources": [
+        "nixpkgs pinned by base (rev + nar_sha256)"
+      ],
+      "kind": "nix"
+    },
+    "warp": {
+      "nix": {
+        "module": "cloudflare-warp",
+        "unfree": true
+      },
+      "hash_sources": [
+        "nixpkgs pinned by base (rev + nar_sha256)"
+      ],
+      "kind": "nix"
+    },
+    "tailscale": {
+      "nix": {
+        "module": "tailscale"
+      },
+      "hash_sources": [
+        "nixpkgs pinned by base (rev + nar_sha256)"
+      ],
+      "kind": "nix"
+    }
+  }
+}

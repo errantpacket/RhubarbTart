@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Runs as root on the freshly installed Kali system (Packer SSH, bootstrap password).
+# Re-verifies staged .debs, installs the profile's packages, sets up Rosetta.
+#
+# usage: install.sh <stage-dir>
+#   SHA256SUMS, packages.tsv (id kind file team app|package), profile.json, lock.json
+
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+
+STAGE="${1:?stage dir}"
+RECORD_DIR=/var/lib/rhubarbtart
+say() { echo "[kali-install] $*"; }
+die() { echo "[kali-install] FAILED: $*" >&2; exit 1; }
+opt() { python3 -c 'import json,sys; v=json.load(open(sys.argv[1]))["options"].get(sys.argv[2]); print(json.dumps(v) if isinstance(v,(list,dict,bool)) else (v or ""))' "$STAGE/profile.json" "$1"; }
+
+cd "$STAGE"
+say "verifying staged packages"
+[[ ! -s SHA256SUMS ]] || sha256sum -c SHA256SUMS || die "hash mismatch inside guest"
+
+# Vendor .debs must not add their own (unpinned) apt sources: updates are a re-resolve.
+install -d /etc/default
+echo 'repo_add_once="false"' > /etc/default/google-chrome
+echo 'repo_reenable_on_distupgrade="false"' >> /etc/default/google-chrome
+
+debs=() distro=()
+while IFS=$'\t' read -r id kind file _team pkg; do
+  [[ -z "$id" ]] && continue
+  case "$kind" in
+    deb) debs+=("./$file") ;;
+    distro) distro+=("$pkg") ;;
+    *) die "$id: kind '$kind' is not installable on Kali" ;;
+  esac
+done < packages.tsv
+
+say "apt update (indexes verified against the Kali archive key)"
+apt-get update -q
+if ((${#debs[@]} + ${#distro[@]})); then
+  say "installing: ${debs[*]} ${distro[*]}"
+  apt-get install -y -q "${debs[@]}" "${distro[@]}"
+fi
+rm -f /etc/apt/sources.list.d/google-chrome.list   # belt and braces
+
+if [[ "$(opt rosetta)" == true ]]; then
+  say "enabling Rosetta for x86_64 binaries (needs: tart run --rosetta=rosetta)"
+  install -d /media/rosetta
+  grep -q '^rosetta ' /etc/fstab || echo 'rosetta /media/rosetta virtiofs ro,nofail 0 0' >> /etc/fstab
+  # Magic/mask per Apple's "Running Intel binaries in Linux VMs with Rosetta" (same as
+  # nixpkgs nixos/lib/binfmt-magics.nix x86_64-linux); flags F (fix binary) C (credentials).
+  printf '%s\n' ':rosetta:M::\x7fELF\x02\x01\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02\x00\x3e\x00:\xff\xff\xff\xff\xff\xfe\xfe\x00\xff\xff\xff\xff\xff\xff\xff\xff\xfe\xff\xff\xff:/media/rosetta/rosetta:CF' \
+    > /etc/binfmt.d/rosetta.conf
+fi
+
+say "recording installed packages"
+install -d -m 755 "$RECORD_DIR"
+install -m 644 lock.json "$RECORD_DIR/lock.json"
+dpkg-query -W -f='${Package}\t${Version}\t${Architecture}\n' | sort > "$RECORD_DIR/installed.txt"
+chmod 644 "$RECORD_DIR/installed.txt"
+say "$(wc -l < "$RECORD_DIR/installed.txt") packages installed"

@@ -1,0 +1,26 @@
+{
+  "description": "Tailscale",
+  "variants": {
+    "macos": {
+      "resolver": "tailscale-mac",
+      "kind": "pkg",
+      "team_id": "W5364U7YZB",
+      "app": "Tailscale.app"
+    },
+    "kali": {
+      "resolver": "apt",
+      "kind": "deb",
+      "repo": "https://pkgs.tailscale.com/stable/debian",
+      "suite": "trixie",
+      "component": "main",
+      "package": "tailscale",
+      "arch": "arm64",
+      "key": "tailscale-apt-2596A99E.gpg",
+      "key_fpr": "2596A99EAAB33821893C0A79458CA832957F5868"
+    },
+    "nixos": {
+      "resolver": "nix",
+      "module": "tailscale"
+    }
+  }
+}

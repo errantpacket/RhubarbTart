@@ -1,0 +1,15 @@
+{
+  "id": "nixos-research",
+  "description": "NixOS research workstation (declarative, fully pinned)",
+  "base": "nixos-26.05",
+  "packages": [
+    "chrome",
+    "zap",
+    "warp",
+    "tailscale"
+  ],
+  "options": {
+    "desktop": "xfce",
+    "rosetta": true
+  }
+}

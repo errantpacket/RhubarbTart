@@ -1,0 +1,16 @@
+{
+  "family": "macos",
+  "description": "macOS 26 Tahoe (Setup Assistant driven by keystrokes)",
+  "ipsw": {
+    "device": "VirtualMac2,1",
+    "major": 26,
+    "pin_build": null
+  },
+  "setup": "keystrokes",
+  "packer": "packer/macos/vanilla-26.pkr.hcl",
+  "vm": {
+    "cpu": 4,
+    "memory_gb": 8,
+    "disk_gb": 80
+  }
+}

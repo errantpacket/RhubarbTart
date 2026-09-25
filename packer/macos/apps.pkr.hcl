@@ -1,11 +1,11 @@
-# Stage 2: clone the vanilla VM, install the locked application set
-# (Chrome, ZAP, Perimeter 81), then harden and seal the image.
+# Stage 2 (macOS): clone the vanilla VM, install the profile's locked packages
+# (e.g. Chrome, ZAP, WARP, Tailscale, Perimeter 81), then harden and seal the image.
 #
 # Inputs come only from the verified stage dir built by `tools/resolve.py verify`;
 # the guest re-verifies hashes and signatures before installing anything.
 #
 # Packer reaches the guest with password SSH (inherited from stage 1) over Tart's
-# host-only NAT. guest/finalize.sh turns password auth off for *new* connections,
+# host-only NAT. guest/macos/finalize.sh turns password auth off for *new* connections,
 # and the guest then powers itself off, so no later step needs to log in again.
 
 packer {
@@ -27,6 +27,21 @@ variable "vm_name" {
 
 variable "stage_dir" {
   type = string
+}
+
+variable "cpu_count" {
+  type    = number
+  default = 4
+}
+
+variable "memory_gb" {
+  type    = number
+  default = 8
+}
+
+variable "disk_gb" {
+  type    = number
+  default = 80
 }
 
 variable "authorized_keys_path" {
@@ -60,9 +75,9 @@ variable "password" {
 source "tart-cli" "apps" {
   vm_base_name = var.base_vm
   vm_name      = var.vm_name
-  cpu_count    = 4
-  memory_gb    = 8
-  disk_size_gb = 80
+  cpu_count    = var.cpu_count
+  memory_gb    = var.memory_gb
+  disk_size_gb = var.disk_gb
   headless     = true
   ssh_username = var.username
   ssh_password = var.password
@@ -87,7 +102,7 @@ build {
   }
 
   provisioner "file" {
-    source      = "${path.root}/../guest/"
+    source      = "${path.root}/../../guest/macos/"
     destination = "/tmp/rhubarb/guest"
   }
 

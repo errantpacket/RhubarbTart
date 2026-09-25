@@ -1,0 +1,12 @@
+{
+  "id": "goldengate-research",
+  "description": "macOS 27 research workstation",
+  "base": "macos-27",
+  "packages": [
+    "chrome",
+    "zap",
+    "warp",
+    "tailscale",
+    "perimeter81"
+  ]
+}

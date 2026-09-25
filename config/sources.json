@@ -1,0 +1,32 @@
+{
+  "macos": {
+    "device": "VirtualMac2,1",
+    "major": 26,
+    "pin_build": null
+  },
+  "packages": [
+    {
+      "id": "chrome",
+      "kind": "pkg",
+      "resolver": "chrome",
+      "url": "https://dl.google.com/dl/chrome/mac/universal/stable/gcem/GoogleChrome.pkg",
+      "pkg_ref": "com.google.Chrome",
+      "team_id": "EQHXZ8M8AV"
+    },
+    {
+      "id": "zap",
+      "kind": "dmg",
+      "resolver": "zap",
+      "arch": "aarch64",
+      "app": "ZAP.app",
+      "team_id": null
+    },
+    {
+      "id": "perimeter81",
+      "kind": "pkg",
+      "resolver": "local",
+      "path": "vendor/perimeter81/Perimeter81.pkg",
+      "team_id": null
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 ---
 name: rhubarb-build
-description: Build, run, enroll and troubleshoot RhubarbTart guest VMs (Tart + Packer) from their profiles — macOS 26/27, NixOS and Kali. Covers bootstrapping the pinned toolchain, preflight, scripts/build.sh PROFILE, the smoke test, finding the guest password in the keychain, cloning, running with Rosetta, SSH, VPN/ZTNA enrollment (Tailscale, Cloudflare WARP, Perimeter 81) via scripts/enroll.sh, and diagnosing failures (Setup Assistant or provisioning hangs, Kali preseed/GRUB, NixOS install, finalize or smoke-test errors, hash/signature/Team ID mismatches, -unverified images). Use this whenever someone wants to make, rebuild, run, clone, connect to or enroll a research VM, or says a build, bootstrap, enrollment or smoke test failed, even if they don't mention Tart or Packer. For designing a guest use rhubarb-profiles; for refreshing versions use rhubarb-update-inputs.
+description: Build, run, enroll and troubleshoot RhubarbTart guest VMs (Tart + Packer) from their profiles — macOS 26/27, NixOS and Kali. Covers bootstrapping the pinned toolchain, preflight, scripts/build.sh PROFILE, the smoke test, managing clones with the rhubarb CLI (new, run, ssh, enroll, list, reset, rm, per-clone passwords, outdated clones), finding passwords in the keychain, Rosetta, VPN/ZTNA enrollment (Tailscale, Cloudflare WARP, Perimeter 81), and diagnosing failures (Setup Assistant or provisioning hangs, Kali preseed/GRUB, NixOS install, finalize or smoke-test errors, hash/signature/Team ID mismatches, -unverified images). Use this whenever someone wants to make, rebuild, run, clone, reset, remove, connect to or enroll a research VM, or says a build, bootstrap, enrollment or smoke test failed, even if they don't mention Tart or Packer. For designing a guest use rhubarb-profiles; for refreshing versions use rhubarb-update-inputs.
 ---
 
 # Building and running RhubarbTart guests
@@ -60,29 +60,38 @@ blocking.
 - **`RHUBARB_SSH_FROM`** only changes if they use softnet or a non-default vmnet subnet. Kali
   also binds its preseed server to that address, so it must be the vmnet host IPv4.
 
-## Using a built image
+## Using built images: the `rhubarb` CLI
+
+Built images are templates; all work happens in clones managed by `./rhubarb` (on the Mac):
 
 ```sh
-tart clone rbt-<profile>-<sha> work-1          # always clone; keep the built image pristine
-tart run work-1                                # macOS
-tart run --rosetta=rosetta work-1              # Linux profiles with "rosetta": true
-./scripts/ssh.sh work-1                        # key-only; host key pinned per VM name
-./scripts/enroll.sh work-1 tailscale --image rbt-<profile>-<sha>   # or: warp --org <team> | perimeter81
-security find-generic-password -s RhubarbTart -a rbt-<profile>-<sha> -w
+./rhubarb images                              # built images, current vs outdated per profile
+./rhubarb new web-1 --profile kali-research   # clone + per-clone password rotation
+./rhubarb run web-1 [--headless] [--detach]   # applies Rosetta etc. from the record
+./rhubarb ssh web-1 [-- CMD]
+./rhubarb enroll web-1 tailscale              # or: warp --org TEAM | perimeter81
+./rhubarb list                                # state, outdated/deleted image, password mode, enrollment
+./rhubarb reset web-1 [--same-image]          # destroy + re-clone (drops identity and enrollment)
+./rhubarb rm web-1 [--yes]
 ```
 
-- **Passwords** are stored under the built image's name (and the vanilla name for macOS).
-  Clones inherit the image's password, so `enroll.sh` takes the running clone as its target and
-  `--image` for the keychain lookup.
-- **Usernames:** `ssh.sh` and `enroll.sh` assume `admin`. For a profile with another
-  `username`, set `RHUBARB_USER=that-name`.
-- **Don't print passwords or enrollment secrets** into the conversation unless asked.
-- **Enrollment secrets** live in the host keychain (service `RhubarbTart-enroll`). The header of
-  `scripts/enroll.sh` shows how to add them. Never put them in the repo, a profile, or an image.
-- **macOS + Tailscale:** the user must approve the system extension in the VM once per clone,
-  and afterwards remove the auth-key policy
-  (`sudo defaults delete /Library/Preferences/io.tailscale.ipn.macsys AuthKey`); enroll.sh
-  prints this.
+- **Prefer `rhubarb` over raw `tart`/`scripts/*.sh`** for clones. It records lineage
+  (profile, image, username, Rosetta), so the right flags, user and keychain entry are used.
+  It only acts on clones it created, and never on built `rbt-…` images or other VMs.
+- **`new` gives each clone its own random password** (keychain account = clone name), proven
+  through `sudo` that the old one is rejected. This needs key SSH: an image built with
+  `RHUBARB_SSH_PUBKEYS` and the key in `ssh-agent`. Otherwise the clone keeps the image's
+  password (`list` shows `inherited`). Suggest `reset NAME --same-image` once the key is loaded.
+- **`outdated`** in `list` means the profile's lock has moved on since that clone was made.
+  Offer `rhubarb reset NAME` (a fresh clone of the current image); warn that it discards the
+  clone's state and enrollment.
+- **Passwords:** `security find-generic-password -s RhubarbTart -a CLONE -w` (or the image name
+  when `inherited`). Don't print passwords or enrollment secrets unless asked.
+- **Enrollment secrets** live in the host keychain (service `RhubarbTart-enroll`); the header of
+  `scripts/enroll.sh` shows how to add them. For macOS + Tailscale the user approves the system
+  extension once per clone, then removes the auth-key policy (the script prints how).
+- **Records** live in `~/Library/Application Support/RhubarbTart/`. If `rhubarb` refuses one
+  (bad permissions, symlink, schema), don't loosen the check: see the troubleshooting guide.
 
 ## When something fails
 

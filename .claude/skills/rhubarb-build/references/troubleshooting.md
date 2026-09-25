@@ -13,6 +13,7 @@ is wrong for a new macOS build, fix it with the same strictness (see the `rhubar
 - [NixOS](#nixos)
 - [Kali](#kali)
 - [Enrollment](#enrollment)
+- [rhubarb CLI](#rhubarb-cli)
 - [Smoke test](#smoke-test)
 - [Inspecting a failed image](#inspecting)
 
@@ -153,3 +154,18 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 | `no keychain password for <name> (for a clone, pass --image …)` | Enrolling a clone: its password lives under the image name | `enroll.sh <clone> <service> --image rbt-<profile>-<sha>` |
 | Tailscale on macOS doesn't connect | System extension not approved | The user approves it in the VM (System Settings > General > Login Items & Extensions) |
 | WARP doesn't register | Service token lacks Service Auth enrollment rights, or wrong `--org` | Fix it in the Cloudflare dashboard; re-run enroll |
+
+## rhubarb CLI
+
+| Message | Cause | Fix |
+|---|---|---|
+| `no rhubarb clone named …` | Not created by `rhubarb new`, or its record was removed | `rhubarb list`; create clones with `rhubarb new`. It deliberately won't manage VMs it didn't create |
+| `… is not built on this Mac (./scripts/build.sh P)` | The profile's current image (from its committed lock) doesn't exist | Build it; or `rhubarb new NAME --image` an existing verified image |
+| `no keychain password for rbt-…` | Image built on another Mac, or its entry was deleted | Rebuild here |
+| `… must be a regular file owned by you with mode 0600; refusing it` | Record permissions loosened, or a symlink | Check nobody else wrote it; `chmod 600` only if you're sure it's yours, otherwise delete the record and the VM (`tart delete`) |
+| `… is not owned by you` / `must be a real directory` (state dir) | State dir is a symlink or owned by another user | Investigate before changing anything. Point `RHUBARB_STATE_DIR` at a directory you own |
+| `name … does not match its file` / `unexpected keys` / `invalid …` | Corrupted or hand-edited record | Delete the record (`rm ~/Library/Application Support/RhubarbTart/clones/NAME.json`) and the VM; re-create |
+| `SSH refused our key …; keeping the image's password` | Key not loaded in `ssh-agent`, or the image was built for other keys | `ssh-add`, then `rhubarb reset NAME --same-image` |
+| `SSH not reachable …; keeping the image's password` | Image built without SSH keys, or slow boot | Expected for SSH-less images; otherwise raise `RHUBARB_SSH_WAIT` |
+| `password rotation failed: …` | Rotation script error in the guest (see the message) | The clone keeps its old password and the new keychain entry is removed. Retry with `reset NAME --same-image` |
+| `a VM named … already exists` | Name collision with any Tart VM | Pick another name |

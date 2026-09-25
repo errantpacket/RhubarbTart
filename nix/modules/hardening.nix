@@ -1,7 +1,7 @@
 # The RhubarbTart security posture, declared (mirrors guest/macos/finalize.sh):
 # no default/empty passwords, no auto-login, sudo needs a password, key-only SSH
 # restricted to the Tart host (or no SSH at all), firewall on, root locked.
-{ lib, profile, ... }:
+{ lib, pkgs, profile, ... }:
 let
   user = profile.username;
   keys = lib.filter (k: k != "" && !(lib.hasPrefix "#" k))
@@ -40,6 +40,10 @@ in
       PermitTunnel = "no";
     };
   };
+
+  # `rhubarb new` rotates each clone's password: it writes a fresh yescrypt hash to the
+  # hashedPasswordFile above (see tools/rhubarb/hostops.py), which needs mkpasswd.
+  environment.systemPackages = [ pkgs.mkpasswd ];
 
   networking.firewall.enable = true;
   networking.firewall.logRefusedConnections = false;

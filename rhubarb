@@ -1,0 +1,10 @@
+#!/bin/bash
+# rhubarb: manage research clones of verified RhubarbTart images.  `./rhubarb --help`
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+# On the Mac, use the pinned toolchain (tart, uv); elsewhere fall back to PATH.
+if [[ -d "$ROOT/.toolchain" ]]; then
+  # shellcheck source=scripts/env.sh
+  source "$ROOT/scripts/env.sh"
+fi
+exec uv run --quiet "$ROOT/tools/rhubarb_cli.py" "$@"

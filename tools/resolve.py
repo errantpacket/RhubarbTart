@@ -20,7 +20,6 @@ Where each step can run:
 
 import argparse
 import datetime as dt
-import hashlib
 import json
 import platform
 import shutil
@@ -34,6 +33,7 @@ from rhubarb import distsign, macos, nar  # noqa: E402
 from rhubarb.bases import PLANNERS  # noqa: E402
 from rhubarb.common import CACHE, ROOT, VerifyError, download, get_bytes, log, sha256_file  # noqa: E402
 from rhubarb.packages import plan_package  # noqa: E402
+from rhubarb.locks import artifacts, inputs_sha256, load_lock  # noqa: E402
 from rhubarb.profiles import list_profiles, load_profile, lock_path  # noqa: E402
 from rhubarb.toolchain import cmd_preflight, cmd_toolchain_pin, toolchain  # noqa: E402
 
@@ -41,17 +41,6 @@ MACOS_KINDS = {"pkg", "dmg"}
 
 
 # ---- helpers ---------------------------------------------------------------------------
-
-def artifacts(lock: dict):
-    """(label, entry) for every downloadable input recorded in a plan/lock."""
-    base = lock["base"]
-    yield "base:image", base["image"]
-    if "nixpkgs" in base:
-        yield "base:nixpkgs", base["nixpkgs"]
-    for pid, e in lock["packages"].items():
-        if e.get("file"):
-            yield pid, e
-
 
 def fetch(entry: dict, dest: Path) -> None:
     if dest.exists():
@@ -63,17 +52,6 @@ def fetch(entry: dict, dest: Path) -> None:
         shutil.copy2(src, dest)
     else:
         download(entry["url"], dest)
-
-
-def inputs_sha256(lock: dict) -> str:
-    """Identity of a build's inputs: profile + artifact hashes + signers. No timestamps."""
-    lines = [f"profile {lock['profile']} {lock['profile_sha256']}"]
-    for label, e in artifacts(lock):
-        lines.append(f"{label} {e['sha256']} {e.get('nar_sha256', '')}")
-    for pid, e in sorted(lock["packages"].items()):
-        extra = e.get("package") or json.dumps(e.get("nix", {}), sort_keys=True)
-        lines.append(f"pkg {pid} {e.get('sha256', '')} {e.get('signature', {}).get('team_id', '')} {extra}")
-    return hashlib.sha256("\n".join(sorted(lines)).encode()).hexdigest()
 
 
 def plan(prof: dict) -> dict:
@@ -152,18 +130,6 @@ def cmd_resolve(args) -> None:
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(lock, indent=2) + "\n")
     log(f"wrote {path.relative_to(ROOT)} — review the diff and commit it")
-
-
-def load_lock(prof: dict) -> dict:
-    path = lock_path(prof["id"])
-    if not path.exists():
-        raise VerifyError(f"{path.relative_to(ROOT)} missing; run `resolve {prof['id']}` first")
-    lock = json.loads(path.read_text())
-    if lock.get("schema") != 2:
-        raise VerifyError(f"{path.name}: unsupported lock schema; re-resolve")
-    if lock["profile_sha256"] != prof["profile_sha256"]:
-        raise VerifyError(f"profiles/{prof['id']}.json changed since {path.name} was written; re-resolve")
-    return lock
 
 
 def cmd_verify(args) -> None:

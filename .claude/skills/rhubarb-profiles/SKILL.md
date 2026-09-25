@@ -75,7 +75,7 @@ passwordless root (`kali-grant-root`) fail the build's seal checks.
    `uv run tools/resolve.py resolve NAME`. Any change to a profile changes its hash, so its lock
    must be re-resolved (build refuses a stale lock).
 4. Show the user the new `locks/NAME.lock.json`, commit it with their go-ahead, then build (the
-   `rhubarb-build` skill).
+   `rhubarb-build` skill), and work in clones: `./rhubarb new web-1 --profile NAME`.
 5. Add the profile to the README **Profiles** table.
 
 ## Confirm with the user

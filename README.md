@@ -3,8 +3,8 @@
 # 🍓 RhubarbTart
 
 **Provenance-first, hardened security-research VMs for Apple silicon.**
-<br/>Pick a profile, get a sealed [Tart](https://tart.run) guest whose every input is pinned, verified
-and proven.
+<br/>The trustworthy foundation for agent-driven research, pentests and CTFs: pick a profile, get a
+sealed [Tart](https://tart.run) guest whose every input is pinned, verified and proven.
 
 ![Apple silicon](https://img.shields.io/badge/host-Apple%20silicon-c9184a)
 ![Guests](https://img.shields.io/badge/guests-macOS%2026%20·%20macOS%2027%20·%20NixOS%20·%20Kali-c9184a)
@@ -15,12 +15,19 @@ and proven.
 
 ---
 
+> [!NOTE]
+> **Where this is heading:** the goal is to run agents through a management interface
+> (herdr) for scoped research, pentests and CTFs inside these VMs, capturing evidence to a
+> secure per-engagement vault outside them. See [`docs/PLAN.md`](docs/PLAN.md).
+
 ## Why RhubarbTart
 
 Research VMs usually start from someone else's image and drift from there. RhubarbTart starts every
 guest from the **OS vendor's own installer**, pins **every** input in a reviewed lock file, verifies
 each one **twice** (on the host and again inside the guest), and refuses to name an image until a
-throwaway clone has **proven** its hardening from the outside.
+throwaway clone has **proven** its hardening from the outside. That verified, disposable guest is the
+unit the [larger plan](docs/PLAN.md) builds on — isolated ranges that agents drive and that produce
+evidence you can trust.
 
 | | |
 |---|---|
@@ -28,14 +35,14 @@ throwaway clone has **proven** its hardening from the outside.
 | 🧱 **Hardened by default** | No default passwords, no auto-login, no passwordless sudo, key-only SSH (or none), firewall on, no shared machine or VPN identity |
 | 🔬 **Proven, not assumed** | Every image is smoke-tested from outside on a disposable clone before it gets its final name |
 | 🧩 **Configurable** | A guest is a small JSON profile: OS base + tools + options. No code needed for new guests |
-| 🔐 **Secrets stay yours** | Passwords live in your macOS keychain; VPN enrollment happens per clone, at runtime, never baked in |
+| 🔐 **Secrets stay yours** | Passwords live in your macOS keychain, each clone gets its own, and VPN enrollment happens per clone at runtime, never baked in |
 
 ## Contents
 
 - [Quick start](#quick-start)
 - [Choose a guest](#choose-a-guest)
 - [How it works](#how-it-works)
-- [Using your VMs](#using-your-vms)
+- [Using your VMs](#using-your-vms): the `rhubarb` CLI
 - [Define your own guest](#define-your-own-guest)
 - [Trust model](#trust-model)
 - [Security posture](#security-posture)
@@ -59,8 +66,8 @@ uv run tools/resolve.py resolve kali-research && git diff locks/
 ssh-add ~/.ssh/id_ed25519
 RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
 
-# 4. Work in clones, never in the built image.
-tart clone rbt-kali-research-<sha> work-1 && tart run --rosetta=rosetta work-1
+# 4. Work in clones, never in the built image. Each clone gets its own password.
+./rhubarb new web-1 --profile kali-research && ./rhubarb run web-1
 ```
 
 > [!TIP]
@@ -77,18 +84,19 @@ tart clone rbt-kali-research-<sha> work-1 && tart run --rosetta=rosetta work-1
 | `kali-research` | Kali rolling | Chrome, ZAP, WARP, Tailscale · `kali-linux-default` · XFCE · Rosetta | Batteries-included offensive tooling |
 
 ```mermaid
+%%{init: {'theme':'base','fontFamily':'ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#2b2d42','primaryBorderColor':'#c9184a','lineColor':'#8d99ae','edgeLabelBackground':'#ffffff','fontSize':'13px'},'flowchart':{'curve':'basis','nodeSpacing':45,'rankSpacing':55,'padding':8,'useMaxWidth':true}}}%%
 flowchart TD
-    Q{"What are you testing?"}
-    Q -->|"macOS apps & clients"| H{"Is your host on<br/>macOS 27?"}
-    H -->|yes| GG["goldengate-research<br/><i>macOS 27</i>"]
-    H -->|no| TH["tahoe-research<br/><i>macOS 26</i>"]
-    Q -->|"Linux tooling"| P{"What matters most?"}
-    P -->|"Reproducibility<br/>& auditability"| NX["nixos-research<br/><i>NixOS 26.05</i>"]
-    P -->|"Largest toolset<br/>out of the box"| KL["kali-research<br/><i>Kali rolling</i>"]
-    Q -->|"Something else"| OWN["Define your own profile<br/><i>see below</i>"]
+    Q{"What are you<br/>testing?"}
+    Q -->|"macOS apps<br/>&amp; clients"| H{"Host on<br/>macOS 27?"}
+    H -->|"yes"| GG["<b>goldengate-research</b><br/><i>macOS 27</i>"]
+    H -->|"no"| TH["<b>tahoe-research</b><br/><i>macOS 26</i>"]
+    Q -->|"Linux<br/>tooling"| P{"What matters<br/>most?"}
+    P -->|"Reproducibility<br/>&amp; audit"| NX["<b>nixos-research</b><br/><i>NixOS 26.05</i>"]
+    P -->|"Largest<br/>toolset"| KL["<b>kali-research</b><br/><i>Kali rolling</i>"]
+    Q -->|"Something<br/>else"| OWN(["Define your<br/>own profile"])
 
-    classDef q fill:#fff0f3,stroke:#c9184a,color:#2b2d42
-    classDef guest fill:#c9184a,stroke:#800f2f,color:#ffffff
+    classDef q fill:#fff0f3,stroke:#c9184a,stroke-width:1.5px,color:#2b2d42
+    classDef guest fill:#c9184a,stroke:#800f2f,stroke-width:1.5px,color:#ffffff
     classDef own fill:#2b2d42,stroke:#2b2d42,color:#ffffff
     class Q,H,P q
     class GG,TH,NX,KL guest
@@ -102,41 +110,42 @@ flowchart TD
 ## How it works
 
 ```mermaid
+%%{init: {'theme':'base','fontFamily':'ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#2b2d42','primaryBorderColor':'#c9184a','lineColor':'#8d99ae','edgeLabelBackground':'#ffffff','fontSize':'13px'},'flowchart':{'curve':'basis','nodeSpacing':45,'rankSpacing':55,'padding':8,'useMaxWidth':true}}}%%
 flowchart TB
-    subgraph D["① Define: profiles, bases and packages (JSON)"]
+    subgraph D["&nbsp;① Define &nbsp;·&nbsp; profiles, bases, packages (JSON)&nbsp;"]
         direction LR
-        PR["profiles/NAME.json"] ~~~ BA["config/bases/*.json"] ~~~ PK["config/packages/*.json"]
+        PR["profiles/<br/>NAME.json"] ~~~ BA["config/bases/<br/>*.json"] ~~~ PK["config/packages/<br/>*.json"]
     end
-    subgraph R["② Resolve & review: any host with gpg, the Mac for macOS"]
+    subgraph R["&nbsp;② Resolve &amp; review &nbsp;·&nbsp; any host with gpg (Mac for macOS)&nbsp;"]
         direction LR
-        RS["resolve.py resolve"] --> LK[("locks/NAME.lock.json")] --> RV{{"you review & commit"}}
+        RS["resolve.py<br/>resolve"] --> LK[("locks/<br/>NAME.lock.json")] --> RV{{"you review<br/>&amp; commit"}}
     end
-    subgraph B["③ Build: Apple silicon Mac"]
+    subgraph B["&nbsp;③ Build &nbsp;·&nbsp; Apple silicon Mac&nbsp;"]
         direction LR
-        VF["verify cache ↔ lock"] --> IN["install from the vendor's IPSW / ISO"] --> GU["guest re-verifies, installs,<br/>hardens, seals, powers off"]
+        VF["verify<br/>cache ↔ lock"] --> IN["install from the<br/>vendor IPSW / ISO"] --> GU["guest re-verifies,<br/>hardens, seals"]
     end
-    subgraph P["④ Prove: a throwaway clone"]
+    subgraph P["&nbsp;④ Prove &nbsp;·&nbsp; a throwaway clone&nbsp;"]
         direction LR
-        UV["rbt-NAME-sha-unverified"] --> ST{{"smoke test from outside"}}
-        ST -->|pass| OK["rbt-NAME-sha ✅"]
-        ST -->|fail| KEEP["kept as -unverified"]
+        UV["…-unverified"] --> ST{{"smoke test<br/>from outside"}}
+        ST -->|"pass"| OK["rbt-NAME-sha ✅"]
+        ST -->|"fail"| KEEP["kept for<br/>inspection"]
     end
-    D --> R --> B --> P
+    D ==> R ==> B ==> P
 
-    classDef cfg fill:#fff0f3,stroke:#c9184a,color:#2b2d42
-    classDef step fill:#ffffff,stroke:#2b2d42,color:#2b2d42
-    classDef gate fill:#ffd6de,stroke:#c9184a,color:#2b2d42
-    classDef good fill:#c9184a,stroke:#800f2f,color:#ffffff
+    classDef cfg fill:#fff0f3,stroke:#c9184a,stroke-width:1.5px,color:#2b2d42
+    classDef step fill:#ffffff,stroke:#2b2d42,stroke-width:1.5px,color:#2b2d42
+    classDef gate fill:#ffd6de,stroke:#c9184a,stroke-width:1.5px,color:#2b2d42
+    classDef good fill:#c9184a,stroke:#800f2f,stroke-width:1.5px,color:#ffffff
     classDef bad fill:#2b2d42,stroke:#2b2d42,color:#ffffff
     class PR,BA,PK cfg
     class RS,VF,IN,GU,UV step
     class LK,RV,ST gate
     class OK good
     class KEEP bad
-    style D fill:#fafafa,stroke:#c9184a,color:#2b2d42
-    style R fill:#fafafa,stroke:#c9184a,color:#2b2d42
-    style B fill:#fafafa,stroke:#c9184a,color:#2b2d42
-    style P fill:#fafafa,stroke:#c9184a,color:#2b2d42
+    style D fill:#f7f7f9,stroke:#d9a5b3,color:#6b6b76
+    style R fill:#f7f7f9,stroke:#d9a5b3,color:#6b6b76
+    style B fill:#f7f7f9,stroke:#d9a5b3,color:#6b6b76
+    style P fill:#f7f7f9,stroke:#d9a5b3,color:#6b6b76
 ```
 
 1. **Define.** A profile names an OS base and a list of tools. Bases and packages declare
@@ -155,13 +164,55 @@ flowchart TB
 
 ## Using your VMs
 
+Built images are templates: you work in **clones**, managed by the `rhubarb` CLI.
+
 ```sh
-tart clone rbt-<profile>-<sha> work-1           # always clone; keep the built image pristine
-tart run work-1                                 # macOS guests
-tart run --rosetta=rosetta work-1               # Linux guests with "rosetta": true
-./scripts/ssh.sh work-1                         # key-only SSH; host key pinned per VM name
-security find-generic-password -s RhubarbTart -a rbt-<profile>-<sha> -w   # login/sudo password
+./rhubarb images                              # built images; which one is current per profile
+./rhubarb new web-1 --profile kali-research   # clone the current image; give it its OWN password
+./rhubarb run web-1                           # GUI (Rosetta applied if the profile uses it)
+./rhubarb ssh web-1                           # key-only SSH, host key pinned per clone
+./rhubarb enroll web-1 tailscale              # VPN identity for this clone only
+./rhubarb list                                # clones: state, outdated image?, password, enrollment
+./rhubarb reset web-1                         # destroy + fresh clone of the current image
+./rhubarb rm web-1                            # delete the clone and its keychain entry
 ```
+
+| Command | What it does |
+|---|---|
+| `new NAME --profile P` / `--image IMG` | Clones a **verified** image (never `-unverified`), records its lineage, then boots it headless and rotates it to a **unique random password** (keychain account = clone name), proving through `sudo` that the old one is rejected. `--no-rotate` keeps the image's password |
+| `run NAME [--headless] [--detach]` | Starts the clone with the right flags for its profile (`--rosetta=rosetta` for Linux Rosetta profiles) |
+| `ssh NAME [-- CMD]` | Connects as the profile's user, host key pinned per clone name |
+| `enroll NAME tailscale\|warp\|perimeter81 [--org TEAM]` | Runtime VPN/ZTNA enrollment (see below) |
+| `list` · `images` | Flags clones whose image is **outdated** (the profile's lock changed) or **deleted**, and shows each clone's password mode and enrollments |
+| `reset NAME [--same-image]` | Throws the clone away (identity, enrollment and all) and re-clones, from the current image by default |
+| `rm NAME [--yes]` | Stops and deletes the clone, its keychain entry and its pinned host key |
+
+> [!NOTE]
+> `rhubarb` only touches clones it created. It never modifies built images (`rbt-…`) or VMs
+> made some other way, and clone names can't start with `rbt-`. Per-clone rotation needs key
+> SSH (images built with `RHUBARB_SSH_PUBKEYS`, key loaded in `ssh-agent`). Without it the clone
+> keeps the image's password, and `rhubarb list` says `inherited`.
+
+<details>
+<summary><b>Where clone records live, and why</b></summary>
+
+Records are kept in `~/Library/Application Support/RhubarbTart/` (override with
+`RHUBARB_STATE_DIR`):
+
+- **Outside the repo**, so they're never committed or synced with it, and **outside Tart's VM
+  folders**, so they never ship inside a VM bundle or registry push.
+- **No secrets:** they hold only names, lineage, username and timestamps. Passwords stay in the
+  macOS keychain.
+- **Like OpenSSH's StrictModes,** a record is trusted only if the folder is `0700` and the file
+  is `0600`, owned by you, and a regular file (not a symlink). Its schema is strict and its name
+  must match the file, so a planted or corrupted record can't steer the CLI at the wrong VM or
+  keychain entry. Writes are atomic.
+- **`events.log`** keeps an append-only trail (no secrets) of `new`, `rotate`, `enroll`,
+  `reset` and `rm`.
+- **They're not a boundary against malware running as you,** which could drive `tart` and your
+  keychain directly anyway. They're about correctness and least surprise.
+
+</details>
 
 ### VPN and ZTNA enrollment
 
@@ -169,15 +220,16 @@ Images never contain VPN identity. Each clone is enrolled at runtime, and the se
 touch the repo, a profile, the image, or a command line:
 
 ```mermaid
+%%{init: {'theme':'base','fontFamily':'ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif','themeVariables':{'primaryColor':'#fff0f3','primaryBorderColor':'#c9184a','primaryTextColor':'#2b2d42','actorBkg':'#fff0f3','actorBorder':'#c9184a','actorTextColor':'#2b2d42','actorLineColor':'#c9a3ae','signalColor':'#8d99ae','signalTextColor':'#2b2d42','labelBoxBkgColor':'#fff0f3','labelBoxBorderColor':'#c9184a','labelTextColor':'#2b2d42','noteBkgColor':'#c9184a','noteTextColor':'#ffffff','noteBorderColor':'#800f2f','sequenceNumberColor':'#ffffff','activationBkgColor':'#c9184a','activationBorderColor':'#800f2f'},'sequence':{'mirrorActors':false,'messageAlign':'center','boxMargin':10,'noteMargin':10,'width':170}}}%%
 sequenceDiagram
     autonumber
     actor You
     participant KC as 🔑 Host keychain
-    participant EN as enroll.sh
-    participant VM as Clone (work-1)
-    You->>KC: store the token once (prompted, never in argv)
-    You->>EN: enroll.sh work-1 tailscale --image rbt-…
-    EN->>KC: read the VM password + token
+    participant EN as rhubarb enroll
+    participant VM as Clone · web-1
+    You->>KC: store the token once<br/>(prompted, never in argv)
+    You->>EN: rhubarb enroll web-1 tailscale
+    EN->>KC: read the clone password + token
     EN->>VM: send both over SSH stdin
     Note over VM: secret → 0600 temp file<br/>enroll → shred
     VM-->>You: connected
@@ -185,13 +237,13 @@ sequenceDiagram
 
 | Service | Command | Secret (keychain service `RhubarbTart-enroll`) | Notes |
 |---|---|---|---|
-| Tailscale | `enroll.sh work-1 tailscale --image rbt-…` | account `tailscale-authkey` | Use a one-off, pre-approved, *tagged* key (ephemeral for throwaway clones). macOS: approve the system extension once per clone |
-| Cloudflare WARP | `enroll.sh work-1 warp --org TEAM --image rbt-…` | `warp-client-id`, `warp-client-secret` | A service token allowed to enroll devices; dashboard version pushes are disabled |
-| Perimeter 81 | `enroll.sh work-1 perimeter81` | — | Prints the manual sign-in and extension-approval steps |
+| Tailscale | `rhubarb enroll web-1 tailscale` | account `tailscale-authkey` | Use a one-off, pre-approved, *tagged* key (ephemeral for throwaway clones). macOS: approve the system extension once per clone |
+| Cloudflare WARP | `rhubarb enroll web-1 warp --org TEAM` | `warp-client-id`, `warp-client-secret` | A service token allowed to enroll devices; dashboard version pushes are disabled |
+| Perimeter 81 | `rhubarb enroll web-1 perimeter81` | — | Prints the manual sign-in and extension-approval steps |
 
-Store a secret with `security add-generic-password -s RhubarbTart-enroll -a tailscale-authkey -w`
-(it prompts). `--image` tells `enroll.sh` which built image's keychain password the clone
-inherited.
+Store a secret once with `security add-generic-password -s RhubarbTart-enroll -a tailscale-authkey -w`
+(it prompts, so the secret never lands in your shell history). `rhubarb enroll` wraps
+`scripts/enroll.sh` and records which services each clone is enrolled in.
 
 ## Define your own guest
 
@@ -246,39 +298,41 @@ Each kind of input has its own chain of trust. The lock records which chain prod
 (`hash_sources`), so reviewers can see where trust comes from.
 
 ```mermaid
-flowchart TB
-    subgraph IPSW["macOS IPSW"]
+%%{init: {'theme':'base','fontFamily':'ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#2b2d42','primaryBorderColor':'#c9184a','lineColor':'#8d99ae','edgeLabelBackground':'#ffffff','fontSize':'13px'},'flowchart':{'curve':'basis','nodeSpacing':45,'rankSpacing':55,'padding':8,'useMaxWidth':true}}}%%
+flowchart LR
+    subgraph IPSW["&nbsp;macOS IPSW&nbsp;"]
         direction LR
-        A1["Apple CDN digest header"] --> A3["IPSW sha256"]
-        A2["ipsw.me<br/>(must agree)"] -.-> A3
+        A1(["Apple CDN<br/>digest header"]) --> A3["IPSW<br/>sha256"]
+        A2(["ipsw.me"]) -.->|"must agree"| A3
     end
-    subgraph APT["Kali vendor .debs"]
+    subgraph APT["&nbsp;Kali vendor .debs&nbsp;"]
         direction LR
-        K1["pinned key file<br/>+ fingerprint"] --> K2["signed InRelease"] --> K3["Packages SHA256"] --> K4[".deb SHA256"]
+        K1(["pinned key<br/>+ fingerprint"]) --> K2["signed<br/>InRelease"] --> K3["Packages<br/>SHA256"] --> K4[".deb<br/>SHA256"]
     end
-    subgraph TSD["Tailscale on macOS"]
+    subgraph TSD["&nbsp;Tailscale on macOS&nbsp;"]
         direction LR
-        T1["root key from<br/>Tailscale's source"] --> T2["signed distsign.pub"] --> T3["Ed25519 signature<br/>on the package"]
+        T1(["root key from<br/>Tailscale source"]) --> T2["signed<br/>distsign.pub"] --> T3["Ed25519 sig<br/>on package"]
     end
-    subgraph NIX["NixOS"]
+    subgraph NIX["&nbsp;NixOS&nbsp;"]
         direction LR
-        N1["channel git revision"] --> N2["nixpkgs NAR hash<br/>re-checked in guest"] --> N3["cache.nixos.org<br/>signed binaries"]
+        N1(["channel<br/>git revision"]) --> N2["nixpkgs NAR hash<br/>re-checked in guest"] --> N3["cache.nixos.org<br/>signed binaries"]
     end
-    subgraph MAC["macOS apps"]
+    subgraph MAC["&nbsp;macOS apps&nbsp;"]
         direction LR
-        M1["sha256<br/>vendor or first use"] --> M2["Developer ID +<br/>notarization"] --> M3["pinned Team ID"]
+        M1(["sha256<br/>vendor / first use"]) --> M2["Developer ID<br/>+ notarization"] --> M3["pinned<br/>Team ID"]
     end
-    IPSW ~~~ APT ~~~ TSD ~~~ NIX ~~~ MAC
+    IPSW ~~~ APT
+    TSD ~~~ NIX ~~~ MAC
 
-    classDef root fill:#c9184a,stroke:#800f2f,color:#ffffff
-    classDef link fill:#fff0f3,stroke:#c9184a,color:#2b2d42
+    classDef root fill:#c9184a,stroke:#800f2f,stroke-width:1.5px,color:#ffffff
+    classDef link fill:#ffffff,stroke:#c9184a,stroke-width:1.5px,color:#2b2d42
     class A1,K1,T1,N1,M1 root
     class A2,A3,K2,K3,K4,T2,T3,N2,N3,M2,M3 link
-    style IPSW fill:#fafafa,stroke:#c9184a,color:#2b2d42
-    style APT fill:#fafafa,stroke:#c9184a,color:#2b2d42
-    style TSD fill:#fafafa,stroke:#c9184a,color:#2b2d42
-    style NIX fill:#fafafa,stroke:#c9184a,color:#2b2d42
-    style MAC fill:#fafafa,stroke:#c9184a,color:#2b2d42
+    style IPSW fill:#f7f7f9,stroke:#d9a5b3,color:#6b6b76
+    style APT fill:#f7f7f9,stroke:#d9a5b3,color:#6b6b76
+    style TSD fill:#f7f7f9,stroke:#d9a5b3,color:#6b6b76
+    style NIX fill:#f7f7f9,stroke:#d9a5b3,color:#6b6b76
+    style MAC fill:#f7f7f9,stroke:#d9a5b3,color:#6b6b76
 ```
 
 <details>
@@ -330,13 +384,14 @@ Where a tool forces a password onto a command line (Apple's provisioning API, th
 installer), RhubarbTart uses a throwaway **bootstrap** password and rotates it away:
 
 ```mermaid
+%%{init: {'theme':'base','fontFamily':'ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif','themeVariables':{'primaryColor':'#fff0f3','primaryBorderColor':'#c9184a','primaryTextColor':'#2b2d42','actorBkg':'#fff0f3','actorBorder':'#c9184a','actorTextColor':'#2b2d42','actorLineColor':'#c9a3ae','signalColor':'#8d99ae','signalTextColor':'#2b2d42','labelBoxBkgColor':'#fff0f3','labelBoxBorderColor':'#c9184a','labelTextColor':'#2b2d42','noteBkgColor':'#c9184a','noteTextColor':'#ffffff','noteBorderColor':'#800f2f','sequenceNumberColor':'#ffffff','activationBkgColor':'#c9184a','activationBorderColor':'#800f2f'},'sequence':{'mirrorActors':false,'messageAlign':'center','boxMargin':10,'noteMargin':10,'width':170}}}%%
 sequenceDiagram
     autonumber
     participant KC as 🔑 Host keychain
     participant BS as build.sh
     participant G as Guest
     BS->>KC: store random final password
-    BS->>G: install with a random bootstrap password
+    BS->>G: install with a random<br/>bootstrap password
     BS->>G: upload final password (0600 file)
     Note over G: rotate bootstrap → final<br/>prove bootstrap is rejected<br/>shred the file
     G-->>BS: seal & power off
@@ -365,8 +420,10 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; needs gpg, any OS
 |---|---|---|
 | `RHUBARB_SSH_PUBKEYS` | unset | Public keys (ed25519/ecdsa, optionally `-sk`; RSA rejected) to authorize. Unset: SSH disabled |
 | `RHUBARB_SSH_FROM` | `192.168.64.1` | `from=` restriction on those keys (Tart's host address); Kali's preseed server binds here too |
-| `RHUBARB_USER` | `admin` | Username `ssh.sh` / `enroll.sh` connect as. Set it for profiles with a custom `username` |
+| `RHUBARB_USER` | `admin` | Username for the low-level `scripts/ssh.sh` / `enroll.sh` (`rhubarb` reads it from the clone's record) |
 | `REBUILD_VANILLA` | `0` | macOS: `1` reinstalls the vanilla VM from the IPSW and **rotates its password**. New macOS builds get a new vanilla VM automatically |
+| `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` | Where `rhubarb` keeps clone records and `events.log` |
+| `RHUBARB_SSH_WAIT` | `180` | Seconds `rhubarb new` waits for a clone's SSH before keeping the inherited password |
 | `RHUBARB_CACHE` | `./cache` | Downloads (`artifacts/`) and per-profile guest stage dirs (`stage/`) |
 | `GITHUB_TOKEN` | unset | Optional; avoids GitHub API rate limits while resolving |
 
@@ -426,6 +483,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; needs gpg, any OS
 | `guest/macos/` · `guest/nixos/` · `guest/kali/` | In-guest verify/install and harden/seal scripts |
 | `nix/` | The NixOS system definition (reads the staged profile) |
 | `kali/preseed.cfg.tmpl` | Unattended Kali install (rendered per build, never committed rendered) |
+| `rhubarb` · `tools/rhubarb_cli.py` · `tools/rhubarb/{cli,clones,hostops}.py` | Clone management CLI, record store, tart/keychain/SSH operations |
 | `scripts/` | `build.sh` · `smoke-test.sh` · `ssh.sh` · `enroll.sh` · `env.sh` · `publish.sh` (draft) |
 | `.claude/skills/` | Guides for Claude Code sessions (see [Development](#development)) |
 
@@ -467,6 +525,8 @@ for regressions of the rules above: Homebrew or `packer init` creeping back, def
 - [ ] A standard (non-admin) daily-use account, with admin kept for maintenance.
 - [ ] Chrome's updater inside macOS clones: disable it via policy if clones must stay identical.
 - [ ] `--net-softnet` for isolating several running clones from each other.
+- [ ] Stacked clones (`tart clone --stacked`, an immutable base plus an overlay) once images are
+      pulled from a private registry. Tart supports it only for remote images.
 - [ ] `scripts/publish.sh` is an untested draft; `cosign`/`crane` aren't in the pinned toolchain.
 - [ ] Pin `TART_TEAM_ID` and the ZAP/Perimeter 81 Team IDs after the first bootstrap and resolve.
 - [ ] Choose a license for this repository.

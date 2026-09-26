@@ -1,0 +1,44 @@
+{
+  "id": "demo",
+  "label": "Demo lab engagement",
+  "operator": "errantpacket",
+  "authorization": "RoE-2026-DEMO-001 (internal lab authorization, non-production)",
+  "ranges": [
+    {
+      "profile": "kali-research",
+      "count": 2,
+      "prefix": "demo-offense"
+    },
+    {
+      "profile": "goldengate-research",
+      "count": 1
+    }
+  ],
+  "targets": {
+    "hosts": [
+      "10.20.0.10"
+    ],
+    "cidrs": [
+      "10.20.0.0/24"
+    ],
+    "domains": [
+      "lab.internal"
+    ],
+    "urls": [
+      "https://lab.internal/ctf"
+    ]
+  },
+  "agent_budget": {
+    "agents": [
+      "recon",
+      "exploit"
+    ],
+    "wall_clock_minutes": 240,
+    "max_spend_usd": 25,
+    "kill_time": "2026-09-27T18:00:00Z"
+  },
+  "evidence": {
+    "vault": "vault://demo",
+    "retention_days": 90
+  }
+}

@@ -432,47 +432,37 @@ def test_cli_progress_stream() -> None:
 
 
 def test_hostops_resilience() -> None:
-    """#16: local_vms() retries the transient disk error and gives a clear error; delete_vm()
-    works by name without listing. tart + sleep are stubbed in-process (no real VMs)."""
+    """#16/#21: local_vms() falls back to a disk-free enumeration when tart list hits the
+    disk-lock (a running VM); other failures still raise; delete_vm() works by name. tart +
+    _fs_vms are stubbed in-process (no real VMs)."""
     from rhubarb import hostops
     from rhubarb.common import VerifyError
     CP = subprocess.CompletedProcess
     BUSY = ("Error: Failed to retrieve info for disk image: The operation couldn't be "
             "completed. Resource temporarily unavailable")
-    orig_tart, orig_sleep = hostops.tart, hostops.time.sleep
-    hostops.time.sleep = lambda *_: None
+    orig_tart, orig_fs = hostops.tart, hostops._fs_vms
     try:
-        # retry on the transient disk error, then succeed
-        calls = {"n": 0}
+        # happy path: tart list works -> its JSON is used, no fallback
         good = json.dumps([{"Source": "local", "Name": "vm1", "Running": False}])
-        def flaky(*a, **k):
-            calls["n"] += 1
-            return CP(a, 0, good, "") if calls["n"] >= 3 else CP(a, 1, "", BUSY)
-        hostops.tart = flaky
-        vms = hostops.local_vms()
-        check("local_vms retries transient disk-busy then succeeds", "vm1" in vms and calls["n"] == 3)
+        hostops.tart = lambda *a, **k: CP(a, 0, good, "")
+        hostops._fs_vms = lambda: {"SHOULD_NOT": {}}
+        check("local_vms uses tart list when it works", hostops.local_vms().get("vm1") is not None)
 
-        # persistent transient -> actionable VerifyError
+        # disk-busy (a running VM) -> fall back to the disk-free enumeration, don't raise
         hostops.tart = lambda *a, **k: CP(a, 1, "", BUSY)
-        try:
-            hostops.local_vms(retries=2)
-            busy_ok = False
-        except VerifyError as e:
-            busy_ok = "disk image" in str(e)
-        check("local_vms raises actionable error on persistent disk-busy", busy_ok)
+        hostops._fs_vms = lambda: {"fsvm": {"Name": "fsvm", "Source": "local",
+                                            "Running": True, "State": "running"}}
+        vms = hostops.local_vms()
+        check("local_vms falls back to disk-free enumeration on a running VM", vms.get("fsvm", {}).get("Running") is True)
 
-        # a different failure is not retried
-        other = {"n": 0}
-        def other_err(*a, **k):
-            other["n"] += 1
-            return CP(a, 1, "", "Error: some other failure")
-        hostops.tart = other_err
+        # a different failure still raises (not masked by the fallback)
+        hostops.tart = lambda *a, **k: CP(a, 1, "", "Error: some other failure")
         try:
-            hostops.local_vms(retries=4)
-            noretry_ok = False
+            hostops.local_vms()
+            other_ok = False
         except VerifyError:
-            noretry_ok = other["n"] == 1
-        check("local_vms does not retry non-transient failures", noretry_ok)
+            other_ok = True
+        check("local_vms raises on a non-disk-lock failure", other_ok)
 
         # delete_vm by name: present / already-gone / real error
         hostops.tart = lambda *a, **k: CP(a, 0, "", "")
@@ -487,8 +477,29 @@ def test_hostops_resilience() -> None:
             d_err = True
         check("delete_vm handles present / absent / error by name", d_ok and d_absent and d_err)
     finally:
-        hostops.tart = orig_tart
-        hostops.time.sleep = orig_sleep
+        hostops.tart, hostops._fs_vms = orig_tart, orig_fs
+
+
+def test_fs_vms() -> None:
+    """#21: _fs_vms enumerates local VM dirs with running state from the process table, no disk read."""
+    from rhubarb import hostops
+    orig_dir, orig_procs = hostops.VMS_DIR, hostops._tart_run_procs
+    with tempfile.TemporaryDirectory() as tmp:
+        vms = Path(tmp)
+        for n in ("gate-c", "rbt-goldengate-research-abc123", "web-1"):
+            (vms / n).mkdir()
+        (vms / "not-a-dir.txt").write_text("x")
+        hostops.VMS_DIR = vms
+        hostops._tart_run_procs = lambda: [("111", "gate-c")]  # only gate-c is running
+        try:
+            out = hostops._fs_vms()
+            ok = (set(out) == {"gate-c", "rbt-goldengate-research-abc123", "web-1"}
+                  and out["gate-c"]["Running"] is True and out["gate-c"]["State"] == "running"
+                  and out["web-1"]["Running"] is False and out["web-1"]["State"] == "stopped"
+                  and all(v["Source"] == "local" for v in out.values()))
+            check("_fs_vms lists VM dirs with running state, no disk read", ok)
+        finally:
+            hostops.VMS_DIR, hostops._tart_run_procs = orig_dir, orig_procs
 
 
 def test_shutdown_reaps_boot_process() -> None:
@@ -567,7 +578,8 @@ def test_reap_run() -> None:
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_cli_progress_stream,
-              test_hostops_resilience, test_shutdown_reaps_boot_process, test_reap_run):
+              test_hostops_resilience, test_shutdown_reaps_boot_process, test_reap_run,
+              test_fs_vms):
         print(t.__name__)
         t()
     if FAILS:

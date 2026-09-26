@@ -22,15 +22,26 @@ assert_team() { # <observed> <expected> <what>
   [[ "$1" == "$2" ]] || die "$3: Team ID '$1' != locked '$2'"
 }
 
-install_pkg() { # <id> <file> <team_id>
-  local id=$1 file=$2 team=$3 sig observed
+install_pkg() { # <id> <file> <team_id> <app>
+  local id=$1 file=$2 team=$3 app=$4 sig observed
   sig=$(pkgutil --check-signature "$file") || die "$id: pkg signature invalid"
   grep -q "trusted by the Apple notary service" <<<"$sig" || die "$id: pkg not notarized"
   observed=$(grep -m1 'Developer ID Installer' <<<"$sig" | sed -E 's/.*\(([A-Z0-9]{10})\).*/\1/')
   assert_team "$observed" "$team" "$id"
   spctl --assess --type install "$file" || die "$id: Gatekeeper rejected pkg"
   say "$id: installing $file"
-  installer -pkg "$file" -target /
+  # A vendor postinstall may end by launching the GUI app (Tailscale runs `open -a Tailscale.app`),
+  # which fails in the headless build (no Aqua session) and fails the whole installer even though
+  # the payload is already extracted. installer resets PATH, so `open` can't be shimmed. Tolerate a
+  # non-zero exit ONLY when the app bundle actually installed; the post-install loop below then
+  # re-verifies its presence, signature and Team ID, which is the real gate. A preinstall failure
+  # (no payload) leaves no bundle and still dies here.
+  if installer -pkg "$file" -target /; then
+    return 0
+  fi
+  [[ -n "$app" && "$app" != "-" && -d "/Applications/$app" ]] \
+    || die "$id: installer failed and /Applications/$app is not present"
+  say "$id: installer postinstall returned non-zero; payload present, continuing (re-verified below)"
 }
 
 verify_app() { # <id> <app-path> <team_id>
@@ -61,7 +72,7 @@ install_dmg_app() { # <id> <file> <team_id> <app-name> <signed>
 while IFS=$'\t' read -r id kind file team app signed; do
   [[ -z "$id" ]] && continue
   case "$kind" in
-    pkg) install_pkg "$id" "$file" "$team" ;;
+    pkg) install_pkg "$id" "$file" "$team" "$app" ;;
     dmg) install_dmg_app "$id" "$file" "$team" "$app" "$signed" ;;
     *) die "$id: unknown kind '$kind'" ;;
   esac

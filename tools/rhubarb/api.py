@@ -31,6 +31,7 @@ See docs/INTERFACE-PLAN.md, Stage A.
 
 import json
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import clones as _clones
@@ -243,6 +244,20 @@ class RemoveResult:
 # ``hostops`` for every record/keychain/tart/GUI-session action and never re-implement it.
 
 
+# Progress sink: an optional ``progress(msg)`` callback the long operations (``new`` /
+# ``reset`` and the internal clone/rotate steps) call as each milestone completes, so a
+# frontend can stream live status. See the module-level ``new``/``reset`` docstrings and
+# docs/INTERFACE-PLAN.md (#19). ``None`` (the default) is silent — pure, no side effects —
+# which is why existing callers and tests are unaffected.
+ProgressFn = Callable[[str], None]
+
+
+def _emit(progress: ProgressFn | None, msg: str) -> None:
+    """Send one milestone line to the progress sink, if a frontend supplied one."""
+    if progress is not None:
+        progress(msg)
+
+
 def _current_image(pid: str) -> str | None:
     """The verified image the profile's committed lock produces (None if no valid lock)."""
     try:
@@ -280,16 +295,21 @@ def _source_image(profile: str | None, image: str | None) -> tuple[str, dict]:
     return img, prof
 
 
-def _rotate(rec: dict) -> tuple[bool, str | None]:
+def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | None]:
     """Give the clone its own password (keychain account = clone name), proven via PAM.
 
     Returns ``(rotated, note)``: ``(True, None)`` on a clean rotation, ``(False, why)`` when
     the clone is unreachable / rejects our key so the image password is kept. Raises
     ``VerifyError`` if the rotation was attempted but could not be completed and verified.
+
+    ``progress`` (optional) streams the same milestones the CLI used to print live —
+    ``"<name>: booting headless to rotate its password"`` before the headless boot and
+    ``"<name>: unique password set ..."`` on a clean rotation; ``None`` is silent.
     """
     name = rec["name"]
     old = hostops.keychain_get(rec["password_account"])
     new_pw = hostops.random_password()
+    _emit(progress, f"{name}: booting headless to rotate its password")
     proc = hostops.start_vm(name, rec["rosetta"], headless=True)
     try:
         ip = hostops.vm_ip(name, rec["family"])
@@ -308,22 +328,27 @@ def _rotate(rec: dict) -> tuple[bool, str | None]:
         rec["password_account"] = name
         _clones.save(rec)
         _clones.log_event("rotate", name)
+        _emit(progress, f"{name}: unique password set (keychain account {name}); old password rejected")
         return True, None
     finally:
         hostops.shutdown(name, proc)  # never orphan the detached boot process (#17)
 
 
-def _clone(name: str, image: str, prof: dict, rotate: bool) -> tuple[bool, str | None]:
+def _clone(name: str, image: str, prof: dict, rotate: bool,
+           progress: ProgressFn | None = None) -> tuple[bool, str | None]:
     """Clone ``image`` to ``name``, write and log the record, then optionally rotate.
 
-    Returns ``(rotated, note)`` describing the password outcome.
+    Returns ``(rotated, note)`` describing the password outcome. ``progress`` (optional)
+    streams milestones live (``"cloned <image> -> <name>"``, then the rotation lines); it is
+    forwarded to ``_rotate``. ``None`` is silent.
     """
     hostops.tart("clone", image, name)
+    _emit(progress, f"cloned {image} -> {name}")
     rec = _clones.new_record(name, prof, image)
     _clones.save(rec)
     _clones.log_event("new", name, image)
     if rotate:
-        return _rotate(rec)
+        return _rotate(rec, progress)
     return False, "password: inherited from the image (use without --no-rotate for a per-clone password)"
 
 
@@ -432,7 +457,7 @@ def provenance(vm: str) -> Provenance:
 
 
 def new(name: str, profile: str | None = None, image: str | None = None,
-        rotate: bool = True) -> NewResult:
+        rotate: bool = True, progress: ProgressFn | None = None) -> NewResult:
     """Create a research clone named ``name`` from a verified image.
 
     Give exactly one of ``profile`` (clone the image its committed lock produces) or
@@ -443,6 +468,12 @@ def new(name: str, profile: str | None = None, image: str | None = None,
     clone is unreachable or rejects the key, the image password is kept (reported in the
     result's ``note``). Mirrors ``rhubarb new``.
 
+    ``progress`` (optional) is a ``Callable[[str], None]`` the operation calls with each
+    milestone as it completes (``"cloned <image> -> <name>"``, ``"<name>: booting headless
+    to rotate its password"``, ``"<name>: unique password set ..."``), letting a frontend
+    stream live status. Omit it (the default ``None``) for pure, silent behavior — existing
+    callers and tests are unaffected.
+
     Returns a ``NewResult``. Raises ``VerifyError`` (not exactly one of profile/image, bad
     name, name already taken, image not built here, no keychain password, or a rotation
     that could not be completed and verified) / ``FileNotFoundError`` per the module
@@ -452,7 +483,7 @@ def new(name: str, profile: str | None = None, image: str | None = None,
     if name in hostops.local_vms():
         raise VerifyError(f"a VM named {name} already exists")
     img, prof = _source_image(profile, image)
-    rotated, note = _clone(name, img, prof, rotate)
+    rotated, note = _clone(name, img, prof, rotate, progress)
     return NewResult(name=name, image=img, profile=prof["id"], rotated=rotated,
                      password_mode="unique" if rotated else "inherited", note=note)
 
@@ -529,7 +560,8 @@ def enroll(name: str, service: str, org: str | None = None) -> EnrollResult:
     return EnrollResult(name=rec["name"], service=service, recorded=True, enrolled_at=ts)
 
 
-def reset(name: str, same_image: bool = False, rotate: bool = True) -> NewResult:
+def reset(name: str, same_image: bool = False, rotate: bool = True,
+          progress: ProgressFn | None = None) -> NewResult:
     """Reset the clone to a clean state: destroy it and re-clone under the same name.
 
     Tears the clone down (stops it, ``tart delete``, forgets its host key, and deletes its
@@ -539,6 +571,10 @@ def reset(name: str, same_image: bool = False, rotate: bool = True) -> NewResult
     to a fresh per-clone password by default (as ``rhubarb reset`` does); pass
     ``rotate=False`` to keep the image password (the CLI's ``--no-rotate``). Mirrors
     ``rhubarb reset``.
+
+    ``progress`` (optional) streams the same live milestones as ``new`` — plus the teardown
+    line ``"<name>: destroyed ...; re-cloning from <image>"`` before the re-clone, so the
+    stream stays in order. Omit it (default ``None``) for pure, silent behavior.
 
     Returns a ``NewResult`` describing the fresh clone. Raises ``VerifyError`` (unknown/
     untrusted clone, or the target image is not built here) / ``FileNotFoundError`` per the
@@ -552,7 +588,8 @@ def reset(name: str, same_image: bool = False, rotate: bool = True) -> NewResult
     _destroy(rec)
     _clones.delete(rec["name"])
     _clones.log_event("reset", rec["name"], img)
-    rotated, note = _clone(rec["name"], img, prof, rotate)
+    _emit(progress, f"{rec['name']}: destroyed (enrollment and identity are gone); re-cloning from {img}")
+    rotated, note = _clone(rec["name"], img, prof, rotate, progress)
     return NewResult(name=rec["name"], image=img, profile=prof["id"], rotated=rotated,
                      password_mode="unique" if rotated else "inherited", note=note)
 

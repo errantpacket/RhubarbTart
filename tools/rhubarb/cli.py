@@ -37,16 +37,16 @@ def table(rows: list[list[str]], header: list[str]) -> None:
         print("  ".join(str(c).ljust(w) for c, w in zip(r, widths, strict=True)).rstrip())
 
 
-def _say_clone(res: api.NewResult, rotate_requested: bool) -> None:
-    """Report a fresh clone (new/reset) exactly as the old orchestration did."""
-    say(f"cloned {res.image} -> {res.name}")
-    if rotate_requested:
-        say(f"{res.name}: booting headless to rotate its password")
-        if res.rotated:
-            say(f"{res.name}: unique password set (keychain account {res.name}); old password rejected")
-        elif res.note:
-            say(res.note)
-    elif res.note:
+def _say_clone(res: api.NewResult) -> None:
+    """Report the outcome of a fresh clone (new/reset).
+
+    The step-by-step milestones (``cloned ... -> ...``, ``booting headless ...``, ``unique
+    password set ...``) stream live during the operation via the ``progress`` callback the
+    commands pass to ``api.new``/``api.reset`` (see #19); this only reports the closing
+    ``note`` — why rotation was skipped or could not complete — which the core returns
+    rather than streams. ``None`` note means a clean rotation, so nothing more to say.
+    """
+    if res.note:
         say(res.note)
 
 
@@ -73,8 +73,8 @@ def cmd_list(_a) -> None:
 
 
 def cmd_new(a) -> None:
-    res = api.new(a.name, profile=a.profile, image=a.image, rotate=not a.no_rotate)
-    _say_clone(res, rotate_requested=not a.no_rotate)
+    res = api.new(a.name, profile=a.profile, image=a.image, rotate=not a.no_rotate, progress=say)
+    _say_clone(res)
     say(f"ready: rhubarb run {res.name}")
 
 
@@ -102,9 +102,8 @@ def cmd_enroll(a) -> None:
 
 
 def cmd_reset(a) -> None:
-    res = api.reset(a.name, same_image=a.same_image, rotate=not a.no_rotate)
-    say(f"{res.name}: destroyed (enrollment and identity are gone); re-cloning from {res.image}")
-    _say_clone(res, rotate_requested=not a.no_rotate)
+    res = api.reset(a.name, same_image=a.same_image, rotate=not a.no_rotate, progress=say)
+    _say_clone(res)
 
 
 def cmd_rm(a) -> None:

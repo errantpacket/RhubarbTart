@@ -71,6 +71,15 @@ derivation — pure, off-Mac) · **CLI parity**: every existing `rhubarb`/`resol
 behaves identically (capture before/after output on a scripted run) · no `tart`/keychain calls
 outside the core.
 
+**Accepted deviations from the frozen contract (Stage A build):**
+- `reset(name, same_image=False, rotate=True)` — the extra `rotate` kwarg is required to preserve
+  the CLI's `reset --no-rotate`; backward-compatible (default `True` == prior behavior).
+- `stop` was not in the contract; `cli.cmd_stop` keeps a thin `clones.load` + `hostops.stop_vm`
+  call. Add `api.stop()` at the next contract revision — Stage C's TUI will want it.
+- One minor stderr difference on the *hard* rotation-failure path (pre-failure progress lines no
+  longer stream before the error); exit code and error text unchanged. Inherent to "return/raise,
+  never print." Not covered by a test.
+
 ### Stage B — TUI, read-only
 
 A Textual app (`tools/rhubarb_tui.py`, launched by a `./rhubarb-tui` shim) that **only reads** via

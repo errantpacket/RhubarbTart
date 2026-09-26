@@ -282,8 +282,111 @@ else: sys.exit(1)
                   res.returncode != 0 and (t / "pw").read_text() == "OldPass111")
 
 
+# ---- api.py: pure logic (no tart / keychain / Mac) -----------------------------------------
+# _profile_of / _current_image derive the image identity and current/outdated status; the
+# expected values below are reasoned from the naming contract and the committed locks/, not
+# read back from what this code returned. Locks present: kali/nixos/goldengate; tahoe has none.
+
+def test_api_pure() -> None:
+    from rhubarb import api
+    from rhubarb.clones import IMAGE_RE
+    from rhubarb.common import VerifyError
+
+    def raises(label, exc, fn):
+        try:
+            fn()
+            check(label, False)
+        except exc:
+            check(label, True)
+
+    # _profile_of: rbt-PROFILE-SHA(12 hex) -> profile id; None for anything else.
+    check("_profile_of maps a well-formed kali image to its profile",
+          api._profile_of("rbt-kali-research-0123456789ab") == "kali-research")
+    check("_profile_of maps a well-formed nixos image to its profile",
+          api._profile_of("rbt-nixos-research-fedcba987654") == "nixos-research")
+    check("_profile_of: matches IMAGE_RE but no such profile -> None",
+          api._profile_of("rbt-nosuchprofile-0123456789ab") is None)
+    check("_profile_of: not an rbt-PROFILE-SHA name -> None",
+          api._profile_of("personal-vm") is None)
+    check("_profile_of: uppercase (non-hex) sha is not an image name -> None",
+          api._profile_of("rbt-kali-research-ABCDEF012345") is None)
+    check("_profile_of: sha of wrong length -> None",
+          api._profile_of("rbt-kali-research-0123456789") is None)
+
+    # _current_image: the rbt- name the profile's committed lock produces; None if no lock.
+    cur = api._current_image("kali-research")
+    check("_current_image returns a well-formed rbt- image for a locked profile",
+          isinstance(cur, str) and bool(IMAGE_RE.match(cur)) and cur.startswith("rbt-kali-research-"))
+    check("_current_image is consistent with _profile_of (round-trip)",
+          api._profile_of(cur) == "kali-research")
+    check("_current_image: profile with no committed lock (tahoe-research) -> None",
+          api._current_image("tahoe-research") is None)
+    check("_current_image: unknown / invalid profile id -> None",
+          api._current_image("no-such-profile") is None)
+
+    # current/outdated status derivation (rhubarb images / list): an image is 'current' iff it
+    # equals what its profile's lock now produces, else 'outdated'.
+    def status(image):
+        return "current" if api._current_image(api._profile_of(image)) == image else "outdated"
+    fake = "rbt-kali-research-000000000000"
+    check("derivation precondition: fabricated image differs from the current one", fake != cur)
+    check("status derivation: the current image reads 'current'", status(cur) == "current")
+    check("status derivation: same profile, stale sha reads 'outdated'", status(fake) == "outdated")
+
+    # provenance(vm): read-only parse of out/<vm>.provenance.json, typed errors, path guard.
+    saved_root = api.ROOT
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            api.ROOT = Path(tmp)
+            out = Path(tmp, "out")
+            out.mkdir()
+            ref = {
+                "vm": "work-1", "profile": "kali-research", "built_at": "2026-01-02T03:04:05Z",
+                "git_commit": "deadbeefcafe", "git_dirty": True,
+                "toolchain": {"tart": "2.0.0", "packer": "1.14.2"},
+                "tart_vm": {"Name": "work-1", "Running": False},
+                "inputs_sha256": "a" * 64, "lock_sha256": "b" * 64,
+                "lock": {"schema": 2, "profile": "kali-research"},
+                "build_files": {"packer/kali/kali.pkr.hcl": "c" * 64},
+            }
+            (out / "work-1.provenance.json").write_text(json.dumps(ref))
+            p = api.provenance("work-1")
+            check("provenance maps every field of a valid record verbatim",
+                  (p.vm, p.profile, p.built_at, p.git_commit, p.git_dirty) ==
+                  ("work-1", "kali-research", "2026-01-02T03:04:05Z", "deadbeefcafe", True)
+                  and p.toolchain == {"tart": "2.0.0", "packer": "1.14.2"}
+                  and p.tart_vm == {"Name": "work-1", "Running": False}
+                  and p.inputs_sha256 == "a" * 64 and p.lock_sha256 == "b" * 64
+                  and p.lock == {"schema": 2, "profile": "kali-research"}
+                  and p.build_files == {"packer/kali/kali.pkr.hcl": "c" * 64})
+
+            nullable = dict(ref, vm="nogit", git_commit=None, git_dirty=False, tart_vm=None)
+            (out / "nogit.provenance.json").write_text(json.dumps(nullable))
+            p2 = api.provenance("nogit")
+            check("provenance passes through null git_commit / tart_vm",
+                  p2.git_commit is None and p2.tart_vm is None and p2.git_dirty is False)
+
+            (out / "bad.provenance.json").write_text("{ not valid json")
+            raises("provenance: malformed JSON -> VerifyError", VerifyError,
+                   lambda: api.provenance("bad"))
+            (out / "partial.provenance.json").write_text(json.dumps({"vm": "partial"}))
+            raises("provenance: record missing required keys -> VerifyError", VerifyError,
+                   lambda: api.provenance("partial"))
+            (out / "list.provenance.json").write_text("[1, 2, 3]")
+            raises("provenance: non-object record -> VerifyError", VerifyError,
+                   lambda: api.provenance("list"))
+            raises("provenance: no record for the vm -> FileNotFoundError", FileNotFoundError,
+                   lambda: api.provenance("ghost"))
+            for bad_vm in ("a/b", "..", ".", "", "a\\b"):
+                raises(f"provenance: rejects unsafe vm name {bad_vm!r} before any file access",
+                       VerifyError, lambda v=bad_vm: api.provenance(v))
+    finally:
+        api.ROOT = saved_root
+
+
 if __name__ == "__main__":
-    for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle, test_rotation_script):
+    for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
+              test_rotation_script, test_api_pure):
         print(t.__name__)
         t()
     if FAILS:

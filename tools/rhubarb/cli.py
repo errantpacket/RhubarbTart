@@ -12,6 +12,10 @@
 
 Only clones created by `rhubarb new` can be run, reset or removed through this tool; built
 images (rbt-*) and other VMs are never modified. Records: see tools/rhubarb/clones.py.
+
+This is a thin adapter: all orchestration, keychain, StrictModes and GUI-session logic lives
+in the typed core (tools/rhubarb/api.py, over clones.py/hostops.py). Each command calls the
+API and formats its structured result for the terminal — see docs/INTERFACE-PLAN.md, Stage A.
 """
 
 import argparse
@@ -19,29 +23,12 @@ import os
 import subprocess
 import sys
 
-from . import clones, hostops
-from .common import ROOT, VerifyError
-from .locks import image_name
-from .profiles import list_profiles, load_profile
+from . import api, clones, hostops
+from .common import VerifyError
 
 
 def say(msg: str) -> None:
     print(f"[rhubarb] {msg}", file=sys.stderr)
-
-
-def current_image(pid: str) -> str | None:
-    """The verified image the profile's committed lock produces (None if no valid lock)."""
-    try:
-        return image_name(load_profile(pid))
-    except VerifyError:
-        return None
-
-
-def profile_of(image: str) -> str | None:
-    for pid in sorted(list_profiles(), key=len, reverse=True):
-        if image.startswith(f"rbt-{pid}-") and clones.IMAGE_RE.match(image):
-            return pid
-    return None
 
 
 def table(rows: list[list[str]], header: list[str]) -> None:
@@ -50,23 +37,23 @@ def table(rows: list[list[str]], header: list[str]) -> None:
         print("  ".join(str(c).ljust(w) for c, w in zip(r, widths, strict=True)).rstrip())
 
 
+def _say_clone(res: api.NewResult, rotate_requested: bool) -> None:
+    """Report a fresh clone (new/reset) exactly as the old orchestration did."""
+    say(f"cloned {res.image} -> {res.name}")
+    if rotate_requested:
+        say(f"{res.name}: booting headless to rotate its password")
+        if res.rotated:
+            say(f"{res.name}: unique password set (keychain account {res.name}); old password rejected")
+        elif res.note:
+            say(res.note)
+    elif res.note:
+        say(res.note)
+
+
 # ---- commands ------------------------------------------------------------------------------
 
 def cmd_images(_a) -> None:
-    vms = hostops.local_vms()
-    recs, _ = clones.all_records()
-    rows = []
-    for name in sorted(vms):
-        kind = ("unverified" if name.endswith("-unverified") else
-                "vanilla" if name.endswith("-vanilla") else
-                "image" if clones.IMAGE_RE.match(name) else None)
-        if kind is None:
-            continue
-        pid = profile_of(name.removesuffix("-unverified")) or "-"
-        status = kind
-        if kind == "image":
-            status = "current" if current_image(pid) == name else "outdated"
-        rows.append([name, pid, status, str(sum(r["image"] == name for r in recs))])
+    rows = [[i.name, i.profile, i.status, str(i.clones)] for i in api.images()]
     if rows:
         table(rows, ["IMAGE", "PROFILE", "STATUS", "CLONES"])
     else:
@@ -74,112 +61,29 @@ def cmd_images(_a) -> None:
 
 
 def cmd_list(_a) -> None:
-    vms = hostops.local_vms()
-    recs, problems = clones.all_records()
-    rows = []
-    for r in recs:
-        vm = vms.get(r["name"])
-        state = vm.get("State", "?") if vm else "MISSING"
-        cur = current_image(r["profile"])
-        fresh = ("image-deleted" if r["image"] not in vms else
-                 "current" if cur == r["image"] else "outdated")
-        pw = "unique" if r["password_account"] == r["name"] else "inherited"
-        rows.append([r["name"], r["profile"], state, fresh, pw, ",".join(sorted(r["enrollments"])) or "-"])
+    result = api.clones()
+    rows = [[c.name, c.profile, c.state, c.freshness, c.password_mode,
+             ",".join(c.enrollments) or "-"] for c in result.clones]
     if rows:
         table(rows, ["CLONE", "PROFILE", "STATE", "IMAGE", "PASSWORD", "ENROLLED"])
     else:
         say("no clones yet (rhubarb new NAME --profile P)")
-    for p in problems:
+    for p in result.problems:
         say(f"IGNORED {p}")
 
 
-def _source_image(a) -> tuple[str, dict]:
-    if bool(a.profile) == bool(a.image):
-        raise VerifyError("give exactly one of --profile or --image")
-    if a.profile:
-        prof = load_profile(a.profile)
-        image = image_name(prof)
-    else:
-        image = a.image
-        if not clones.IMAGE_RE.match(image):
-            raise VerifyError(f"{image!r} is not a verified RhubarbTart image name (rbt-PROFILE-SHA)")
-        pid = profile_of(image)
-        if not pid:
-            raise VerifyError(f"{image}: no matching profile in profiles/")
-        prof = load_profile(pid)
-    if image not in hostops.local_vms():
-        raise VerifyError(f"{image} is not built on this Mac (./scripts/build.sh {prof['id']})")
-    if hostops.keychain_get(image) is None:
-        raise VerifyError(f"no keychain password for {image}; was it built on this Mac?")
-    return image, prof
-
-
-def _clone(name: str, image: str, prof: dict, rotate: bool) -> dict:
-    hostops.tart("clone", image, name)
-    rec = clones.new_record(name, prof, image)
-    clones.save(rec)
-    clones.log_event("new", name, image)
-    say(f"cloned {image} -> {name}")
-    if rotate:
-        _rotate(rec)
-    else:
-        say("password: inherited from the image (use without --no-rotate for a per-clone password)")
-    return rec
-
-
-def _rotate(rec: dict) -> None:
-    """Give the clone its own password (keychain account = clone name), proven via PAM."""
-    name = rec["name"]
-    old = hostops.keychain_get(rec["password_account"])
-    new = hostops.random_password()
-    say(f"{name}: booting headless to rotate its password")
-    proc = hostops.start_vm(name, rec["rosetta"], headless=True)
-    try:
-        ip = hostops.vm_ip(name, rec["family"])
-        reach = hostops.wait_for_ssh(name, rec["username"], ip)
-        if reach != "ok":
-            why = ("SSH refused our key: load it with ssh-add, or the image was built for other keys"
-                   if reach == "denied" else "SSH not reachable (image built without SSH keys?)")
-            say(f"{name}: {why}; keeping the image's password. "
-                f"Retry later with: rhubarb reset {name} --same-image")
-            return
-        hostops.keychain_put(name, new)
-        try:
-            hostops.rotate_password(name, rec["username"], ip, old, new)
-        except VerifyError:
-            hostops.keychain_delete(name)
-            raise
-        rec["password_account"] = name
-        clones.save(rec)
-        clones.log_event("rotate", name)
-        say(f"{name}: unique password set (keychain account {name}); old password rejected")
-    finally:
-        hostops.stop_vm(name)
-        if proc.poll() is None:
-            proc.wait(timeout=60)
-
-
 def cmd_new(a) -> None:
-    name = clones.check_clone_name(a.name)
-    if name in hostops.local_vms():
-        raise VerifyError(f"a VM named {name} already exists")
-    image, prof = _source_image(a)
-    _clone(name, image, prof, rotate=not a.no_rotate)
-    say(f"ready: rhubarb run {name}")
+    res = api.new(a.name, profile=a.profile, image=a.image, rotate=not a.no_rotate)
+    _say_clone(res, rotate_requested=not a.no_rotate)
+    say(f"ready: rhubarb run {res.name}")
 
 
 def cmd_run(a) -> None:
-    rec = clones.load(a.name)
-    if hostops.is_running(rec["name"]):
-        raise VerifyError(f"{rec['name']} is already running")
-    if a.detach:
-        logs = clones._secure_dir(clones.state_dir() / "logs")
-        hostops.start_vm(rec["name"], rec["rosetta"], a.headless, logs / f"{rec['name']}.log")
-        say(f"started {rec['name']} in the background (log: {logs / (rec['name'] + '.log')})")
+    res = api.run(a.name, headless=a.headless, detach=a.detach)
+    if res.detached:
+        say(f"started {res.name} in the background (log: {res.log_path})")
         return
-    args = ["tart", "run", *(["--rosetta=rosetta"] if rec["rosetta"] else []),
-            *(["--no-graphics"] if a.headless else []), rec["name"]]
-    os.execvp("tart", args)
+    os.execvp(res.argv[0], res.argv)
 
 
 def cmd_stop(a) -> None:
@@ -189,59 +93,29 @@ def cmd_stop(a) -> None:
 
 
 def cmd_ssh(a) -> None:
-    rec = clones.load(a.name)
-    ip = hostops.vm_ip(rec["name"], rec["family"], wait=60)
-    args = hostops.ssh_args(rec["name"], rec["username"], ip, batch=False)
-    os.execvp("ssh", [*args, *a.remote])
+    res = api.ssh_args(a.name)
+    os.execvp(res.argv[0], [*res.argv, *a.remote])
 
 
 def cmd_enroll(a) -> None:
-    rec = clones.load(a.name)
-    cmd = [str(ROOT / "scripts" / "enroll.sh"), rec["name"], a.service, "--image", rec["password_account"]]
-    if a.org:
-        cmd += ["--org", a.org]
-    res = subprocess.run(cmd, env=hostops.env_with(RHUBARB_USER=rec["username"]))
-    if res.returncode != 0:
-        raise VerifyError(f"enrollment failed ({a.service})")
-    if a.service != "perimeter81":  # P81 is manual; the script only prints instructions
-        rec["enrollments"][a.service] = clones.now()
-        clones.save(rec)
-        clones.log_event("enroll", rec["name"], a.service)
-
-
-def _destroy(rec: dict) -> None:
-    hostops.stop_vm(rec["name"])
-    if rec["name"] in hostops.local_vms():
-        hostops.tart("delete", rec["name"])
-    hostops.forget_host_key(rec["name"])
-    if rec["password_account"] == rec["name"]:
-        hostops.keychain_delete(rec["name"])
+    api.enroll(a.name, a.service, org=a.org)
 
 
 def cmd_reset(a) -> None:
-    rec = clones.load(a.name)
-    prof = load_profile(rec["profile"])
-    image = rec["image"] if a.same_image else image_name(prof)
-    if image not in hostops.local_vms():
-        raise VerifyError(f"{image} is not built on this Mac")
-    _destroy(rec)
-    clones.delete(rec["name"])
-    clones.log_event("reset", rec["name"], image)
-    say(f"{rec['name']}: destroyed (enrollment and identity are gone); re-cloning from {image}")
-    _clone(rec["name"], image, prof, rotate=not a.no_rotate)
+    res = api.reset(a.name, same_image=a.same_image, rotate=not a.no_rotate)
+    say(f"{res.name}: destroyed (enrollment and identity are gone); re-cloning from {res.image}")
+    _say_clone(res, rotate_requested=not a.no_rotate)
 
 
 def cmd_rm(a) -> None:
-    rec = clones.load(a.name)
     if not a.yes:
+        rec = clones.load(a.name)  # StrictModes-trusted read, for the confirmation prompt
         answer = input(f"Delete clone {rec['name']} (from {rec['image']}) and its keychain entry? [y/N] ")
         if answer.strip().lower() not in ("y", "yes"):
             say("aborted")
             return
-    _destroy(rec)
-    clones.delete(rec["name"])
-    clones.log_event("rm", rec["name"])
-    say(f"removed {rec['name']}")
+    res = api.rm(a.name)
+    say(f"removed {res.name}")
 
 
 def main(argv: list[str] | None = None) -> None:

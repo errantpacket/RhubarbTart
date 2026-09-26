@@ -97,30 +97,46 @@ def stop_vm(name: str) -> None:
         raise VerifyError(f"{name}: did not stop within 60s")
 
 
+def reap_run(name: str) -> None:
+    """Force-kill any lingering `tart run <name>` process (exact final-arg match). Best-effort.
+
+    A detached `tart run` (start_new_session — from `run --detach`, or a rotation whose graceful
+    stop timed out) can outlive us and keep the VM's disk image locked, wedging all listing
+    (#16/#17/#18). The VM name is matched only as the final argument, so a different VM (e.g.
+    `web-10` vs `web-1`) is never touched.
+    """
+    found = subprocess.run(["pgrep", "-f", "tart run"], capture_output=True, text=True)
+    for pid in found.stdout.split():
+        cmd = subprocess.run(["ps", "-o", "command=", "-p", pid], capture_output=True, text=True).stdout
+        toks = cmd.split()
+        if toks and "run" in toks and toks[-1] == name:
+            subprocess.run(["kill", pid], capture_output=True)
+
+
 def shutdown(name: str, proc: subprocess.Popen | None = None, timeout: int = 60) -> None:
-    """Best-effort graceful `tart stop`, then GUARANTEE the boot process is gone (#17).
+    """Stop the VM and GUARANTEE nothing is left running it (#17, #18).
 
     start_vm() detaches the `tart run` into its own session, so if it outlives us it keeps the
-    VM's disk image locked and wedges all listing. stop_vm() can itself fail (timeout, or a
-    degraded `list`), so this never lets that mask a still-running child: whatever Popen we hold
-    is reaped — waited on, then terminated, then killed. Safe on any failure path (a finally).
+    VM's disk image locked and wedges all listing. This is belt-and-suspenders on any failure
+    path (a finally): (1) a polite `tart stop`; (2) reap the Popen we hold (new's rotation boot) —
+    wait, terminate, kill; (3) force-kill any detached `tart run <name>` we don't hold (a
+    `run --detach`, or a macOS guest that ignored the graceful stop) so teardown never orphans.
     """
     try:
         stop_vm(name)
     except VerifyError:
-        pass
-    if proc is None or proc.poll() is not None:
-        return
-    try:
-        proc.wait(timeout=timeout)
-        return
-    except subprocess.TimeoutExpired:
-        proc.terminate()
-    try:
-        proc.wait(timeout=10)
-    except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait(timeout=10)
+        pass  # graceful stop may fail/timeout (headless macOS); the reap below is the guarantee
+    if proc is not None and proc.poll() is None:
+        try:
+            proc.wait(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait(timeout=10)
+    reap_run(name)
 
 
 # ---- keychain -----------------------------------------------------------------------------

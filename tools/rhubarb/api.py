@@ -333,10 +333,7 @@ def _destroy(rec: dict) -> bool:
     Returns whether a per-clone keychain entry was deleted (account == clone name).
     """
     name = rec["name"]
-    try:
-        hostops.stop_vm(name)
-    except VerifyError:
-        pass  # best-effort: delete by name still works if listing/stop is degraded (see #16)
+    hostops.shutdown(name)  # stop + reap any lingering `tart run <name>` so rm never orphans (#18)
     hostops.delete_vm(name)
     hostops.forget_host_key(name)
     keychain_deleted = rec["password_account"] == name

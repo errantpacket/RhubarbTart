@@ -345,13 +345,17 @@ def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | 
         try:
             try:
                 ip = hostops.vm_ip(name, rec["family"])
-                reach = hostops.wait_for_ssh(name, rec["username"], ip)
+                _emit(progress, f"{name}: booted at {ip}; waiting for SSH to come up…")
+                reach = hostops.wait_for_ssh(name, rec["username"], ip, progress=progress)
             except VerifyError:
+                _emit(progress, f"{name}: no IP on boot {attempt + 1}")
                 reach = "unreachable"  # no IP this boot — reboot and retry
             if reach == "denied":
                 return False, (f"{name}: SSH refused our key (load it with ssh-add, or the image "
                                f"was built for other keys); keeping the image's password.")
             if reach != "ok":
+                _emit(progress, f"{name}: SSH unreachable on boot {attempt + 1}"
+                      + (" — rebooting to retry" if attempt == 0 else ""))
                 continue  # transient: the finally reaps this boot, then we try once more
             hostops.keychain_put(name, new_pw)
             try:

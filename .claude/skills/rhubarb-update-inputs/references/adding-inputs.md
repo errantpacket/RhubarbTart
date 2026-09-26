@@ -44,6 +44,29 @@ and reuse `apt`. macOS variants need `app` (the bundle name in `/Applications`) 
 re-verify the installed bundle. The one exception is Perimeter 81, whose bundle name varies: it
 has no `app`, and a pattern hardcoded in `guest/macos/install.sh` finds it.
 
+**`signed: false` (macOS)** — for a macOS `dmg`/`pkg` that ships *no* Apple signature (e.g. ZAP).
+The host skips `codesign`/notarization and the guest skips its re-verify; integrity comes solely
+from the pinned `sha256`, so a `signed: false` variant **must** resolve a non-null hash (a
+`github-release-digest`, a vendor `.sha256`, etc.) — resolve refuses it otherwise. This is a
+weaker tier than Developer ID + notarization; record it as such in the Provenance table. Default
+is `true` (full signature verification).
+
+### Local / tenant installer (no public URL)
+
+For a tool distributed only through a portal login (Perimeter 81 is the worked example in
+`config/packages/perimeter81.json`):
+
+1. `config/packages/<id>.json`: `resolver: "local"`, `kind: "pkg"`/`"dmg"`, `path:
+   "vendor/<id>/<file>"`, `team_id: null` (pin later), `app` for a dmg (or omit + add a pattern),
+   `signed: false` only if the installer is unsigned.
+2. Place the downloaded installer at `vendor/<id>/<file>` on the build host. Everything under
+   `vendor/` is git-ignored (`vendor/**/*.pkg`, `*.cer`) — tenant installers are never committed.
+   See `vendor/README.md`.
+3. `resolve.py resolve <profile>` TOFU-pins its `sha256`; if signed it verifies the Developer ID
+   signature and **prints the observed Team ID**. Pin that `team_id` in the package file and
+   re-resolve so it's enforced from then on. (Missing file → resolve fails with the exact path.)
+4. Add `<id>` to the profile's `packages` and rebuild.
+
 ### 2. A new resolver (only for a new download source)
 
 Add a function in `tools/rhubarb/packages.py` and register it in `RESOLVERS`. It returns
@@ -54,8 +77,9 @@ reference-implementation values.
 
 ### 3. Guest side
 
-- **macOS:** `guest/macos/install.sh` installs any `pkg`/`dmg` and re-verifies `/Applications/<app>`.
-  Add a self-updater disable if the tool has one; see the WARP updater.
+- **macOS:** `guest/macos/install.sh` installs any `pkg`/`dmg` and re-verifies `/Applications/<app>`
+  (Team ID + notarization), unless the variant is `signed: false` — then integrity is the
+  `SHA256SUMS` check only. Add a self-updater disable if the tool has one; see the WARP updater.
 - **Kali:** `guest/kali/install.sh` installs `deb` and `distro` kinds generically. If the `.deb`
   adds an apt source, neutralize that the way Chrome's is.
 - **NixOS:** usually nothing, since `nix/modules/packages.nix` maps `attr`/`module`. Check with

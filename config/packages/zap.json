@@ -6,7 +6,7 @@
       "kind": "dmg",
       "arch": "aarch64",
       "app": "ZAP.app",
-      "team_id": null
+      "signed": false
     },
     "kali": {
       "resolver": "distro",

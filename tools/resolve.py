@@ -111,7 +111,12 @@ def cmd_resolve(args) -> None:
             log(f"{label}: distsign signature ok")
         variant = prof["packages"].get(label, {})
         if variant.get("kind") in MACOS_KINDS:
-            e["signature"] = macos.check_signature(label, variant, path)
+            if variant.get("signed", True):
+                e["signature"] = macos.check_signature(label, variant, path)
+            elif not e.get("sha256"):
+                # signed=false trades Apple's signature for an exact pinned hash; without one
+                # there is no provenance at all, so refuse it.
+                raise VerifyError(f"{label}: unsigned macOS artifact needs a pinned sha256")
             if variant.get("resolver") == "chrome-mac":
                 e["version"] = macos.pkg_ref_version(path, variant["pkg_ref"])
         log(f"{label} ok: {e.get('version', '')} sha256={got[:16]}…")
@@ -153,7 +158,7 @@ def cmd_verify(args) -> None:
             raise VerifyError(f"{label}: cached {e['file']} differs from lock. If upstream moved "
                               "(an unversioned URL such as Chrome's), re-resolve.")
         variant = prof["packages"].get(label, {})
-        if variant.get("kind") in MACOS_KINDS:
+        if variant.get("kind") in MACOS_KINDS and variant.get("signed", True):
             sig = macos.check_signature(label, variant, path)
             if sig["team_id"] != e["signature"]["team_id"]:
                 raise VerifyError(f"{label}: Team ID changed since lock ({sig['team_id']})")
@@ -164,9 +169,12 @@ def cmd_verify(args) -> None:
 
     for pid, e in lock["packages"].items():
         v = prof["packages"][pid]
+        # 6th column: "1" = Apple-signature verified in-guest, "0" = unsigned, integrity from
+        # SHA256SUMS only (see guest/macos/install.sh). Default signed.
+        signed = "1" if v.get("signed", True) else "0"
         manifest.append("\t".join([pid, v.get("kind", v["resolver"]), e.get("file", "-"),
                                    e.get("signature", {}).get("team_id", "-"),
-                                   v.get("app", e.get("package", "-"))]))
+                                   v.get("app", e.get("package", "-")), signed]))
     (stage / "SHA256SUMS").write_text("\n".join(sums) + "\n" if sums else "")
     (stage / "packages.tsv").write_text("\n".join(manifest) + "\n" if manifest else "")
     (stage / "profile.json").write_text(json.dumps({

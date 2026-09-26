@@ -6,7 +6,6 @@
     "chrome",
     "zap",
     "warp",
-    "tailscale",
-    "perimeter81"
+    "tailscale"
   ]
 }

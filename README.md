@@ -22,12 +22,18 @@ sealed [Tart](https://tart.run) guest whose every input is pinned, verified and 
 
 ## Why RhubarbTart
 
-Research VMs usually start from someone else's image and drift from there. RhubarbTart starts every
-guest from the **OS vendor's own installer**, pins **every** input in a reviewed lock file, verifies
-each one **twice** (on the host and again inside the guest), and refuses to name an image until a
-throwaway clone has **proven** its hardening from the outside. That verified, disposable guest is the
-unit the [larger plan](docs/PLAN.md) builds on — isolated ranges that agents drive and that produce
-evidence you can trust.
+**A security result is only as trustworthy as the machine it came from.** Yet research VMs usually
+start from someone else's snapshot and drift from there — so you can't say what was really on the
+box, can't reproduce a finding a month later, and risk carrying one job's contamination (or one
+client's data) into the next.
+
+RhubarbTart removes that doubt. Every guest starts from the **OS vendor's own installer**, **every**
+input is pinned in a reviewed lock file and verified **twice** (on the host, then again inside the
+guest), and an image isn't given its name until a throwaway clone has **proven** its hardening from
+the outside. You end up with a guest whose exact contents you can *prove*, and a disposable clone to
+actually work in — so your findings are reproducible, attributable, and never cross-contaminated.
+That verified, disposable guest is also the unit the [larger plan](docs/PLAN.md) builds on: isolated
+ranges that agents drive and that produce evidence you can trust.
 
 | | |
 |---|---|
@@ -37,8 +43,34 @@ evidence you can trust.
 | 🧩 **Configurable** | A guest is a small JSON profile: OS base + tools + options. No code needed for new guests |
 | 🔐 **Secrets stay yours** | Passwords live in your macOS keychain, each clone gets its own, and VPN enrollment happens per clone at runtime, never baked in |
 
+## What it's for
+
+The pattern is always the same: build a hardened guest whose contents you can prove, work in a
+**throwaway clone** of it, and delete the clone when you're done. The golden image is never booted,
+so it stays pristine for the next run. Two work patterns this is built for:
+
+**macOS / iOS / Apple-app penetration testing.** Assessing a macOS app, an iOS app and its backend,
+or an Apple-ecosystem service needs a clean Apple environment you can trust and repeat. RhubarbTart
+hands you a hardened **macOS** guest with your tooling (Chrome, ZAP, a VPN/ZTNA agent) pinned and
+verified — no drift from a colleague's snapshot, no mystery software. Because the image's provenance
+is recorded and every clone is isolated and disposable, findings are **attributable and
+reproducible**: you can state exactly what the box contained, re-run from an identical base, and
+never carry one client's state into the next engagement. (Tart runs macOS/Linux guests on Apple
+silicon — the macOS guest is the *workbench* for Apple work: simulators, intercepting proxies,
+static/dynamic tooling — not an iOS VM.)
+
+**Ephemeral boxes for research and malware analysis.** Detonating a sample or poking at something
+hostile demands a box you can trust *before* the run and discard *after* it. Clone the verified
+image, do the work in that clone, delete it — and since the golden image never boots, it can't be
+contaminated and the next analysis starts from the same **known-clean** state. The recorded
+provenance means anything present that *wasn't* in the image is the sample's doing, not leftover
+tooling; per-clone identity (and, on the [roadmap](docs/PLAN.md), per-clone network isolation) keeps
+one run from reaching another or your host. NixOS and Kali guests give a fully-pinned Linux analysis
+box; macOS guests let you study Mac-targeted samples on the platform they actually target.
+
 ## Contents
 
+- [What it's for](#what-its-for)
 - [Quick start](#quick-start)
 - [Choose a guest](#choose-a-guest)
 - [How it works](#how-it-works)

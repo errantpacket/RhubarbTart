@@ -62,22 +62,36 @@ variable "bootstrap_password" {
   }
 }
 
-source "tart-cli" "nixos" {
-  from_iso      = [var.iso_path]
-  vm_name       = var.vm_name
-  cpu_count     = var.cpu_count
-  memory_gb     = var.memory_gb
-  disk_size_gb  = var.disk_gb
-  headless      = true
-  ssh_username  = "nixos"
-  ssh_password  = var.bootstrap_password
-  ssh_timeout   = "15m"
-  ip_extra_args = ["--resolver", "arp"]
+variable "headless" {
+  type    = bool
+  default = true
+}
 
-  # Default boot entry, then the auto-logged-in live console.
+source "tart-cli" "nixos" {
+  from_iso     = [var.iso_path]
+  vm_name      = var.vm_name
+  cpu_count    = var.cpu_count
+  memory_gb    = var.memory_gb
+  disk_size_gb = var.disk_gb
+  headless     = var.headless
+  ssh_username = "nixos"
+  ssh_password = var.bootstrap_password
+  ssh_timeout  = "15m"
+
+  # The ISO auto-logs in as `nixos` (passwordless sudo) after ~40s. Give margin, wake the
+  # console with Enter, then set the SSH password and ensure sshd is up — one action per line
+  # so a dropped VNC keystroke can't merge two commands.
   boot_command = [
-    "<wait60s>",
-    "echo 'nixos:${var.bootstrap_password}' | sudo chpasswd && sudo systemctl start sshd<enter>",
+    "<wait75s>",
+    "<enter><wait2s>",
+    "echo 'nixos:${var.bootstrap_password}' | sudo chpasswd<enter>",
+    "<wait3s>",
+    "sudo systemctl restart sshd<enter>",
+    "<wait2s>",
+    # Keep the host<->guest ARP entry alive: a foreground ping to the vmnet gateway means the
+    # host can always reach the VM's IP for SSH (otherwise its early dials get EHOSTUNREACH).
+    "ping 192.168.64.1<enter>",
+    "<wait3s>",
   ]
 }
 

@@ -84,7 +84,6 @@ source "tart-cli" "kali" {
   ssh_username  = var.username
   ssh_password  = var.bootstrap_password
   ssh_timeout   = "120m" # the whole unattended install happens before SSH is up
-  ip_extra_args = ["--resolver", "arp"]
 
   # GRUB command line: kernel + initrd from the ISO's install.a64/, preseed by URL.
   boot_command = [

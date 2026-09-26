@@ -17,11 +17,9 @@ USER_NAME="${RHUBARB_USER:-admin}"
 SSH_ENABLED="${RHUBARB_SSH_ENABLED:?set to 1 or 0}"
 FAMILY="${RHUBARB_FAMILY:?set to macos, nixos or kali}"
 RUN_ARGS=(--no-graphics)
-IP_ARGS=(--wait 300)
-if [[ "$FAMILY" != macos ]]; then
-  IP_ARGS+=(--resolver arp)
-  [[ "${RHUBARB_ROSETTA:-false}" == true ]] && RUN_ARGS+=(--rosetta=rosetta)
-fi
+[[ "$FAMILY" != macos && "${RHUBARB_ROSETTA:-false}" == true ]] && RUN_ARGS+=(--rosetta=rosetta)
+# Default resolver (DHCP leases, MAC-matched) is stable; arp cache is volatile, so only fall back to it.
+vm_ip() { tart ip --wait 300 "$1" 2>/dev/null || tart ip --wait 60 --resolver arp "$1"; }
 SMOKE="$VM-smoke-$$"
 WORK="$(mktemp -d)"
 log() { echo "[smoke] $*"; }
@@ -38,7 +36,7 @@ trap cleanup EXIT
 tart clone "$VM" "$SMOKE"
 tart run "${RUN_ARGS[@]}" "$SMOKE" >"$WORK/run.log" 2>&1 &
 RUN_PID=$!
-IP="$(tart ip "${IP_ARGS[@]}" "$SMOKE")" || fail "no IP within 300s"
+IP="$(vm_ip "$SMOKE")" || fail "no IP within 300s"
 log "clone $SMOKE booted at $IP"
 
 port_open() { nc -z -G 3 "$IP" "$1" >/dev/null 2>&1; }
@@ -88,15 +86,23 @@ EOF
   else
     "${SSH[@]}" "FAMILY=$FAMILY ROSETTA=${RHUBARB_ROSETTA:-false} bash -s" <<'EOF' || fail "in-guest posture checks failed"
 set -e
-if sudo -n true 2>/dev/null; then echo "passwordless sudo works" >&2; exit 1; fi
+# A non-login SSH command shell may not inherit the system PATH, so system/wrapper binaries
+# (systemctl, nixos-version, the setuid sudo wrapper) can be missing; put them on PATH first.
+export PATH=/run/wrappers/bin:/run/current-system/sw/bin:/usr/bin:/bin:$PATH
+bad() { echo "posture: $*" >&2; exit 1; }
+if sudo -n true 2>/dev/null; then bad "passwordless sudo works"; fi
 if grep -rEqs '^[[:space:]]*autologin-user[[:space:]]*=[[:space:]]*[^[:space:]]' /etc/lightdm; then
-  echo "display-manager auto-login configured" >&2; exit 1
+  bad "display-manager auto-login configured"
 fi
-if [[ "$FAMILY" == kali ]]; then systemctl is-active --quiet nftables; else systemctl is-active --quiet firewall; fi
-test -s /etc/machine-id                         # regenerated for this clone
-test -s /var/lib/rhubarbtart/installed.txt
-if [[ "$ROSETTA" == true ]]; then test -e /proc/sys/fs/binfmt_misc/rosetta; fi
-[[ "$FAMILY" == nixos ]] && nixos-version
+if [[ "$FAMILY" == kali ]]; then
+  systemctl is-active --quiet nftables || bad "nftables service not active"
+else
+  systemctl is-active --quiet firewall || bad "firewall service not active"
+fi
+test -s /etc/machine-id || bad "machine-id empty (not regenerated for this clone)"
+test -s /var/lib/rhubarbtart/installed.txt || bad "installed.txt missing"
+if [[ "$ROSETTA" == true ]]; then test -e /proc/sys/fs/binfmt_misc/rosetta || bad "rosetta binfmt not registered"; fi
+if [[ "$FAMILY" == nixos ]]; then nixos-version || bad "nixos-version failed"; fi
 echo "packages recorded: $(wc -l < /var/lib/rhubarbtart/installed.txt)"
 EOF
     log "ok: no passwordless sudo, no auto-login, firewall active, fresh machine-id"

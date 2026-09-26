@@ -9,6 +9,7 @@
 #   <stage-dir>/password                                                final password (0600), shredded here
 
 set -euo pipefail
+export HOME=/root   # runs as root (sudo -E keeps nixos $HOME); keep nix from warning
 
 STAGE="${1:?stage dir}"
 : "${RB_SSH_FROM?}"
@@ -41,8 +42,11 @@ EOF
 udevadm settle
 mkfs.fat -F 32 -n BOOT "${DISK}1" >/dev/null
 mkfs.ext4 -q -F -L nixos "${DISK}2"
-mount /dev/disk/by-label/nixos /mnt
-mkdir -p /mnt/boot && mount -o umask=077 /dev/disk/by-label/BOOT /mnt/boot
+udevadm settle   # register the new filesystem labels (by-label symlinks) after mkfs
+# Mount by device path, not by-label: the by-label symlink can lag mkfs and fail the mount.
+# The labels still exist for the installed system (nix/modules/tart-vm.nix mounts by-label).
+mount "${DISK}2" /mnt
+mkdir -p /mnt/boot && mount -o umask=077 "${DISK}1" /mnt/boot
 
 say "staging configuration"
 install -d -m 755 /mnt/etc/nixos
@@ -50,7 +54,9 @@ cp -r nix/. /mnt/etc/nixos/
 install -m 644 profile.json lock.json /mnt/etc/nixos/
 install -m 644 authorized_keys /mnt/etc/nixos/authorized_keys
 printf '{"from": "%s"}\n' "$RB_SSH_FROM" > /mnt/etc/nixos/ssh.json
-install -d -m 700 /mnt/var/lib/rhubarbtart
+# Dir is traversable (755) so the non-secret provenance (installed.txt, 644) is readable by the
+# unprivileged user; the secret is the password hash itself, kept 600 (root-only) within it.
+install -d -m 755 /mnt/var/lib/rhubarbtart
 # yescrypt hash from stdin; the plaintext never appears in argv or the Nix store
 mkpasswd -m yescrypt -s < password > /mnt/var/lib/rhubarbtart/password.hash
 chmod 600 /mnt/var/lib/rhubarbtart/password.hash

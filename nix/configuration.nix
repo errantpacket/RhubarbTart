@@ -31,8 +31,12 @@ in
   nix.nixPath = [ "nixpkgs=/etc/rhubarbtart/nixpkgs" ];
   environment.etc."rhubarbtart/nixpkgs".source = pkgs.path;
   nix.channel.enable = false;
+  # Flakes/nix-command stay off, so the classic pinned nixPath above is the only source of
+  # nixpkgs and the flake registry is never consulted. Clear it anyway so a later operator who
+  # turns flakes on doesn't inherit a floating github: registry. Do NOT set
+  # nix.settings.flake-registry here: that writes a flake-registry line into nix.conf, which
+  # nix rejects while the flakes feature is disabled (breaks the nix.conf build).
   nix.registry = lib.mkForce { };
-  nix.settings.flake-registry = "";
 
   environment.etc."rhubarbtart/lock.json".source = ./lock.json;
   environment.etc."rhubarbtart/profile.json".source = ./profile.json;

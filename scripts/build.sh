@@ -41,6 +41,9 @@ py() { uv run --quiet --no-project python -c "$@"; }
 json_field() { plutil -extract "$1" raw -o - - <<<"$2"; }   # macOS plutil reads JSON
 vm_exists() { tart get "$1" >/dev/null 2>&1; }
 random_password() { py 'import secrets,string; a=string.ascii_letters+string.digits; print("".join(secrets.choice(a) for _ in range(32)))'; }
+# Bootstrap password is typed over VNC (NixOS) / put in a preseed / passed to the provisioning
+# API. Lowercase+digits only: no Shift keys for VNC typing to drop. Throwaway; rotated away.
+random_bootstrap() { py 'import secrets,string; a=string.ascii_lowercase+string.digits; print("".join(secrets.choice(a) for _ in range(32)))'; }
 keychain_get() { security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$1" -w 2>/dev/null; }
 keychain_put() { # <account> <password>; `security -i` keeps the secret out of argv
   printf 'add-generic-password -U -s %s -a %s -w %s\n' "$KEYCHAIN_SERVICE" "$1" "$2" | security -i >/dev/null
@@ -91,6 +94,10 @@ PKR_VAR_cpu_count="$(json_field cpu "$info")"
 PKR_VAR_memory_gb="$(json_field memory_gb "$info")"
 PKR_VAR_disk_gb="$(json_field disk_gb "$info")"
 export PKR_VAR_authorized_keys_path="$AUTH_KEYS" PKR_VAR_ssh_from="$SSH_FROM"
+export PKR_VAR_headless="${RHUBARB_HEADLESS:-true}"   # RHUBARB_HEADLESS=false to watch the VM window
+# Nix writes its progress ("copying/building …") to stderr, which Packer's colored UI paints red
+# even though it isn't errors. Set RHUBARB_NO_COLOR (or the standard NO_COLOR) to get plain output.
+[[ -n "${RHUBARB_NO_COLOR:-}" || -n "${NO_COLOR:-}" ]] && export PACKER_NO_COLOR=1
 BASE_JSON="$(cat "config/bases/$BASE_ID.json")"
 BASE_PACKER="$(json_field packer "$BASE_JSON")"            # stage-1 / install template
 [[ "$BASE_PACKER" =~ ^packer/(macos|linux)/[a-z0-9.-]+\.pkr\.hcl$ && -f "$BASE_PACKER" ]] \
@@ -125,7 +132,7 @@ case "$FAMILY" in
       log "installing macOS $OS_BUILD from $IMAGE -> $BASE_VM ($SETUP)"
       if [[ "$SETUP" == provisioning ]]; then
         write_password_file "$PKR_VAR_password"
-        PKR_VAR_bootstrap_password="$(random_password)" PKR_VAR_password_file="$PASSWORD_FILE" \
+        PKR_VAR_bootstrap_password="$(random_bootstrap)" PKR_VAR_password_file="$PASSWORD_FILE" \
           packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER"
       else
         packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER"
@@ -143,7 +150,7 @@ case "$FAMILY" in
     export PKR_VAR_password
     write_password_file "$PKR_VAR_password"
     export PKR_VAR_password_file="$PASSWORD_FILE"
-    PKR_VAR_bootstrap_password="$(random_password)"
+    PKR_VAR_bootstrap_password="$(random_bootstrap)"
     export PKR_VAR_bootstrap_password
     keychain_put "$VM" "$PKR_VAR_password"
     if [[ "$FAMILY" == kali ]]; then

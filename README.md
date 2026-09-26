@@ -529,10 +529,12 @@ for regressions of the rules above: Homebrew or `packer init` creeping back, def
 
 - [x] **NixOS** built end-to-end on a macOS 27 host: install, harden, seal, smoke test and
       provenance all pass.
-- [ ] **First real build of the other families on a Mac.** Still to confirm on hardware: the
-      macOS 26 keystroke path, the macOS 27 provisioning + password rotation, and the Kali GRUB
-      and preseed flow (each with its `tart ip`). Everything else (resolvers, locks, NixOS
-      evaluation, templates, scripts) is verified off-Mac.
+- [x] **macOS 27** (`goldengate-research`) built end-to-end on a macOS 27 host: provisioning API
+      → password rotation → Chrome/ZAP/WARP/Tailscale install → seal → smoke → provenance.
+- [ ] **First real build of the remaining families on a Mac.** Still to confirm on hardware: the
+      **macOS 26** keystroke Setup Assistant path, and the **Kali** GRUB + preseed flow (each with
+      its `tart ip`). Everything else (resolvers, locks, NixOS evaluation, templates, scripts) is
+      verified off-Mac.
 - [ ] Kali: WARP's Debian `trixie` build and ZAP from the Kali archive are expected to work on
       rolling Kali but are untested.
 - [ ] Perimeter 81 on Linux (no pinned Linux variant yet).
@@ -542,6 +544,9 @@ for regressions of the rules above: Homebrew or `packer init` creeping back, def
 - [ ] Stacked clones (`tart clone --stacked`, an immutable base plus an overlay) once images are
       pulled from a private registry. Tart supports it only for remote images.
 - [ ] `scripts/publish.sh` is an untested draft; `cosign`/`crane` aren't in the pinned toolchain.
+- [ ] **Management surface.** Harden `tools/rhubarb/` into a typed core API, then a Textual TUI and
+      (for the agent platform) a localhost `herdr` service on top — no off-the-shelf tool fits, and
+      Orchard is only a fleet backend. Rationale + layering in [`docs/PLAN.md`](docs/PLAN.md#management-interface--control-plane-api).
 - [x] `TART_TEAM_ID` (`9M2P8L4D89`) and the Packer signer (`D38WU7D763`) pinned after the first
       bootstrap. ZAP needs none (unsigned, hash-pinned); pin Perimeter 81's Team ID when its
       installer is first resolved.

@@ -444,9 +444,48 @@ def test_hostops_resilience() -> None:
         hostops.time.sleep = orig_sleep
 
 
+def test_shutdown_reaps_boot_process() -> None:
+    """#17: shutdown() must terminate the detached boot process even when stop_vm() fails."""
+    from rhubarb import hostops
+    from rhubarb.common import VerifyError
+
+    class FakeProc:
+        def __init__(self):
+            self.alive = True
+            self.terminated = self.killed = False
+        def poll(self):
+            return None if self.alive else 0
+        def wait(self, timeout=None):
+            if self.alive:
+                raise subprocess.TimeoutExpired("tart", timeout)
+            return 0
+        def terminate(self):
+            self.terminated = True
+            self.alive = False  # dies on SIGTERM
+        def kill(self):
+            self.killed = True
+            self.alive = False
+
+    orig_stop = hostops.stop_vm
+    hostops.stop_vm = lambda *_a, **_k: (_ for _ in ()).throw(VerifyError("stop failed / listing degraded"))
+    try:
+        p = FakeProc()
+        hostops.shutdown("vm1", p, timeout=0)  # stop raises, wait times out -> terminate
+        check("shutdown terminates the boot process when stop_vm fails", p.terminated and not p.alive)
+
+        # a process that has already exited is left alone (no terminate/kill)
+        gone = FakeProc()
+        gone.alive = False
+        hostops.shutdown("vm1", gone, timeout=0)
+        check("shutdown no-ops on an already-exited process", not gone.terminated and not gone.killed)
+    finally:
+        hostops.stop_vm = orig_stop
+
+
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
-              test_rotation_script, test_api_pure, test_hostops_resilience):
+              test_rotation_script, test_api_pure, test_hostops_resilience,
+              test_shutdown_reaps_boot_process):
         print(t.__name__)
         t()
     if FAILS:

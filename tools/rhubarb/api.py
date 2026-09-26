@@ -310,9 +310,7 @@ def _rotate(rec: dict) -> tuple[bool, str | None]:
         _clones.log_event("rotate", name)
         return True, None
     finally:
-        hostops.stop_vm(name)
-        if proc.poll() is None:
-            proc.wait(timeout=60)
+        hostops.shutdown(name, proc)  # never orphan the detached boot process (#17)
 
 
 def _clone(name: str, image: str, prof: dict, rotate: bool) -> tuple[bool, str | None]:

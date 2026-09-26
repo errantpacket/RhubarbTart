@@ -97,6 +97,32 @@ def stop_vm(name: str) -> None:
         raise VerifyError(f"{name}: did not stop within 60s")
 
 
+def shutdown(name: str, proc: subprocess.Popen | None = None, timeout: int = 60) -> None:
+    """Best-effort graceful `tart stop`, then GUARANTEE the boot process is gone (#17).
+
+    start_vm() detaches the `tart run` into its own session, so if it outlives us it keeps the
+    VM's disk image locked and wedges all listing. stop_vm() can itself fail (timeout, or a
+    degraded `list`), so this never lets that mask a still-running child: whatever Popen we hold
+    is reaped — waited on, then terminated, then killed. Safe on any failure path (a finally).
+    """
+    try:
+        stop_vm(name)
+    except VerifyError:
+        pass
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        proc.wait(timeout=timeout)
+        return
+    except subprocess.TimeoutExpired:
+        proc.terminate()
+    try:
+        proc.wait(timeout=10)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=10)
+
+
 # ---- keychain -----------------------------------------------------------------------------
 
 def keychain_get(account: str) -> str | None:

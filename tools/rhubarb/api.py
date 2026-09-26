@@ -309,29 +309,41 @@ def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | 
     name = rec["name"]
     old = hostops.keychain_get(rec["password_account"])
     new_pw = hostops.random_password()
-    _emit(progress, f"{name}: booting headless to rotate its password")
-    proc = hostops.start_vm(name, rec["rosetta"], headless=True)
-    try:
-        ip = hostops.vm_ip(name, rec["family"])
-        reach = hostops.wait_for_ssh(name, rec["username"], ip)
-        if reach != "ok":
-            why = ("SSH refused our key: load it with ssh-add, or the image was built for other keys"
-                   if reach == "denied" else "SSH not reachable (image built without SSH keys?)")
-            return False, (f"{name}: {why}; keeping the image's password. "
-                           f"Retry later with: rhubarb reset {name} --same-image")
-        hostops.keychain_put(name, new_pw)
+    # A fresh clone's first boot is normally SSH-reachable in seconds, but that first boot can
+    # occasionally be slow, or hand back a stale DHCP lease right after clone — making a single
+    # wait_for_ssh time out and soft-fail the rotation. A second boot reliably comes up, so retry
+    # the boot on "unreachable" before giving up; "denied" (a key problem) won't improve, so bail. (#23)
+    note = (f"{name}: SSH not reachable after 2 boots; keeping the image's password. "
+            f"Retry later with: rhubarb reset {name} --same-image")
+    for attempt in range(2):
+        _emit(progress, f"{name}: booting headless to rotate its password"
+              + (" (retry)" if attempt else ""))
+        proc = hostops.start_vm(name, rec["rosetta"], headless=True)
         try:
-            hostops.rotate_password(name, rec["username"], ip, old, new_pw)
-        except VerifyError:
-            hostops.keychain_delete(name)
-            raise
-        rec["password_account"] = name
-        _clones.save(rec)
-        _clones.log_event("rotate", name)
-        _emit(progress, f"{name}: unique password set (keychain account {name}); old password rejected")
-        return True, None
-    finally:
-        hostops.shutdown(name, proc)  # never orphan the detached boot process (#17)
+            try:
+                ip = hostops.vm_ip(name, rec["family"])
+                reach = hostops.wait_for_ssh(name, rec["username"], ip)
+            except VerifyError:
+                reach = "unreachable"  # no IP this boot — reboot and retry
+            if reach == "denied":
+                return False, (f"{name}: SSH refused our key (load it with ssh-add, or the image "
+                               f"was built for other keys); keeping the image's password.")
+            if reach != "ok":
+                continue  # transient: the finally reaps this boot, then we try once more
+            hostops.keychain_put(name, new_pw)
+            try:
+                hostops.rotate_password(name, rec["username"], ip, old, new_pw)
+            except VerifyError:
+                hostops.keychain_delete(name)
+                raise
+            rec["password_account"] = name
+            _clones.save(rec)
+            _clones.log_event("rotate", name)
+            _emit(progress, f"{name}: unique password set (keychain account {name}); old password rejected")
+            return True, None
+        finally:
+            hostops.shutdown(name, proc)  # never orphan the detached boot process (#17)
+    return False, note
 
 
 def _clone(name: str, image: str, prof: dict, rotate: bool,

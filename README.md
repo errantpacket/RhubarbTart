@@ -168,7 +168,10 @@ flowchart TB
 
 ## Using your VMs
 
-Built images are templates: you work in **clones**, managed by the `rhubarb` CLI.
+Built images are templates: you work in **clones**, managed by the `rhubarb` CLI — or the
+`./rhubarb-tui` Textual dashboard, which drives the same actions over the same audited core
+(browse images/clones/provenance; run, ssh, enroll, reset, rm, new and build, with confirms on
+destructive ones).
 
 ```sh
 ./rhubarb images                              # built images; which one is current per profile
@@ -475,7 +478,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; needs gpg, any OS
   changed since the last bootstrap.
 - `toolchain-pin --latest` re-derives every hash and only accepts it when two upstream views
   agree.
-- **Textual** — the read-only TUI's only third-party dependency, and the repo's *first* — is not
+- **Textual** — the TUI's only third-party dependency, and the repo's *first* — is not
   a bootstrap binary. It is pinned to an exact version in `tools/rhubarb_tui.py`'s PEP 723 header
   and hash-locked in `tools/rhubarb_tui.py.lock` (`uv lock --script`); `./rhubarb-tui` runs under
   `uv run --script`, which installs it from that lock and verifies every file's sha256 (the
@@ -496,7 +499,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; needs gpg, any OS
 | `config/toolchain.env` | Host toolchain pins |
 | `locks/*.lock.json` | Resolved inputs per profile (generated, reviewed, committed) |
 | `tools/resolve.py` · `tools/rhubarb/` | `list` · `plan` · `resolve` · `verify` · `provenance` · `preflight` · `toolchain-pin` |
-| `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb/tui/` · `tools/rhubarb_tui.py.lock` | Read-only Textual TUI over `rhubarb/api.py`: launcher shim, app shell, pane widgets, and the pinned + hashed Textual lockfile |
+| `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb/tui/` · `tools/rhubarb_tui.py.lock` | Textual TUI over `rhubarb/api.py` (read-only panes + confirm-gated write actions): launcher shim, app shell, pane widgets, action modules, and the pinned + hashed Textual lockfile |
 | `tools/bootstrap.sh` · `tools/check.sh` · `tools/test_rhubarb.py` | Toolchain install · static checks · offline crypto/parsing self-tests |
 | `tools/serve_preseed.py` | One-shot preseed server bound only to Tart's host address |
 | `packer/macos/` · `packer/linux/` | Build templates per family |
@@ -539,26 +542,20 @@ for regressions of the rules above: Homebrew or `packer init` creeping back, def
       provenance all pass.
 - [x] **macOS 27** (`goldengate-research`) built end-to-end on a macOS 27 host: provisioning API
       → password rotation → Chrome/ZAP/WARP/Tailscale install → seal → smoke → provenance.
-- [ ] **First real build of the remaining families on a Mac.** Still to confirm on hardware: the
-      **macOS 26** keystroke Setup Assistant path, and the **Kali** GRUB + preseed flow (each with
-      its `tart ip`). Everything else (resolvers, locks, NixOS evaluation, templates, scripts) is
-      verified off-Mac.
-- [ ] Kali: WARP's Debian `trixie` build and ZAP from the Kali archive are expected to work on
-      rolling Kali but are untested.
-- [ ] Perimeter 81 on Linux (no pinned Linux variant yet).
-- [ ] A standard (non-admin) daily-use account, with admin kept for maintenance.
-- [ ] Chrome's updater inside macOS clones: disable it via policy if clones must stay identical.
-- [ ] `--net-softnet` for isolating several running clones from each other.
-- [ ] Stacked clones (`tart clone --stacked`, an immutable base plus an overlay) once images are
-      pulled from a private registry. Tart supports it only for remote images.
-- [ ] `scripts/publish.sh` is an untested draft; `cosign`/`crane` aren't in the pinned toolchain.
-- [ ] **Management surface.** Harden `tools/rhubarb/` into a typed core API, then a Textual TUI and
-      (for the agent platform) a localhost `herdr` service on top — no off-the-shelf tool fits, and
-      Orchard is only a fleet backend. Rationale + layering in [`docs/PLAN.md`](docs/PLAN.md#management-interface--control-plane-api).
 - [x] `TART_TEAM_ID` (`9M2P8L4D89`) and the Packer signer (`D38WU7D763`) pinned after the first
       bootstrap. ZAP needs none (unsigned, hash-pinned); pin Perimeter 81's Team ID when its
       installer is first resolved.
-- [ ] Choose a license for this repository.
+- [x] **Management surface (Phase 0.5).** `tools/rhubarb/` hardened into a typed core API, with a
+      Textual TUI (`./rhubarb-tui`) over it — read-only panes plus confirm-gated write actions. The
+      agent-platform `herdr` service is the next layer ([#33](https://github.com/errantpacket/RhubarbTart/issues/33)).
+      Rationale + layering: [`docs/PLAN.md`](docs/PLAN.md#management-interface--control-plane-api).
+
+Remaining work is tracked as issues (see the [issue tracker](https://github.com/errantpacket/RhubarbTart/issues)):
+
+- First real build on a Mac of **macOS 26** ([#24](https://github.com/errantpacket/RhubarbTart/issues/24)) and **Kali** ([#25](https://github.com/errantpacket/RhubarbTart/issues/25)); Kali WARP-trixie + ZAP-from-archive ([#26](https://github.com/errantpacket/RhubarbTart/issues/26)).
+- Perimeter 81 Linux variant ([#27](https://github.com/errantpacket/RhubarbTart/issues/27)) · non-admin daily-use account ([#28](https://github.com/errantpacket/RhubarbTart/issues/28)) · disable Chrome's updater in macOS clones ([#29](https://github.com/errantpacket/RhubarbTart/issues/29)).
+- Per-clone isolation via `--net-softnet` ([#30](https://github.com/errantpacket/RhubarbTart/issues/30)) · stacked clones from a private registry ([#31](https://github.com/errantpacket/RhubarbTart/issues/31)) · finish `scripts/publish.sh` + pin `cosign`/`crane` ([#32](https://github.com/errantpacket/RhubarbTart/issues/32)).
+- `herdr` service ([#33](https://github.com/errantpacket/RhubarbTart/issues/33)) · choose a license ([#34](https://github.com/errantpacket/RhubarbTart/issues/34)).
 
 ---
 

@@ -1,6 +1,8 @@
 # Management Interface — Implementation Charter
 
-_Status: draft · 2026-09-26 · branch `dev-control-plane`_
+_Status: **delivered** · 2026-09-26 · branch `dev-control-plane` (Stages A–C complete; all gates
+passed and hardware-validated; #16–#23 fixed along the way). Remaining input-modal actions (#20)
+done. The `herdr` service (Phase 5) gets its own charter._
 
 Implements **Phase 0.5** of [`PLAN.md`](PLAN.md#management-interface--control-plane-api): harden
 `tools/rhubarb/` into a typed **core API**, then build a **Textual TUI** over it — laying the

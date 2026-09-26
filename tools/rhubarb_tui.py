@@ -26,20 +26,41 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from rich.text import Text  # noqa: E402  (bundled with textual)
+from textual import work  # noqa: E402
 from textual.app import App, ComposeResult  # noqa: E402
 from textual.binding import Binding  # noqa: E402
-from textual.widgets import Footer, Header, TabbedContent, TabPane  # noqa: E402
+from textual.widgets import DataTable, Footer, Header, RichLog, TabbedContent, TabPane  # noqa: E402
 
+from rhubarb.tui import actions  # noqa: E402
 from rhubarb.tui.clones_pane import ClonesPane  # noqa: E402
+from rhubarb.tui.confirm import ConfirmScreen  # noqa: E402
 from rhubarb.tui.images_pane import ImagesPane  # noqa: E402
 from rhubarb.tui.provenance_pane import ProvenancePane  # noqa: E402
 
 
 class RhubarbTUI(App):
-    """A tabbed, keyboard-driven, read-only view of images, clones and provenance."""
+    """A tabbed, keyboard-driven view of images, clones and provenance.
+
+    The three panes are strictly read-only (Stage B). Operator *actions* (Stage C)
+    are dispatched by the shell — never by the panes — through the action modules in
+    ``rhubarb.tui.actions``: each runs in a Textual worker off the UI thread, streams
+    its progress into the action log, and destructive actions confirm first via
+    ``ConfirmScreen``. ``rm`` is wired end to end; the rest are stubs for the
+    per-action agents.
+    """
 
     TITLE = "RhubarbTart"
-    SUB_TITLE = "control plane · read-only"
+    SUB_TITLE = "control plane"
+
+    CSS = """
+    #action-log {
+        height: 8;
+        border-top: solid $panel;
+        padding: 0 1;
+        background: $surface;
+    }
+    """
 
     # Seconds between automatic read-only refreshes of every pane.
     REFRESH_INTERVAL = 5.0
@@ -50,6 +71,13 @@ class RhubarbTUI(App):
         Binding("1", "show_tab('images')", "Images"),
         Binding("2", "show_tab('clones')", "Clones"),
         Binding("3", "show_tab('provenance')", "Provenance"),
+        # Actions on the highlighted clone (dispatched by the shell, run in a worker;
+        # destructive ones confirm first). new/enroll/build need input prompts — tracked
+        # as a follow-up (they need selection/text modals).
+        Binding("b", "run_clone", "Run"),
+        Binding("s", "ssh_clone", "SSH"),
+        Binding("x", "reset_clone", "Reset"),
+        Binding("d", "delete_clone", "Remove clone"),
         # left/right arrows and tab already move between panes via TabbedContent.
     ]
 
@@ -62,6 +90,7 @@ class RhubarbTUI(App):
                 yield ClonesPane(id="clones-pane")
             with TabPane("Provenance", id="provenance"):
                 yield ProvenancePane(id="provenance-pane")
+        yield RichLog(id="action-log", markup=False, wrap=True, highlight=False)
         yield Footer()
 
     def _panes(self):
@@ -83,6 +112,151 @@ class RhubarbTUI(App):
 
     def action_show_tab(self, tab: str) -> None:
         self.query_one(TabbedContent).active = tab
+
+    # -- action infrastructure (Stage C) --------------------------------------
+    # The shell owns action dispatch so the read-only panes stay read-only. The
+    # flow: resolve target -> guard -> (confirm if destructive) -> run in a worker,
+    # streaming progress into the action log -> apply the outcome (log + refresh).
+
+    def action_delete_clone(self) -> None:
+        """Remove the highlighted clone (with confirm)."""
+        from rhubarb.tui.actions import rm
+
+        self.dispatch_action(rm)
+
+    def action_run_clone(self) -> None:
+        """Start the highlighted clone (GUI window, in the background)."""
+        from rhubarb.tui.actions import run
+
+        self.dispatch_action(run, params={"headless": False, "detach": True})
+
+    def action_ssh_clone(self) -> None:
+        """SSH into the highlighted clone: the core returns argv, the shell suspends and execs it."""
+        from rhubarb.tui.actions import ssh
+
+        self.dispatch_action(ssh)
+
+    def action_reset_clone(self) -> None:
+        """Destroy + re-clone the highlighted clone from the current image (with confirm)."""
+        from rhubarb.tui.actions import reset
+
+        self.dispatch_action(reset, params={"same_image": False, "rotate": True})
+
+    def dispatch_action(self, module, *, name: str | None = None,
+                        clone: object | None = None, params: dict | None = None) -> None:
+        """Run an action module for a target, confirming first if it is destructive.
+
+        ``name``/``clone`` default to the highlighted clone in the read-only clones
+        table. Applies the ``require_clone`` guard for clone-targeted actions so a
+        built image (``rbt-*``) or a ``*-vanilla``/``*-unverified`` precursor is never
+        a target — the core enforces this too, this is the friendly UI-side gate.
+        """
+        if module.REQUIRES_CLONE:
+            if name is None:
+                name = self._selected_clone_name()
+            if not name:
+                self._log_action(f"{module.LABEL}: select a clone in the Clones tab first")
+                return
+            try:
+                actions.require_clone(name)
+            except actions.NotAClone as e:
+                self._log_action(f"refused: {e}", ok=False)
+                return
+            if clone is None:
+                clone = self._lookup_clone(name)
+
+        ctx = actions.ActionContext(name=name or "", clone=clone,
+                                    params=params or {}, progress=self._action_progress)
+
+        if module.DESTRUCTIVE:
+            def on_confirm(confirmed: bool | None) -> None:
+                if confirmed:
+                    self._run_action(module, ctx)
+                else:
+                    self._log_action(f"{module.LABEL}: cancelled")
+
+            self.push_screen(ConfirmScreen(module.confirm_prompt(ctx),
+                                           action_label=module.LABEL), on_confirm)
+        else:
+            self._run_action(module, ctx)
+
+    @work(thread=True, group="rhubarb-action")
+    def _run_action(self, module, ctx: "actions.ActionContext") -> None:
+        """Run ``module.handle(ctx)`` off the UI thread; report the outcome.
+
+        Runs in a Textual thread worker so the (blocking) core API never freezes the
+        UI. All UI updates are marshalled back with ``call_from_thread``.
+        """
+        try:
+            outcome = module.handle(ctx)
+        except NotImplementedError as e:
+            self.call_from_thread(self._log_action, f"{module.LABEL}: {e}", False)
+            return
+        except Exception as e:  # a handler bug must not take the app down
+            self.call_from_thread(self._log_action,
+                                  f"{module.LABEL} FAILED: {type(e).__name__}: {e}", False)
+            return
+        self.call_from_thread(self._apply_outcome, outcome)
+
+    def _apply_outcome(self, outcome: "actions.ActionOutcome") -> None:
+        """Apply an action's result on the UI thread: log it; hand off an interactive
+        session if the core returned one; then refresh."""
+        self._log_action(outcome.summary, ok=outcome.ok)
+        if outcome.exec_argv:
+            self._exec_interactive(outcome.exec_argv)
+        elif outcome.needs_refresh:
+            self.action_refresh_all()
+
+    def _exec_interactive(self, argv: list[str]) -> None:
+        """Hand the terminal to an interactive command the core returned as argv (ssh, or a
+        foreground run) — the TUI can't host it — then resume the app and refresh. argv is built
+        by the core (api.ssh_args / api.run), never from user text."""
+        import subprocess
+
+        self._log_action("handing terminal over: " + " ".join(argv))
+        with self.suspend():
+            subprocess.run(argv)  # noqa: S603
+        self.action_refresh_all()
+
+    def _action_progress(self, msg: str) -> None:
+        """Progress sink handed to action handlers (and forwarded to the core).
+
+        Called from the worker thread, so it marshals the line onto the UI thread.
+        """
+        self.call_from_thread(self._log_action, msg)
+
+    def _log_action(self, msg: str, ok: bool | None = None) -> None:
+        """Write one line to the action log (UI thread). ``ok`` colours the line."""
+        style = "" if ok is None else ("green" if ok else "red bold")
+        try:
+            self.query_one("#action-log", RichLog).write(Text(msg, style=style))
+        except Exception:
+            pass
+
+    def _selected_clone_name(self) -> str | None:
+        """Read the highlighted clone's name from the read-only clones table.
+
+        Read-only: it only inspects the DataTable cursor; it never mutates the pane.
+        """
+        try:
+            table = self.query_one("#clones-table", DataTable)
+            if not table.row_count or not table.is_valid_coordinate(table.cursor_coordinate):
+                return None
+            return table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
+        except Exception:
+            return None
+
+    def _lookup_clone(self, name: str):
+        """Find the ``api.Clone`` row for ``name`` (for prompts/messages); best-effort."""
+        try:
+            from rhubarb import api
+
+            for c in api.clones().clones:
+                if c.name == name:
+                    return c
+        except Exception:
+            pass
+        return None
 
 
 def main() -> None:

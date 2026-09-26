@@ -13,6 +13,7 @@ Each expected value was produced by the reference implementation, not by this co
 import os
 import sys
 import tempfile
+import types
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -384,6 +385,52 @@ def test_api_pure() -> None:
         api.ROOT = saved_root
 
 
+def test_cli_progress_stream() -> None:
+    """#19: cli.py still streams the core's live milestones for `rhubarb new`/`reset` (it
+    hands api a progress callback that prints each line), and api's default (no callback)
+    stays a pure no-op so existing callers/tests are unaffected."""
+    import io
+    from contextlib import redirect_stderr
+
+    from rhubarb import api, cli
+
+    # cli.cmd_new must pass api.new a live progress callback and stream what it emits.
+    seen = {}
+
+    def fake_new(name, profile=None, image=None, rotate=True, progress=None):
+        seen["callable"] = callable(progress)
+        if progress:
+            progress(f"cloned rbt-x -> {name}")
+            progress(f"{name}: unique password set (rotated)")
+        return api.NewResult(name=name, image="rbt-x", profile=profile or "kali-research",
+                             rotated=rotate, password_mode="unique" if rotate else "inherited",
+                             note=None)
+
+    orig_new = api.new
+    api.new = fake_new
+    try:
+        args = types.SimpleNamespace(name="work-1", profile="kali-research",
+                                     image=None, no_rotate=False)
+        err = io.StringIO()
+        with redirect_stderr(err):
+            cli.cmd_new(args)
+        streamed = err.getvalue()
+    finally:
+        api.new = orig_new
+
+    check("cli.cmd_new hands api.new a live progress callback (#19)", seen.get("callable") is True)
+    check("cli.cmd_new streams the core's milestones live to stderr as they arrive",
+          "cloned rbt-x -> work-1" in streamed and "unique password set" in streamed)
+
+    # api's default is silent: _emit with no callback is a pure no-op (why existing tests
+    # and callers are unaffected); with a callback it delivers each line unchanged.
+    delivered = []
+    api._emit(None, "dropped when no frontend supplied a sink")
+    api._emit(delivered.append, "delivered verbatim")
+    check("api._emit is a no-op without a callback (default behavior unchanged)",
+          delivered == ["delivered verbatim"])
+
+
 def test_hostops_resilience() -> None:
     """#16: local_vms() retries the transient disk error and gives a clear error; delete_vm()
     works by name without listing. tart + sleep are stubbed in-process (no real VMs)."""
@@ -519,8 +566,8 @@ def test_reap_run() -> None:
 
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
-              test_rotation_script, test_api_pure, test_hostops_resilience,
-              test_shutdown_reaps_boot_process, test_reap_run):
+              test_rotation_script, test_api_pure, test_cli_progress_stream,
+              test_hostops_resilience, test_shutdown_reaps_boot_process, test_reap_run):
         print(t.__name__)
         t()
     if FAILS:

@@ -1,7 +1,8 @@
 # Sourced by the scripts in this directory: use only the pinned, repo-local toolchain.
 # shellcheck shell=bash
 
-RHUBARB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Works whether sourced by bash (BASH_SOURCE) or interactively in zsh ($0 is the sourced file).
+RHUBARB_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." && pwd)"
 TOOLCHAIN="$RHUBARB_ROOT/.toolchain"
 [[ -x "$TOOLCHAIN/bin/tart" && -x "$TOOLCHAIN/bin/packer" && -x "$TOOLCHAIN/bin/uv" ]] || {
   echo "toolchain missing; run ./tools/bootstrap.sh" >&2

@@ -360,6 +360,7 @@ flowchart LR
 | WARP (macOS) | Versioned pkg from Cloudflare's feed | First use (no vendor hash exists) | Developer ID + notarized, Team `68WVV388M8` |
 | Tailscale (macOS) | `pkgs.tailscale.com` | Vendor `.sha256` | **distsign** Ed25519 chain from a pinned root, plus Team `W5364U7YZB` |
 | Perimeter 81 (macOS) | Your tenant portal | First use | Developer ID + notarized; pin the Team ID after the first resolve |
+| Textual (TUI dep) | PyPI (`files.pythonhosted.org`) | `tools/rhubarb_tui.py.lock` (uv script lockfile; per-file sha256) | — (pinned + hash-verified by uv; the repo's only third-party Python dep) |
 
 </details>
 
@@ -466,6 +467,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; needs gpg, any OS
 | Packer | `releases.hashicorp.com` | `SHA256SUMS` GPG-verified against HashiCorp key `C874 011F … 72D7 468F` | sha256, Team ID if signed and pinned |
 | packer-plugin-tart | `github.com/cirruslabs/packer-plugin-tart` | `SHA256SUMS` == GitHub asset digest | sha256; `packer plugins install --path` (never `packer init`) |
 | uv | `github.com/astral-sh/uv` | `.sha256` == GitHub asset digest | sha256 |
+| Textual (TUI only) | PyPI (`files.pythonhosted.org`) | `uv lock --script` → `tools/rhubarb_tui.py.lock` | per-file sha256, verified by uv at `uv run --script` |
 
 - `scripts/env.sh` puts `.toolchain/bin` first on PATH, sets `PACKER_PLUGIN_PATH`, sets
   `CHECKPOINT_DISABLE=1` (no Packer phone-home), and pins uv to its own Python 3.13.
@@ -473,6 +475,11 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; needs gpg, any OS
   changed since the last bootstrap.
 - `toolchain-pin --latest` re-derives every hash and only accepts it when two upstream views
   agree.
+- **Textual** — the read-only TUI's only third-party dependency, and the repo's *first* — is not
+  a bootstrap binary. It is pinned to an exact version in `tools/rhubarb_tui.py`'s PEP 723 header
+  and hash-locked in `tools/rhubarb_tui.py.lock` (`uv lock --script`); `./rhubarb-tui` runs under
+  `uv run --script`, which installs it from that lock and verifies every file's sha256 (the
+  `--require-hashes` equivalent). `check.sh` asserts the pin and the lock stay consistent.
 
 </details>
 
@@ -489,6 +496,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; needs gpg, any OS
 | `config/toolchain.env` | Host toolchain pins |
 | `locks/*.lock.json` | Resolved inputs per profile (generated, reviewed, committed) |
 | `tools/resolve.py` · `tools/rhubarb/` | `list` · `plan` · `resolve` · `verify` · `provenance` · `preflight` · `toolchain-pin` |
+| `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb/tui/` · `tools/rhubarb_tui.py.lock` | Read-only Textual TUI over `rhubarb/api.py`: launcher shim, app shell, pane widgets, and the pinned + hashed Textual lockfile |
 | `tools/bootstrap.sh` · `tools/check.sh` · `tools/test_rhubarb.py` | Toolchain install · static checks · offline crypto/parsing self-tests |
 | `tools/serve_preseed.py` | One-shot preseed server bound only to Tart's host address |
 | `packer/macos/` · `packer/linux/` | Build templates per family |

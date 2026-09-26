@@ -1,0 +1,13 @@
+#!/bin/bash
+# rhubarb-tui: read-only Textual TUI over the RhubarbTart core API.  `./rhubarb-tui`
+# Thin client of tools/rhubarb/api.py; never touches tart/keychain directly.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+# On the Mac, use the pinned toolchain (tart, uv); elsewhere fall back to PATH.
+if [[ -d "$ROOT/.toolchain" ]]; then
+  # shellcheck source=scripts/env.sh
+  source "$ROOT/scripts/env.sh"
+fi
+# --script resolves against tools/rhubarb_tui.py.lock (uv lock --script), which
+# pins Textual to an exact version and verifies its hashes. See INTERFACE-PLAN B-0.
+exec uv run --quiet --script "$ROOT/tools/rhubarb_tui.py" "$@"

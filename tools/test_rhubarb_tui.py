@@ -533,6 +533,175 @@ async def _action_writes() -> None:
               "cloned rbt-kali-research-cc4479ae7492 -> fresh-1" in _log_text(app))
 
 
+async def _action_prompts() -> None:
+    """The input-driven write actions (new/enroll/build) end-to-end through the shell's
+    prompt modals — pressing the binding, driving the SelectScreen/InputScreen, and
+    asserting the exact ``api.*`` call (or none, on cancel) — with a mocked core API
+    (no Mac/tart/keychain).
+
+    Covers the hard rules for the modal-gated writes: everything goes through
+    ``dispatch_action`` -> the core; cancelling any modal (Escape) makes no ``api.*``
+    call and logs a cancel line; and the highlighted clone (read-only table) is the
+    enroll target. It complements ``_action_writes`` (which drives reset/new via
+    ``dispatch_action`` directly) by exercising the ``prompt`` modals themselves.
+    """
+    from textual.widgets import Input
+
+    api.images = _mock_images
+    api.clones = _mock_clones
+    api.provenance = _mock_provenance
+    api.list_profiles = lambda: ["kali-research", "nixos-research"]
+
+    new_calls: list = []
+    enroll_calls: list = []
+
+    def _fake_new(name, profile=None, image=None, rotate=True, progress=None):
+        new_calls.append((name, profile, image, rotate))
+        if progress:
+            progress(f"cloned rbt-x -> {name}")
+        return api.NewResult(name=name, image="rbt-kali-research-cc4479ae7492",
+                             profile=profile or "kali-research", rotated=rotate,
+                             password_mode="unique" if rotate else "inherited", note=None)
+
+    def _fake_enroll(name, service, org=None):
+        enroll_calls.append((name, service, org))
+        return api.EnrollResult(name=name, service=service, recorded=True,
+                                enrolled_at="2026-01-04T00:00:00Z")
+    api.new = _fake_new
+    api.enroll = _fake_enroll
+
+    import rhubarb_tui
+    from rhubarb.tui import actions
+    from rhubarb.tui.actions import build as build_mod
+    from rhubarb.tui.confirm import ConfirmScreen
+    from rhubarb.tui.prompt import InputScreen, SelectScreen
+
+    # build shells out to scripts/build.sh; intercept its handler so the test asserts the
+    # shell wiring (binding -> profile picker -> dispatch) without launching a real build.
+    build_calls: list = []
+    saved_build_handle = build_mod.handle
+
+    def _fake_build_handle(ctx):
+        build_calls.append((ctx.name, (ctx.params or {}).get("profile")))
+        return actions.ActionOutcome(ok=True, summary=f"build {ctx.params.get('profile')} finished")
+
+    app = rhubarb_tui.RhubarbTUI()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        # -- new: n -> profile SelectScreen -> name InputScreen -> api.new once --------------
+        await pilot.press("n")
+        await pilot.pause()
+        check("new: pressing 'n' opens the profile SelectScreen",
+              isinstance(app.screen, SelectScreen))
+        await pilot.press("enter")  # pick the highlighted (first, sorted) profile: kali-research
+        await pilot.pause()
+        check("new: choosing a profile opens the name InputScreen",
+              isinstance(app.screen, InputScreen))
+        app.screen.query_one("#input-field", Input).value = "fresh-9"
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("new: driving the modals calls api.new once with the typed name + chosen "
+              "profile + rotate True",
+              new_calls == [("fresh-9", "kali-research", None, True)])
+        check("new: no modal is left on screen after the flow",
+              not isinstance(app.screen, (SelectScreen, InputScreen)))
+
+        # -- new cancel: n -> Escape the profile picker -> no api.new, logs a cancel ---------
+        new_calls.clear()
+        await pilot.press("n")
+        await pilot.pause()
+        check("new (cancel): the profile SelectScreen is up", isinstance(app.screen, SelectScreen))
+        await pilot.press("escape")
+        await pilot.pause()
+        check("new (cancel): Escape makes no api.new call", new_calls == [])
+        check("new (cancel): a cancel line is logged", "cancelled" in _log_text(app))
+
+        # -- enroll (warp): highlight a clone -> e -> service picker -> org input -> api.enroll
+        await pilot.press("2")  # Clones tab
+        await pilot.pause()
+        app.query_one("#clones-table").focus()
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+        check("enroll: pressing 'e' on a highlighted clone opens the service SelectScreen",
+              isinstance(app.screen, SelectScreen))
+        await pilot.press("down")   # highlight index 1: warp (SERVICES = tailscale, warp, perimeter81)
+        await pilot.press("enter")
+        await pilot.pause()
+        check("enroll: choosing warp opens the optional --org InputScreen",
+              isinstance(app.screen, InputScreen))
+        app.screen.query_one("#input-field", Input).value = "acme"
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("enroll (warp): api.enroll is called with the highlighted clone, service and org",
+              enroll_calls == [("work-1", "warp", "acme")])
+
+        # -- enroll (tailscale): no org prompt -> dispatches immediately ---------------------
+        enroll_calls.clear()
+        await pilot.press("e")
+        await pilot.pause()
+        check("enroll (tailscale): service picker is up again", isinstance(app.screen, SelectScreen))
+        await pilot.press("enter")  # highlighted index 0: tailscale (no org prompt)
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("enroll (tailscale): api.enroll is called with org None and no org prompt shown",
+              enroll_calls == [("work-1", "tailscale", None)]
+              and not isinstance(app.screen, InputScreen))
+
+        # -- enroll cancel: e -> Escape the service picker -> no api.enroll ------------------
+        enroll_calls.clear()
+        await pilot.press("e")
+        await pilot.pause()
+        await pilot.press("escape")
+        await pilot.pause()
+        check("enroll (cancel): Escaping the service picker makes no api.enroll call",
+              enroll_calls == [] and not isinstance(app.screen, SelectScreen))
+
+        # -- build: B -> profile SelectScreen -> ACK modal (GUI-session caveat) -> handler ----
+        build_mod.handle = _fake_build_handle
+        try:
+            await pilot.press("B")
+            await pilot.pause()
+            check("build: pressing 'B' opens the profile SelectScreen",
+                  isinstance(app.screen, SelectScreen))
+            await pilot.press("enter")  # pick kali-research
+            await pilot.pause()
+            check("build: choosing a profile opens the acknowledgement modal (REQUIRES_ACK)",
+                  isinstance(app.screen, ConfirmScreen))
+            await pilot.press("y")  # acknowledge the GUI-session caveat
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            check("build: acknowledging runs the build handler with that profile",
+                  build_calls == [("", "kali-research")])
+
+            # build cancel: B -> Escape the profile picker -> the handler never runs.
+            build_calls.clear()
+            await pilot.press("B")
+            await pilot.pause()
+            await pilot.press("escape")
+            await pilot.pause()
+            check("build (cancel): Escaping the profile picker never runs the build handler",
+                  build_calls == [] and "cancelled" in _log_text(app))
+
+            # build ack-cancel: B -> pick profile -> decline the ack -> the handler never runs.
+            build_calls.clear()
+            await pilot.press("B")
+            await pilot.pause()
+            await pilot.press("enter")  # pick the profile
+            await pilot.pause()
+            check("build (ack-cancel): the acknowledgement modal is up",
+                  isinstance(app.screen, ConfirmScreen))
+            await pilot.press("n")  # decline
+            await pilot.pause()
+            check("build (ack-cancel): declining the ack never runs the build handler",
+                  build_calls == [])
+        finally:
+            build_mod.handle = saved_build_handle
+
+
 def main() -> None:
     asyncio.run(_render())
     _test_guard()
@@ -540,6 +709,7 @@ def main() -> None:
     _test_action_handlers()
     asyncio.run(_actions())
     asyncio.run(_action_writes())
+    asyncio.run(_action_prompts())
     if FAILS:
         sys.exit(f"{len(FAILS)} TUI render test(s) failed")
     print("all rhubarb TUI render tests passed")

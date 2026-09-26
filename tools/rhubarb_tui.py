@@ -36,6 +36,7 @@ from rhubarb.tui import actions  # noqa: E402
 from rhubarb.tui.clones_pane import ClonesPane  # noqa: E402
 from rhubarb.tui.confirm import ConfirmScreen  # noqa: E402
 from rhubarb.tui.images_pane import ImagesPane  # noqa: E402
+from rhubarb.tui.prompt import InputScreen, SelectScreen  # noqa: E402
 from rhubarb.tui.provenance_pane import ProvenancePane  # noqa: E402
 
 
@@ -72,12 +73,17 @@ class RhubarbTUI(App):
         Binding("2", "show_tab('clones')", "Clones"),
         Binding("3", "show_tab('provenance')", "Provenance"),
         # Actions on the highlighted clone (dispatched by the shell, run in a worker;
-        # destructive ones confirm first). new/enroll/build need input prompts — tracked
-        # as a follow-up (they need selection/text modals).
+        # destructive ones confirm first).
         Binding("b", "run_clone", "Run"),
         Binding("s", "ssh_clone", "SSH"),
         Binding("x", "reset_clone", "Reset"),
         Binding("d", "delete_clone", "Remove clone"),
+        # Input-driven write actions: they gather a profile/service/name via the
+        # prompt modals (rhubarb.tui.prompt) before dispatch. new/build target a
+        # profile (not a clone); enroll acts on the highlighted clone.
+        Binding("n", "new_clone", "New"),
+        Binding("e", "enroll_clone", "Enroll"),
+        Binding("B", "build", "Build"),
         # left/right arrows and tab already move between panes via TabbedContent.
     ]
 
@@ -142,6 +148,102 @@ class RhubarbTUI(App):
 
         self.dispatch_action(reset, params={"same_image": False, "rotate": True})
 
+    # -- input-driven write actions (profile/service/name gathered via prompt modals) ----
+    # These need operator input before dispatch, so they chain the prompt modals via
+    # push_screen callbacks (like ConfirmScreen). Cancelling any modal (Escape) aborts
+    # cleanly: log a line, make no api call. The action handlers still validate in the core.
+
+    def _profile_choices(self) -> list[str] | None:
+        """The known profile ids for a picker; None (with a log line) when unavailable."""
+        try:
+            from rhubarb import api
+
+            return sorted(api.list_profiles())
+        except Exception as e:  # a missing/broken profiles dir must not crash the app
+            self._log_action(f"could not list profiles: {e}", ok=False)
+            return None
+
+    def action_new_clone(self) -> None:
+        """Create a fresh clone: pick a profile, type a name, then dispatch ``new``."""
+        from rhubarb.tui.actions import new
+
+        profiles = self._profile_choices()
+        if not profiles:
+            if profiles is not None:
+                self._log_action(f"{new.LABEL}: no profiles found to build a clone from")
+            return
+
+        def got_profile(profile: str | None) -> None:
+            if not profile:
+                self._log_action(f"{new.LABEL}: cancelled")
+                return
+
+            def got_name(name: str | None) -> None:
+                if not name:
+                    self._log_action(f"{new.LABEL}: cancelled")
+                    return
+                self.dispatch_action(new, name=name,
+                                     params={"profile": profile, "rotate": True})
+
+            self.push_screen(InputScreen(f"New clone name (profile {profile})"), got_name)
+
+        self.push_screen(SelectScreen("Select a profile for the new clone", profiles),
+                         got_profile)
+
+    def action_enroll_clone(self) -> None:
+        """Enroll the highlighted clone: pick a service (and, for warp, an optional org)."""
+        from rhubarb.tui.actions import enroll
+
+        name = self._selected_clone_name()
+        if not name:
+            self._log_action(f"{enroll.LABEL}: select a clone in the Clones tab first")
+            return
+
+        def got_service(service: str | None) -> None:
+            if not service:
+                self._log_action(f"{enroll.LABEL}: cancelled")
+                return
+            if service == "warp":
+                def got_org(org: str | None) -> None:
+                    if org is None:  # Escape aborts; blank means "no org"
+                        self._log_action(f"{enroll.LABEL}: cancelled")
+                        return
+                    self.dispatch_action(enroll, name=name,
+                                         params={"service": service, "org": org or None})
+
+                self.push_screen(
+                    InputScreen("Cloudflare WARP --org (optional; leave blank for none)"),
+                    got_org)
+            else:
+                self.dispatch_action(enroll, name=name,
+                                     params={"service": service, "org": None})
+
+        self.push_screen(
+            SelectScreen(f"Enroll {name} in which service?", list(enroll.SERVICES)),
+            got_service)
+
+    def action_build(self) -> None:
+        """Build a profile image: pick a profile, then dispatch ``build``.
+
+        The build handler streams the GUI-session caveat and refuses over SSH itself,
+        so the shell does not duplicate that here.
+        """
+        from rhubarb.tui.actions import build
+
+        profiles = self._profile_choices()
+        if not profiles:
+            if profiles is not None:
+                self._log_action(f"{build.LABEL}: no profiles found to build")
+            return
+
+        def got_profile(profile: str | None) -> None:
+            if not profile:
+                self._log_action(f"{build.LABEL}: cancelled")
+                return
+            self.dispatch_action(build, params={"profile": profile})
+
+        self.push_screen(SelectScreen("Build which profile?", profiles), got_profile)
+
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         """Point the Provenance pane at the highlighted row (read-only).
 
@@ -191,7 +293,9 @@ class RhubarbTUI(App):
         ctx = actions.ActionContext(name=name or "", clone=clone,
                                     params=params or {}, progress=self._action_progress)
 
-        if module.DESTRUCTIVE:
+        # DESTRUCTIVE actions (reset/rm) confirm before acting; REQUIRES_ACK actions (build)
+        # aren't destructive but must surface an acknowledgement first (the GUI-session caveat).
+        if module.DESTRUCTIVE or getattr(module, "REQUIRES_ACK", False):
             def on_confirm(confirmed: bool | None) -> None:
                 if confirmed:
                     self._run_action(module, ctx)

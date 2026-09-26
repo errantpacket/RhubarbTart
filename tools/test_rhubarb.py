@@ -466,8 +466,10 @@ def test_shutdown_reaps_boot_process() -> None:
             self.killed = True
             self.alive = False
 
-    orig_stop = hostops.stop_vm
+    orig_stop, orig_reap = hostops.stop_vm, hostops.reap_run
     hostops.stop_vm = lambda *_a, **_k: (_ for _ in ()).throw(VerifyError("stop failed / listing degraded"))
+    reaped = []
+    hostops.reap_run = lambda n: reaped.append(n)
     try:
         p = FakeProc()
         hostops.shutdown("vm1", p, timeout=0)  # stop raises, wait times out -> terminate
@@ -478,14 +480,47 @@ def test_shutdown_reaps_boot_process() -> None:
         gone.alive = False
         hostops.shutdown("vm1", gone, timeout=0)
         check("shutdown no-ops on an already-exited process", not gone.terminated and not gone.killed)
+
+        # shutdown always sweeps for a stray detached `tart run <name>` (#18), even proc=None
+        hostops.shutdown("vm1")
+        check("shutdown always reaps stray tart run by name", reaped == ["vm1", "vm1", "vm1"])
     finally:
-        hostops.stop_vm = orig_stop
+        hostops.stop_vm, hostops.reap_run = orig_stop, orig_reap
+
+
+def test_reap_run() -> None:
+    """#18: reap_run kills only `tart run <name>` whose final arg is the exact name."""
+    from rhubarb import hostops
+    CP = subprocess.CompletedProcess
+    killed = []
+    cmds = {"100": "/x/tart run --no-graphics web-1",
+            "101": "/x/tart run web-10",                       # substring — must NOT match web-1
+            "102": "/x/tart run --rosetta=rosetta web-1",
+            "103": "/x/some-other-process web-1"}              # not a tart run — must NOT match
+
+    def fake_run(argv, **k):
+        if argv[:2] == ["pgrep", "-f"]:
+            return CP(argv, 0, "100\n101\n102\n103\n", "")
+        if argv[0] == "ps":
+            return CP(argv, 0, cmds.get(argv[argv.index("-p") + 1], "") + "\n", "")
+        if argv[0] == "kill":
+            killed.append(argv[1])
+            return CP(argv, 0, "", "")
+        return CP(argv, 0, "", "")
+
+    orig = hostops.subprocess.run
+    hostops.subprocess.run = fake_run
+    try:
+        hostops.reap_run("web-1")
+        check("reap_run kills exact-name matches only (web-1, not web-10)", sorted(killed) == ["100", "102"])
+    finally:
+        hostops.subprocess.run = orig
 
 
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_hostops_resilience,
-              test_shutdown_reaps_boot_process):
+              test_shutdown_reaps_boot_process, test_reap_run):
         print(t.__name__)
         t()
     if FAILS:

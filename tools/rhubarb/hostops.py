@@ -202,16 +202,27 @@ def forget_host_key(name: str) -> None:
         subprocess.run(["ssh-keygen", "-R", name, "-f", str(KNOWN_HOSTS)], capture_output=True)
 
 
-def wait_for_ssh(name: str, username: str, ip: str, timeout: int | None = None) -> str:
-    """'ok' | 'denied' (reachable, but our key isn't accepted: final) | 'unreachable'."""
+def wait_for_ssh(name: str, username: str, ip: str, timeout: int | None = None,
+                 progress=None) -> str:
+    """'ok' | 'denied' (reachable, but our key isn't accepted: final) | 'unreachable'.
+
+    ``progress`` (optional callable): emits a "waiting for SSH … Ns/Ms" line every ~20s so a
+    long wait (a slow macOS first-boot clone) isn't a silent stall.
+    """
     timeout = timeout or int(os.environ.get("RHUBARB_SSH_WAIT", "180"))
-    deadline = time.time() + timeout
+    start = time.time()
+    deadline = start + timeout
+    ticked = 0
     while time.time() < deadline:
         res = subprocess.run([*ssh_args(name, username, ip), "true"], capture_output=True, text=True)
         if res.returncode == 0:
             return "ok"
         if "Permission denied" in res.stderr:
             return "denied"
+        elapsed = int(time.time() - start)
+        if progress and elapsed - ticked >= 20:
+            ticked = elapsed
+            progress(f"{name}: waiting for SSH at {ip} … {elapsed}s/{timeout}s")
         time.sleep(3)
     return "unreachable"
 

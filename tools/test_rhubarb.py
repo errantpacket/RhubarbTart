@@ -384,9 +384,69 @@ def test_api_pure() -> None:
         api.ROOT = saved_root
 
 
+def test_hostops_resilience() -> None:
+    """#16: local_vms() retries the transient disk error and gives a clear error; delete_vm()
+    works by name without listing. tart + sleep are stubbed in-process (no real VMs)."""
+    from rhubarb import hostops
+    from rhubarb.common import VerifyError
+    CP = subprocess.CompletedProcess
+    BUSY = ("Error: Failed to retrieve info for disk image: The operation couldn't be "
+            "completed. Resource temporarily unavailable")
+    orig_tart, orig_sleep = hostops.tart, hostops.time.sleep
+    hostops.time.sleep = lambda *_: None
+    try:
+        # retry on the transient disk error, then succeed
+        calls = {"n": 0}
+        good = json.dumps([{"Source": "local", "Name": "vm1", "Running": False}])
+        def flaky(*a, **k):
+            calls["n"] += 1
+            return CP(a, 0, good, "") if calls["n"] >= 3 else CP(a, 1, "", BUSY)
+        hostops.tart = flaky
+        vms = hostops.local_vms()
+        check("local_vms retries transient disk-busy then succeeds", "vm1" in vms and calls["n"] == 3)
+
+        # persistent transient -> actionable VerifyError
+        hostops.tart = lambda *a, **k: CP(a, 1, "", BUSY)
+        try:
+            hostops.local_vms(retries=2)
+            busy_ok = False
+        except VerifyError as e:
+            busy_ok = "disk image" in str(e)
+        check("local_vms raises actionable error on persistent disk-busy", busy_ok)
+
+        # a different failure is not retried
+        other = {"n": 0}
+        def other_err(*a, **k):
+            other["n"] += 1
+            return CP(a, 1, "", "Error: some other failure")
+        hostops.tart = other_err
+        try:
+            hostops.local_vms(retries=4)
+            noretry_ok = False
+        except VerifyError:
+            noretry_ok = other["n"] == 1
+        check("local_vms does not retry non-transient failures", noretry_ok)
+
+        # delete_vm by name: present / already-gone / real error
+        hostops.tart = lambda *a, **k: CP(a, 0, "", "")
+        d_ok = hostops.delete_vm("x") is True
+        hostops.tart = lambda *a, **k: CP(a, 1, "", 'Error: VM "x" does not exist')
+        d_absent = hostops.delete_vm("x") is False
+        hostops.tart = lambda *a, **k: CP(a, 1, "", "Error: still running")
+        try:
+            hostops.delete_vm("x")
+            d_err = False
+        except VerifyError:
+            d_err = True
+        check("delete_vm handles present / absent / error by name", d_ok and d_absent and d_err)
+    finally:
+        hostops.tart = orig_tart
+        hostops.time.sleep = orig_sleep
+
+
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
-              test_rotation_script, test_api_pure):
+              test_rotation_script, test_api_pure, test_hostops_resilience):
         print(t.__name__)
         t()
     if FAILS:

@@ -43,8 +43,8 @@ The things this project promises, and therefore wants to hear about if they brea
 - **Isolation gaps** — the network/isolation model described in [`docs/PLAN.md`](docs/PLAN.md) once
   it's implemented.
 
-The [Trust model](README.md#trust-model) and [Security posture](README.md#security-posture) in the
-README, and the threat model in [`docs/PLAN.md`](docs/PLAN.md), describe the intended guarantees.
+The [Trust model](docs/trust-model.md#trust-model) and [Security posture](docs/trust-model.md#security-posture)
+pages, and the threat model in [`docs/PLAN.md`](docs/PLAN.md), describe the intended guarantees.
 
 ## Out of scope
 

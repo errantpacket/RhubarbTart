@@ -96,7 +96,8 @@ mode, enrollments), and a provenance detail view. Auto-refresh; no writes, no de
 > 2. **Rich only** (lighter dep, simpler render loop, less interactivity).
 > 3. **stdlib `curses`** (zero deps, preserves purity; most work, weakest UX).
 > Pick before writing Stage B. Whichever wins, add the pin to the toolchain/bootstrap path and a
-> `check.sh` assertion, and note it in the README provenance/toolchain tables.
+> `check.sh` assertion, and note it in the provenance/toolchain tables (docs/trust-model.md,
+> docs/reference.md).
 
 **Gate B:** launches and renders **real** images/clones on the Mac · strictly read-only (grep the
 diff — no `new`/`run`/`enroll`/`reset`/`rm` calls) · a headless render test (Textual `Pilot` /

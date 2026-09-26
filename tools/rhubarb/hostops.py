@@ -27,9 +27,43 @@ def tart(*args: str, capture: bool = False, check: bool = True) -> subprocess.Co
                           stderr=subprocess.PIPE if capture else None)
 
 
-def local_vms() -> dict[str, dict]:
-    out = tart("list", "--format", "json", capture=True).stdout
-    return {v["Name"]: v for v in json.loads(out or "[]") if v.get("Source") == "local"}
+# tart enriches `list` with each VM's disk-image info and aborts the whole command if any one
+# is momentarily locked/unreadable (EAGAIN right after a clone/stop) — printing this. It's
+# usually transient, so retry before giving up rather than let one VM blank the entire listing.
+_DISK_BUSY = "Resource temporarily unavailable"
+
+
+def local_vms(retries: int = 4) -> dict[str, dict]:
+    res = None
+    for attempt in range(retries):
+        res = tart("list", "--format", "json", capture=True, check=False)
+        if res.returncode == 0:
+            return {v["Name"]: v for v in json.loads(res.stdout or "[]") if v.get("Source") == "local"}
+        if _DISK_BUSY not in (res.stderr or ""):
+            break  # a different failure — don't spend retries on it
+        if attempt < retries - 1:
+            time.sleep(1.5 * (attempt + 1))
+    stderr = (res.stderr or "").strip() if res else ""
+    if _DISK_BUSY in stderr:
+        raise VerifyError(
+            "tart could not list VMs: a VM's disk image is temporarily unreadable (one may be "
+            "mid-clone/boot, or stuck). Retry in a moment; if it persists, remove the stuck VM "
+            "with `rhubarb rm <name>` (or `tart delete <name>`).")
+    raise VerifyError(f"tart list failed: {stderr or 'unknown error'}")
+
+
+def delete_vm(name: str) -> bool:
+    """Delete a VM by name — no listing needed, so it works even when `list` is degraded.
+
+    Returns whether the VM existed; tolerates it already being gone.
+    """
+    res = tart("delete", name, capture=True, check=False)
+    if res.returncode == 0:
+        return True
+    low = (res.stderr or "").lower()
+    if "does not exist" in low or "doesn't exist" in low or "not found" in low:
+        return False
+    raise VerifyError(f"{name}: could not delete: {(res.stderr or '').strip() or 'unknown error'}")
 
 
 def is_running(name: str) -> bool:

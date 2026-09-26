@@ -27,29 +27,53 @@ def tart(*args: str, capture: bool = False, check: bool = True) -> subprocess.Co
                           stderr=subprocess.PIPE if capture else None)
 
 
-# tart enriches `list` with each VM's disk-image info and aborts the whole command if any one
-# is momentarily locked/unreadable (EAGAIN right after a clone/stop) — printing this. It's
-# usually transient, so retry before giving up rather than let one VM blank the entire listing.
+# tart enriches `list`/`get` with each VM's disk-image info and aborts the whole command if any
+# one is unreadable — printing this. A *running* VM holds an exclusive lock on its disk.img, so
+# this happens for the whole time it runs (not just transiently after a clone/stop). See #16/#21.
 _DISK_BUSY = "Resource temporarily unavailable"
+VMS_DIR = Path.home() / ".tart" / "vms"
 
 
-def local_vms(retries: int = 4) -> dict[str, dict]:
-    res = None
-    for attempt in range(retries):
-        res = tart("list", "--format", "json", capture=True, check=False)
-        if res.returncode == 0:
-            return {v["Name"]: v for v in json.loads(res.stdout or "[]") if v.get("Source") == "local"}
-        if _DISK_BUSY not in (res.stderr or ""):
-            break  # a different failure — don't spend retries on it
-        if attempt < retries - 1:
-            time.sleep(1.5 * (attempt + 1))
-    stderr = (res.stderr or "").strip() if res else ""
-    if _DISK_BUSY in stderr:
-        raise VerifyError(
-            "tart could not list VMs: a VM's disk image is temporarily unreadable (one may be "
-            "mid-clone/boot, or stuck). Retry in a moment; if it persists, remove the stuck VM "
-            "with `rhubarb rm <name>` (or `tart delete <name>`).")
-    raise VerifyError(f"tart list failed: {stderr or 'unknown error'}")
+def _tart_run_procs() -> list[tuple[str, str]]:
+    """(pid, vm_name) for each live `tart run <name>` process — the VM name is the final arg."""
+    procs = []
+    found = subprocess.run(["pgrep", "-f", "tart run"], capture_output=True, text=True)
+    for pid in found.stdout.split():
+        cmd = subprocess.run(["ps", "-o", "command=", "-p", pid], capture_output=True, text=True).stdout
+        toks = cmd.split()
+        if toks and "run" in toks:
+            procs.append((pid, toks[-1]))
+    return procs
+
+
+def _fs_vms() -> dict[str, dict]:
+    """Disk-free VM enumeration: local VM directories + running state from the process table.
+
+    The fallback when `tart list` can't read a running VM's locked disk (#21). Never reads
+    disk.img, so it works while clones are up. Provides {Name, Source, Running, State} — all the
+    CLI/TUI need (Disk size and other tart-only fields aren't used by images()/clones()).
+    """
+    running = {vm for _pid, vm in _tart_run_procs()}
+    out = {}
+    if VMS_DIR.is_dir():
+        for d in sorted(VMS_DIR.iterdir()):
+            if d.is_dir():
+                up = d.name in running
+                out[d.name] = {"Name": d.name, "Source": "local", "Running": up,
+                               "State": "running" if up else "stopped"}
+    return out
+
+
+def local_vms() -> dict[str, dict]:
+    res = tart("list", "--format", "json", capture=True, check=False)
+    if res.returncode == 0:
+        return {v["Name"]: v for v in json.loads(res.stdout or "[]") if v.get("Source") == "local"}
+    # A running VM's locked disk (or a transient EAGAIN right after clone/stop) makes tart abort
+    # the whole listing. Fall back to the disk-free enumeration so listing — and running state —
+    # keep working even while clones are up (#16/#21).
+    if _DISK_BUSY in (res.stderr or ""):
+        return _fs_vms()
+    raise VerifyError(f"tart list failed: {(res.stderr or '').strip() or 'unknown error'}")
 
 
 def delete_vm(name: str) -> bool:
@@ -105,11 +129,8 @@ def reap_run(name: str) -> None:
     (#16/#17/#18). The VM name is matched only as the final argument, so a different VM (e.g.
     `web-10` vs `web-1`) is never touched.
     """
-    found = subprocess.run(["pgrep", "-f", "tart run"], capture_output=True, text=True)
-    for pid in found.stdout.split():
-        cmd = subprocess.run(["ps", "-o", "command=", "-p", pid], capture_output=True, text=True).stdout
-        toks = cmd.split()
-        if toks and "run" in toks and toks[-1] == name:
+    for pid, vm in _tart_run_procs():
+        if vm == name:
             subprocess.run(["kill", pid], capture_output=True)
 
 

@@ -9,6 +9,10 @@
   rhubarb enroll NAME tailscale|warp|perimeter81 [--org TEAM]
   rhubarb reset NAME [--same-image] [--no-rotate]   back to a clean clone (drops enrollment)
   rhubarb rm NAME [--yes]
+  rhubarb engagement define FILE|ID                 validate + acknowledge a scope manifest
+  rhubarb engagement list                           defined engagements and their clone counts
+  rhubarb engagement provision ID                   stand up its ranges from verified images
+  rhubarb engagement teardown ID [--yes]            remove every clone tagged to it
 
 Only clones created by `rhubarb new` can be run, reset or removed through this tool; built
 images (rbt-*) and other VMs are never modified. Records: see tools/rhubarb/clones.py.
@@ -22,6 +26,7 @@ import argparse
 import os
 import subprocess
 import sys
+from pathlib import Path
 
 from . import api, clones, hostops
 from .common import VerifyError
@@ -123,6 +128,71 @@ def cmd_rm(a) -> None:
     say(f"removed {res.name}")
 
 
+# ---- engagement commands -------------------------------------------------------------------
+# Thin adapters over the core's engagement ops (api.provision/teardown/engagements/
+# engagement_clones, over engagements.py). No tart/keychain/record logic lives here.
+
+def _engagement_id(arg: str) -> str:
+    """Accept a manifest path (engagements/<id>.json) or a bare id, returning the id.
+
+    Manifests are committed in engagements/ and loaded from there by id; a path is a
+    convenience, so strip its directory and .json suffix to the stem.
+    """
+    return Path(arg).stem if arg.endswith(".json") or "/" in arg else arg
+
+
+def cmd_engagement_define(a) -> None:
+    eid = _engagement_id(a.engagement)
+    eng = api._engagements.load_engagement(eid)   # strict validation ("no manifest, no run")
+    total = sum(r.count for r in eng.ranges)
+    say(f"engagement {eng.id!r} OK: {eng.label} (operator {eng.operator})")
+    say(f"authorization: {eng.authorization}")
+    rows = [[r.profile, str(r.count), r.prefix or f"{eng.id}-{r.profile}"] for r in eng.ranges]
+    table(rows, ["PROFILE", "COUNT", "PREFIX"])
+    say(f"{len(eng.ranges)} range(s), {total} clone(s); provision with: rhubarb engagement provision {eng.id}")
+
+
+def cmd_engagement_list(_a) -> None:
+    defined = api.engagements()
+    if not defined:
+        say("no engagements defined (add engagements/<id>.json)")
+        return
+    counts: dict[str, int] = {}
+    for c in api.clones().clones:
+        if c.engagement:
+            counts[c.engagement] = counts.get(c.engagement, 0) + 1
+    table([[eid, str(counts.get(eid, 0))] for eid in defined], ["ENGAGEMENT", "CLONES"])
+
+
+def cmd_engagement_provision(a) -> None:
+    res = api.provision(_engagement_id(a.engagement))
+    for r in res.created:
+        _say_clone(r)
+        say(f"provisioned {r.name} (from {r.image}, password {r.password_mode})")
+    for name in res.skipped:
+        say(f"skipped {name}: already exists (not re-created)")
+    say(f"engagement {res.engagement}: {len(res.created)} created, {len(res.skipped)} skipped")
+
+
+def cmd_engagement_teardown(a) -> None:
+    eid = _engagement_id(a.engagement)
+    if not a.yes:
+        victims = [c.name for c in api.engagement_clones(eid)]
+        if not victims:
+            say(f"engagement {eid}: no clones to tear down")
+            return
+        answer = input(f"Tear down {len(victims)} clone(s) of engagement {eid} "
+                       f"({', '.join(victims)}) and their keychain entries? [y/N] ")
+        if answer.strip().lower() not in ("y", "yes"):
+            say("aborted")
+            return
+    removed = api.teardown(eid)
+    if removed:
+        say(f"engagement {eid}: removed {len(removed)} clone(s): {', '.join(removed)}")
+    else:
+        say(f"engagement {eid}: nothing to remove")
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="rhubarb", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -161,6 +231,19 @@ def main(argv: list[str] | None = None) -> None:
     rm.add_argument("name")
     rm.add_argument("--yes", action="store_true")
     rm.set_defaults(fn=cmd_rm)
+    eng = sub.add_parser("engagement", help="define / list / provision / teardown a scoped engagement")
+    esub = eng.add_subparsers(dest="engagement_cmd", required=True)
+    ed = esub.add_parser("define", help="validate and acknowledge a manifest (engagements/<id>.json)")
+    ed.add_argument("engagement", metavar="FILE|ID")
+    ed.set_defaults(fn=cmd_engagement_define)
+    esub.add_parser("list", help="defined engagements and their clone counts").set_defaults(fn=cmd_engagement_list)
+    ep = esub.add_parser("provision", help="stand up the engagement's clone set from verified images")
+    ep.add_argument("engagement", metavar="ID")
+    ep.set_defaults(fn=cmd_engagement_provision)
+    et = esub.add_parser("teardown", help="remove every clone tagged to the engagement")
+    et.add_argument("engagement", metavar="ID")
+    et.add_argument("--yes", action="store_true")
+    et.set_defaults(fn=cmd_engagement_teardown)
     a = ap.parse_args(argv)
     if a.cmd == "ssh" and a.remote[:1] == ["--"]:
         a.remote = a.remote[1:]

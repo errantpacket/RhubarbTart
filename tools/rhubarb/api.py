@@ -35,6 +35,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import clones as _clones
+from . import engagements as _engagements
 from . import hostops
 from .common import ROOT, VerifyError
 from .locks import image_name
@@ -85,6 +86,8 @@ class Clone:
     enrollments:      sorted service names it is enrolled in (subset of tailscale/warp/
                       perimeter81); empty when none.
     created_at:       ISO-8601 UTC timestamp the record was created.
+    engagement:       the engagement id this clone belongs to (its lineage tag), or ``None``
+                      for an ad-hoc clone. Holds no secret. Populated from the record.
     """
 
     name: str
@@ -97,6 +100,7 @@ class Clone:
     password_account: str
     enrollments: list[str]
     created_at: str
+    engagement: str | None = None
 
 
 @dataclass(frozen=True)
@@ -242,6 +246,22 @@ class RemoveResult:
     keychain_deleted: bool
 
 
+@dataclass(frozen=True)
+class ProvisionResult:
+    """The result of ``provision()``: the engagement's clone set, standing up as one unit.
+
+    engagement: the engagement id that was provisioned.
+    created:    a ``NewResult`` per clone actually created this run (in provision order),
+                each carrying its image lineage and password outcome.
+    skipped:    names that already existed (a VM or a clone record) and so were left
+                untouched rather than duplicated — reported, never silently re-created.
+    """
+
+    engagement: str
+    created: list[NewResult]
+    skipped: list[str]
+
+
 # ---- internal helpers ----------------------------------------------------------------------
 # These mirror the private orchestration ``cli.py`` used to hold; they call ``clones`` and
 # ``hostops`` for every record/keychain/tart/GUI-session action and never re-implement it.
@@ -350,16 +370,17 @@ def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | 
 
 
 def _clone(name: str, image: str, prof: dict, rotate: bool,
-           progress: ProgressFn | None = None) -> tuple[bool, str | None]:
+           progress: ProgressFn | None = None, engagement: str | None = None) -> tuple[bool, str | None]:
     """Clone ``image`` to ``name``, write and log the record, then optionally rotate.
 
     Returns ``(rotated, note)`` describing the password outcome. ``progress`` (optional)
     streams milestones live (``"cloned <image> -> <name>"``, then the rotation lines); it is
-    forwarded to ``_rotate``. ``None`` is silent.
+    forwarded to ``_rotate``. ``None`` is silent. ``engagement`` (optional) tags the clone
+    record with the engagement it belongs to (``None`` for an ad-hoc clone).
     """
     hostops.tart("clone", image, name)
     _emit(progress, f"cloned {image} -> {name}")
-    rec = _clones.new_record(name, prof, image)
+    rec = _clones.new_record(name, prof, image, engagement=engagement)
     _clones.save(rec)
     _clones.log_event("new", name, image)
     if rotate:
@@ -438,7 +459,7 @@ def clones() -> CloneList:
             name=r["name"], profile=r["profile"], family=r["family"], image=r["image"],
             state=state, freshness=fresh, password_mode=pw,
             password_account=r["password_account"], enrollments=sorted(r["enrollments"]),
-            created_at=r["created_at"]))
+            created_at=r["created_at"], engagement=r["engagement"]))
     return CloneList(clones=out, problems=list(problems))
 
 
@@ -472,7 +493,8 @@ def provenance(vm: str) -> Provenance:
 
 
 def new(name: str, profile: str | None = None, image: str | None = None,
-        rotate: bool = True, progress: ProgressFn | None = None) -> NewResult:
+        rotate: bool = True, progress: ProgressFn | None = None,
+        engagement: str | None = None) -> NewResult:
     """Create a research clone named ``name`` from a verified image.
 
     Give exactly one of ``profile`` (clone the image its committed lock produces) or
@@ -489,6 +511,10 @@ def new(name: str, profile: str | None = None, image: str | None = None,
     stream live status. Omit it (the default ``None``) for pure, silent behavior — existing
     callers and tests are unaffected.
 
+    ``engagement`` (optional) tags the clone's record with the engagement id it belongs to;
+    ``None`` (the default) is an ad-hoc clone. It only records lineage — no other behavior
+    changes. Stage 1B's ``provision`` passes it; ``rhubarb new`` leaves it ``None``.
+
     Returns a ``NewResult``. Raises ``VerifyError`` (not exactly one of profile/image, bad
     name, name already taken, image not built here, no keychain password, or a rotation
     that could not be completed and verified) / ``FileNotFoundError`` per the module
@@ -498,7 +524,7 @@ def new(name: str, profile: str | None = None, image: str | None = None,
     if name in hostops.local_vms():
         raise VerifyError(f"a VM named {name} already exists")
     img, prof = _source_image(profile, image)
-    rotated, note = _clone(name, img, prof, rotate, progress)
+    rotated, note = _clone(name, img, prof, rotate, progress, engagement=engagement)
     return NewResult(name=name, image=img, profile=prof["id"], rotated=rotated,
                      password_mode="unique" if rotated else "inherited", note=note)
 
@@ -633,3 +659,90 @@ def rm(name: str) -> RemoveResult:
     _clones.delete(rec["name"])
     _clones.log_event("rm", rec["name"])
     return RemoveResult(name=rec["name"], image=rec["image"], keychain_deleted=keychain_deleted)
+
+
+# ---- engagements ---------------------------------------------------------------------------
+# An engagement (engagements/<id>.json, loaded + strictly validated by ``engagements.py``) is
+# the scoped unit: its ranges build and tear down as one. These functions act only on identity
+# + ranges — they clone verified images via ``new`` and remove tagged clones via ``rm``, never
+# re-implementing any tart/keychain/record logic. See docs/ENGAGEMENT-PLAN.md (Stage 1B).
+
+
+def engagements() -> list[str]:
+    """The defined engagement ids (``engagements/<id>.json``), sorted. Read-only."""
+    return _engagements.list_engagements()
+
+
+def engagement_clones(engagement: str) -> list[Clone]:
+    """Every trusted clone tagged to ``engagement`` (record ``engagement`` == this id).
+
+    A view over ``clones()`` filtered by the lineage tag — same StrictModes trust and live
+    state. Untagged (ad-hoc) clones and clones of other engagements are excluded. Read-only.
+    """
+    return [c for c in clones().clones if c.engagement == engagement]
+
+
+def _range_names(engagement: str, rng: _engagements.Range) -> list[str]:
+    """The clone names a range stands up: its ``prefix`` (or ``<engagement>-<profile>``),
+    bare when ``count == 1`` else suffixed ``-1``..``-count``. Each is validated as a clone
+    name (never ``rbt-``); an over-long/invalid name raises ``VerifyError`` before any clone."""
+    base = rng.prefix or f"{engagement}-{rng.profile}"
+    names = [base] if rng.count == 1 else [f"{base}-{i}" for i in range(1, rng.count + 1)]
+    for name in names:
+        _clones.check_clone_name(name)
+    return names
+
+
+def provision(engagement: str) -> ProvisionResult:
+    """Stand up an engagement's clone set from its ranges, as one unit.
+
+    Loads + strictly validates ``engagements/<engagement>.json``, then for each range resolves
+    the profile's current verified image and REFUSES (``VerifyError``) if that image is not
+    built + keychain-backed on this Mac — checking every range up front, so a missing image
+    provisions nothing. Each range then clones ``count`` copies via ``new`` (rotating a
+    per-clone password, like ``rhubarb new``), tagged with the engagement id, named from the
+    range ``prefix`` or ``<engagement>-<profile>`` (bare for one, ``-1``..``-count`` for more).
+    A name that already exists (a VM or a clone record) is reported in ``skipped``, never
+    duplicated.
+
+    Returns a ``ProvisionResult`` (``created`` NewResults + ``skipped`` names). Raises
+    ``VerifyError`` (bad/absent manifest, an unbuilt/unverified range image, an invalid clone
+    name) / ``FileNotFoundError`` per the module docstring.
+    """
+    eng = _engagements.load_engagement(engagement)
+    # Resolve + verify every range's image first (each raises VerifyError if not built here),
+    # so we refuse a partial provision rather than clone some ranges and then fail on another.
+    plan: list[tuple[str, str]] = []   # (clone name, verified image)
+    for rng in eng.ranges:
+        img, _prof = _source_image(rng.profile, None)
+        for name in _range_names(eng.id, rng):
+            plan.append((name, img))
+    # Skip any name already taken by a VM or an existing clone record (reported, not re-created);
+    # track created names too, so two ranges can't collide within one provision.
+    existing = set(hostops.local_vms())
+    recs, _ = _clones.all_records()
+    existing |= {r["name"] for r in recs}
+    created: list[NewResult] = []
+    skipped: list[str] = []
+    for name, img in plan:
+        if name in existing:
+            skipped.append(name)
+            continue
+        created.append(new(name, image=img, engagement=eng.id))
+        existing.add(name)
+    return ProvisionResult(engagement=eng.id, created=created, skipped=skipped)
+
+
+def teardown(engagement: str) -> list[str]:
+    """Tear down every clone tagged to ``engagement`` via ``rm`` (stop + delete + forget host
+    key + drop any per-clone keychain entry, reaping strays so nothing is orphaned — #18).
+
+    Idempotent: an engagement with no tagged clones removes nothing and returns ``[]``. Other
+    engagements' clones and ad-hoc clones are untouched. Returns the removed names, in the
+    order removed. Raises ``VerifyError`` / ``FileNotFoundError`` per the module docstring.
+    """
+    removed: list[str] = []
+    for clone in engagement_clones(engagement):
+        rm(clone.name)
+        removed.append(clone.name)
+    return removed

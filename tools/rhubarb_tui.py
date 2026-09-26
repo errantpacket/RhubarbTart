@@ -142,6 +142,29 @@ class RhubarbTUI(App):
 
         self.dispatch_action(reset, params={"same_image": False, "rotate": True})
 
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        """Point the Provenance pane at the highlighted row (read-only).
+
+        Provenance records exist for built images (``out/<image>.provenance.json``), not clones —
+        a clone's provenance is that of the image it was cloned from. So an images-table highlight
+        shows that image; a clones-table highlight shows the clone's source image.
+        """
+        try:
+            prov = self.query_one("#provenance-pane", ProvenancePane)
+        except Exception:
+            return
+        table_id = event.data_table.id
+        if table_id == "images-table":
+            try:
+                name = str(event.data_table.get_row(event.row_key)[0])
+            except Exception:
+                return
+            prov.show(name)
+        elif table_id == "clones-table":
+            clone = self._lookup_clone(str(event.row_key.value))
+            if clone is not None:
+                prov.show(clone.image)
+
     def dispatch_action(self, module, *, name: str | None = None,
                         clone: object | None = None, params: dict | None = None) -> None:
         """Run an action module for a target, confirming first if it is destructive.

@@ -172,11 +172,14 @@ async def _render() -> None:
         check("clones pane surfaces rejected (untrusted) records",
               "ignored" in cprob.lower() and "work-9.json" in cprob)
 
-        # -- provenance pane ----------------------------------------------------
+        # -- provenance pane (auto-follows the highlighted row) -----------------
+        # The shell wires a row highlight to prov.show(): on mount the images table
+        # highlights its first row, so the pane shows that image's record straight away
+        # (a clone shows its source image's). It is no longer blank on arrival.
         prov = app.query_one("#provenance-pane")
-        body_before = _static_text(app.query_one("#provenance-body", Static))
-        check("provenance pane is empty until a VM is selected",
-              "No VM selected" in body_before)
+        body_mount = _static_text(app.query_one("#provenance-body", Static))
+        check("provenance auto-follows the highlighted image on mount (not blank)",
+              "No VM selected" not in body_mount and "work-1" in body_mount)
 
         # Read-only selection wiring: pointing the pane at a VM renders its record.
         prov.show("work-1")

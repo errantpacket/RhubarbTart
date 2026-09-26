@@ -216,12 +216,15 @@ class EnrollResult:
                  ``perimeter81`` (manual — the script only prints instructions), ``True``
                  otherwise.
     enrolled_at: the ISO-8601 UTC timestamp recorded, or ``None`` when not recorded.
+    detail:      captured enroll.sh output (status lines / manual instructions), for the
+                 caller to surface. No secrets (those move over SSH stdin, never printed).
     """
 
     name: str
     service: str
     recorded: bool
     enrolled_at: str | None
+    detail: str | None = None
 
 
 @dataclass(frozen=True)
@@ -560,16 +563,24 @@ def enroll(name: str, service: str, org: str | None = None) -> EnrollResult:
     cmd = [str(ROOT / "scripts" / "enroll.sh"), rec["name"], service, "--image", rec["password_account"]]
     if org:
         cmd += ["--org", org]
-    res = subprocess.run(cmd, env=hostops.env_with(RHUBARB_USER=rec["username"]))
+    # Capture so callers (the TUI in particular, whose subprocess has no terminal) get the
+    # real reason on failure and the status/instructions on success. enroll.sh prints only
+    # status/errors — the secrets travel over SSH stdin and are never echoed.
+    res = subprocess.run(cmd, env=hostops.env_with(RHUBARB_USER=rec["username"]),
+                         capture_output=True, text=True)
+    out = "\n".join(p.strip() for p in (res.stdout, res.stderr) if p and p.strip()).strip()
     if res.returncode != 0:
-        raise VerifyError(f"enrollment failed ({service})")
+        reason = next((ln for ln in reversed(out.splitlines()) if ln.strip()), "enroll.sh failed")
+        raise VerifyError(f"enrollment failed ({service}): {reason}")
     if service == "perimeter81":  # P81 is manual; the script only prints instructions
-        return EnrollResult(name=rec["name"], service=service, recorded=False, enrolled_at=None)
+        return EnrollResult(name=rec["name"], service=service, recorded=False,
+                            enrolled_at=None, detail=out or None)
     ts = _clones.now()
     rec["enrollments"][service] = ts
     _clones.save(rec)
     _clones.log_event("enroll", rec["name"], service)
-    return EnrollResult(name=rec["name"], service=service, recorded=True, enrolled_at=ts)
+    return EnrollResult(name=rec["name"], service=service, recorded=True,
+                        enrolled_at=ts, detail=out or None)
 
 
 def reset(name: str, same_image: bool = False, rotate: bool = True,

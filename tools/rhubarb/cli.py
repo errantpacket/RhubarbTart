@@ -98,7 +98,13 @@ def cmd_ssh(a) -> None:
 
 
 def cmd_enroll(a) -> None:
-    api.enroll(a.name, a.service, org=a.org)
+    res = api.enroll(a.name, a.service, org=a.org)
+    if res.detail:
+        print(res.detail)
+    if res.recorded:
+        say(f"enrolled {res.name} in {res.service} ({res.enrolled_at})")
+    else:
+        say(f"{res.name}: {res.service} enrollment is manual — follow the printed steps above")
 
 
 def cmd_reset(a) -> None:

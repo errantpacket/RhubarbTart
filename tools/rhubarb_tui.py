@@ -205,15 +205,18 @@ class RhubarbTUI(App):
                 return
             if service == "warp":
                 def got_org(org: str | None) -> None:
-                    if org is None:  # Escape aborts; blank means "no org"
+                    if org is None:  # Escape aborts
                         self._log_action(f"{enroll.LABEL}: cancelled")
                         return
+                    if not org.strip():  # WARP requires a team/org (enroll.sh: "warp needs --org")
+                        self._log_action(f"{enroll.LABEL}: WARP needs a team/org name — cancelled",
+                                         ok=False)
+                        return
                     self.dispatch_action(enroll, name=name,
-                                         params={"service": service, "org": org or None})
+                                         params={"service": service, "org": org.strip()})
 
                 self.push_screen(
-                    InputScreen("Cloudflare WARP --org (optional; leave blank for none)"),
-                    got_org)
+                    InputScreen("Cloudflare WARP team/org (required)"), got_org)
             else:
                 self.dispatch_action(enroll, name=name,
                                      params={"service": service, "org": None})

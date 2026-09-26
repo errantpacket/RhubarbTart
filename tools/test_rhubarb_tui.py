@@ -630,7 +630,7 @@ async def _action_prompts() -> None:
         await pilot.press("down")   # highlight index 1: warp (SERVICES = tailscale, warp, perimeter81)
         await pilot.press("enter")
         await pilot.pause()
-        check("enroll: choosing warp opens the optional --org InputScreen",
+        check("enroll: choosing warp opens the required team/org InputScreen",
               isinstance(app.screen, InputScreen))
         app.screen.query_one("#input-field", Input).value = "acme"
         await pilot.press("enter")
@@ -638,6 +638,19 @@ async def _action_prompts() -> None:
         await pilot.pause()
         check("enroll (warp): api.enroll is called with the highlighted clone, service and org",
               enroll_calls == [("work-1", "warp", "acme")])
+
+        # -- enroll (warp, blank org): required -> no api.enroll, logs a clear message --------
+        enroll_calls.clear()
+        await pilot.press("e")
+        await pilot.pause()
+        await pilot.press("down")   # warp
+        await pilot.press("enter")
+        await pilot.pause()
+        app.screen.query_one("#input-field", Input).value = ""  # leave org blank
+        await pilot.press("enter")
+        await pilot.pause()
+        check("enroll (warp, blank org): no api.enroll call and a clear 'needs a team/org' log",
+              enroll_calls == [] and "team/org" in _log_text(app).lower())
 
         # -- enroll (tailscale): no org prompt -> dispatches immediately ---------------------
         enroll_calls.clear()

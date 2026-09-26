@@ -56,6 +56,10 @@ def handle(ctx: ActionContext) -> ActionOutcome:
         return ActionOutcome(ok=False, needs_refresh=False,
                              summary=f"enroll {ctx.name} in {service} failed: {tool} not installed")
 
+    if res.detail:  # enroll.sh status lines / manual instructions — surface them in the log
+        for line in res.detail.splitlines():
+            if line.strip():
+                ctx.progress(line)
     if res.recorded:
         ctx.progress(f"{res.name}: enrolled in {res.service} (recorded {res.enrolled_at})")
         return ActionOutcome(

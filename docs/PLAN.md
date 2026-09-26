@@ -1,6 +1,6 @@
 # RhubarbTart: Agent-Driven Research Ranges — Plan
 
-_Status: draft · 2026-09-25_
+_Status: draft · 2026-09-26_
 
 ## Goal & vision
 
@@ -100,6 +100,66 @@ The key line is the one-way arrow from range to vault: agents and VMs can *write
 outward, but a sealed engagement's vault is append-only and the range can't read another
 engagement's data. The host control plane brokers everything; nothing in a range talks to
 another range or to the operator's workstation directly.
+
+## Management interface & control-plane API
+
+The architecture calls for a **control plane** (today's `rhubarb` CLI, grown into a small API)
+and a **management interface** (herdr). Before building either, we surveyed the Tart ecosystem to
+settle build-vs-buy; the finding shapes everything downstream.
+
+**Finding: the core must be ours; only the fleet layer can be bought.** No off-the-shelf tool
+models RhubarbTart's domain — provenance-verified images, per-clone keychain secrets,
+StrictModes clone records, runtime enrollment, the smoke gate, engagements, and the evidence
+vault. Concretely, as of 2026-09:
+
+- **Tart is CLI-first.** Its only GUI renders a *running VM's screen*; there is no
+  image/clone/provenance management surface to reuse ([tart.run](https://tart.run/)).
+- **Orchard** (cirruslabs, moving under OpenAI with a more permissive license) is a genuine
+  orchestration layer: a controller + workers exposing a **REST API + CLI** to schedule Tart VMs
+  across a cluster of Apple-silicon hosts. Its API exposes **VMs** (create with
+  image/CPU/memory/startup-scripts, get, delete), **Workers**, a **Controller** info endpoint, an
+  **Events/logs** stream, and **resource scheduling** (well-known slots such as
+  `org.cirruslabs.tart-vms`, ~2 per worker), with **HTTP basic (username/token)** auth. But it
+  understands *VMs and placement* — **not** provenance, clone records, secrets, enrollment, the
+  smoke gate, or evidence. It is a "where does this VM run" layer, not "what is this VM and can we
+  trust it" ([Orchard integration guide](https://tart.run/orchard/integration-guide/),
+  [openai/orchard](https://github.com/cirruslabs/orchard)).
+- **Generic macOS VM GUIs** (UTM, VirtualBuddy) manage their *own* VMs, not Tart, and structurally
+  cannot represent our guarantees; using one would bypass the trust model. Rejected.
+
+**Principle: one audited core, many thin frontends.** The security-critical logic — tart
+operations, keychain access, clone-record StrictModes, enrollment, resolve/provenance — lives in
+`tools/rhubarb/` and stays there. Every surface (CLI, TUI, the herdr service, later Orchard
+integration) is a **thin client of that core**; no frontend touches `tart` or the keychain
+directly. The CLI is already layered this way (`cli.py` over `clones.py` / `hostops.py` /
+`locks.py`), so the work is to harden those modules into a **stable internal API** (typed entry
+points, structured returns — not argv/stdout parsing) that a TUI or service can import. **This
+refactor is the prerequisite for Phases 1+ and precedes any UI work**, so the security review has
+one place to land.
+
+**Layered surfaces (cheapest first):**
+
+1. **CLI (today).** `rhubarb` for images/clones/enroll; `resolve.py` for build. Remains the ground
+   truth and the scripting interface.
+2. **TUI — Textual (Python), near-term operator convenience.** Same runtime as the core, pinned
+   into `.toolchain`, imports `tools/rhubarb/*` directly, stays inside the local trust boundary and
+   the keychain/GUI-session rules. Delivers an image/clone browser, live state, one-key
+   run/ssh/enroll/reset/rm, a provenance view, and a build launcher. Days of work; best ROI for
+   managing the project as it stands. Optional but recommended before Phase 5.
+3. **herdr service — FastAPI + web, the PLAN goal (Phase 5).** The interface for agent-driven
+   engagements is inherently bespoke. Build it as a small **localhost-bound, authenticated**
+   service exposing the same core plus the engagement/evidence APIs, with herdr (or a web UI) on
+   top. This layer can drive VMs and touch the keychain, so it earns a dedicated security review
+   and must not bind a listening network interface by default.
+4. **Orchard — fleet backend (Phase 7, optional).** When engagements need many ranges across
+   multiple Apple-silicon hosts, run range VMs *as* Orchard VMs and have the control plane call
+   Orchard's REST API for placement/lifecycle/logs, while `rhubarb` keeps owning provenance,
+   records, secrets, enrollment, and evidence. Orchard answers "where does it run"; rhubarb answers
+   "what is it and can we trust it." Adopt lazily — it adds a controller/worker deployment and its
+   own auth surface.
+
+**What we will not do:** adopt a generic VM GUI (bypasses the guarantees), or let a UI
+re-implement clone/keychain logic (forks the security-critical code).
 
 ## Engagements: the unit of isolation
 
@@ -272,7 +332,8 @@ guarantees.
 
 | Phase | Deliverable | Exit criteria |
 |---|---|---|
-| 0 · Foundation (done) | Profiles, per-profile locks, verified builds, `rhubarb` clone CLI with per-clone identity + runtime enrollment | Clones build, verify and run; first real builds on the Mac still pending |
+| 0 · Foundation (done) | Profiles, per-profile locks, verified builds, `rhubarb` clone CLI with per-clone identity + runtime enrollment | Clones build, verify and run; NixOS + macOS 27 confirmed on real hardware, macOS 26 + Kali pending |
+| 0.5 · Control-plane core API (+ optional TUI) | Harden `tools/rhubarb/` into a typed internal API (structured returns, no argv/stdout parsing); optional Textual TUI over it (see [Management interface](#management-interface--control-plane-api)) | CLI, TUI and the future service all call one audited core; no frontend touches tart/keychain directly |
 | 1 · Engagement object | Scope-manifest format + validation; `rhubarb engagement` commands (define/provision/teardown); engagement-tagged clone records | A manifest defines a named set of ranges that build and tear down as a unit |
 | 2 · Network isolation | Per-engagement softnet segment; host-enforced default-deny egress to in-scope targets + evidence sink | A range can reach only its scoped targets; other ranges, the LAN and the internet are provably blocked |
 | 3 · Evidence capture | In-guest capture (transcript, artifacts, screen, findings) under a known tree; per-item hashes + append-only chain | A run inside a VM produces a hashed, structured evidence tree |

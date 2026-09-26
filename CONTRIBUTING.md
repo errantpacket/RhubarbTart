@@ -63,8 +63,10 @@ untested in your change.
   `if cmd; then die …; fi`.
 - New cryptographic or parsing code gets a case in `tools/test_rhubarb.py` using
   reference-implementation values, not values this code produced.
-- Update the README tables (posture / provenance / config) and any affected skill when behavior
-  changes — the README is the spec.
+- Update the reference pages under `docs/` when behavior changes — the posture and provenance
+  tables in [`docs/trust-model.md`](docs/trust-model.md), the config and toolchain tables in
+  [`docs/reference.md`](docs/reference.md) — and any affected skill. The README is the landing
+  page; the `docs/` reference pages are the spec.
 
 ## Commits & pull requests
 

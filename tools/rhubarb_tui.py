@@ -63,8 +63,13 @@ class RhubarbTUI(App):
     }
     """
 
-    # Seconds between automatic read-only refreshes of every pane.
-    REFRESH_INTERVAL = 5.0
+    # Seconds between automatic read-only refreshes of the VISIBLE pane (each refresh spawns a
+    # `tart list`/pgrep, so we refresh only what's on screen, not all three every tick).
+    REFRESH_INTERVAL = 8.0
+
+    # The row whose provenance to show when the Provenance tab is visible: ("image"|"clone", name).
+    # Resolved lazily (a clone -> its source image) so navigation never pays for the read.
+    _prov_source = None
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
@@ -109,12 +114,34 @@ class RhubarbTUI(App):
 
     def on_mount(self) -> None:
         self.action_refresh_all()
-        self.set_interval(self.REFRESH_INTERVAL, self.action_refresh_all)
+        # Auto-refresh only the pane on screen — refreshing all three every tick on the UI thread
+        # spawned several subprocesses per tick and made the TUI feel laggy.
+        self.set_interval(self.REFRESH_INTERVAL, self._refresh_active)
 
     def action_refresh_all(self) -> None:
-        """Reload every pane from the core API (read-only)."""
+        """Reload every pane from the core API (read-only). Used on `r` and after an action."""
         for pane in self._panes():
             pane.refresh_data()
+
+    _PANE_IDS = {"images": "#images-pane", "clones": "#clones-pane", "provenance": "#provenance-pane"}
+
+    def _active_pane_id(self) -> str | None:
+        try:
+            return self._PANE_IDS.get(self.query_one(TabbedContent).active)
+        except Exception:
+            return None
+
+    def _refresh_active(self) -> None:
+        """Reload just the visible pane (the periodic timer)."""
+        if self._active_pane_id() == "#provenance-pane":
+            self._update_provenance()
+            return
+        pane_id = self._active_pane_id()
+        if pane_id:
+            try:
+                self.query_one(pane_id).refresh_data()
+            except Exception:
+                pass
 
     def action_show_tab(self, tab: str) -> None:
         self.query_one(TabbedContent).active = tab
@@ -248,27 +275,42 @@ class RhubarbTUI(App):
         self.push_screen(SelectScreen("Build which profile?", profiles), got_profile)
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        """Point the Provenance pane at the highlighted row (read-only).
-
-        Provenance records exist for built images (``out/<image>.provenance.json``), not clones —
-        a clone's provenance is that of the image it was cloned from. So an images-table highlight
-        shows that image; a clones-table highlight shows the clone's source image.
+        """Remember the highlighted row's provenance source; only *read* it when the Provenance
+        tab is visible — so navigating images/clones never pays for the file read or the
+        clone->image lookup. Provenance exists for built images; a clone shows its source image.
         """
-        try:
-            prov = self.query_one("#provenance-pane", ProvenancePane)
-        except Exception:
-            return
         table_id = event.data_table.id
         if table_id == "images-table":
             try:
-                name = str(event.data_table.get_row(event.row_key)[0])
+                self._prov_source = ("image", str(event.data_table.get_row(event.row_key)[0]))
             except Exception:
                 return
-            prov.show(name)
         elif table_id == "clones-table":
-            clone = self._lookup_clone(str(event.row_key.value))
-            if clone is not None:
-                prov.show(clone.image)
+            self._prov_source = ("clone", str(event.row_key.value))
+        else:
+            return
+        if self._active_pane_id() == "#provenance-pane":
+            self._update_provenance()
+
+    def _update_provenance(self) -> None:
+        """Resolve the remembered source to a VM (clone -> its source image) and show it."""
+        if not self._prov_source:
+            return
+        kind, ref = self._prov_source
+        vm = ref
+        if kind == "clone":
+            clone = self._lookup_clone(ref)
+            if clone is None:
+                return
+            vm = clone.image
+        try:
+            self.query_one("#provenance-pane", ProvenancePane).show(vm)
+        except Exception:
+            pass
+
+    def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
+        """Refresh the pane that just became visible (so switching tabs shows fresh data at once)."""
+        self._refresh_active()
 
     def dispatch_action(self, module, *, name: str | None = None,
                         clone: object | None = None, params: dict | None = None) -> None:

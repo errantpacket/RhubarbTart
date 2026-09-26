@@ -34,6 +34,15 @@ def check(name: str, cond: bool) -> None:
         FAILS.append(name)
 
 
+def _is_frozen(obj, attr: str, value) -> bool:
+    """True iff setting attr on obj raises (a frozen dataclass forbids assignment)."""
+    try:
+        setattr(obj, attr, value)
+        return False
+    except Exception:
+        return True
+
+
 def test_ed25519() -> None:
     v1_pub = bytes.fromhex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
     v1_sig = bytes.fromhex("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")
@@ -385,6 +394,78 @@ def test_api_pure() -> None:
         api.ROOT = saved_root
 
 
+def test_engagements() -> None:
+    """Stage 1A: engagements.py loads + strictly validates a scope manifest into a frozen
+    Engagement. The committed engagements/demo.json is the reference; the rejection cases are
+    variants of it written to a temp engagements/ dir (no tart / keychain / network)."""
+    from rhubarb import engagements
+    from rhubarb.common import VerifyError
+
+    # The committed demo manifest parses to the expected frozen dataclass.
+    eng = engagements.load_engagement("demo")
+    check("demo: id/label/operator/authorization map verbatim",
+          (eng.id, eng.label, eng.operator, eng.authorization)
+          == ("demo", "Demo lab engagement", "errantpacket",
+              "RoE-2026-DEMO-001 (internal lab authorization, non-production)"))
+    check("demo: 2 ranges reference existing profiles with their counts/prefix",
+          [(r.profile, r.count, r.prefix) for r in eng.ranges]
+          == [("kali-research", 2, "demo-offense"), ("goldengate-research", 1, None)])
+    check("demo: targets stored by shape (hosts/cidrs/domains/urls)",
+          eng.targets.hosts == ("10.20.0.10",) and eng.targets.cidrs == ("10.20.0.0/24",)
+          and eng.targets.domains == ("lab.internal",) and eng.targets.urls == ("https://lab.internal/ctf",))
+    check("demo: agent_budget stored (agents/wall-clock/spend/kill-time)",
+          eng.agent_budget.agents == ("recon", "exploit")
+          and eng.agent_budget.wall_clock_minutes == 240
+          and eng.agent_budget.max_spend_usd == 25.0
+          and eng.agent_budget.kill_time == "2026-09-27T18:00:00Z")
+    check("demo: evidence policy stored (vault + retention)",
+          eng.evidence.vault == "vault://demo" and eng.evidence.retention_days == 90)
+    check("Engagement is frozen (immutable)", isinstance(eng, engagements.Engagement)
+          and _is_frozen(eng, "label", "tampered"))
+    check("demo id is in list_engagements()", "demo" in engagements.list_engagements())
+
+    # Rejection cases: write a manifest into a temp engagements/ dir and load it by stem.
+    base = json.loads((engagements.ENGAGEMENTS / "demo.json").read_text())
+    saved = engagements.ENGAGEMENTS
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            engagements.ENGAGEMENTS = Path(tmp)
+
+            def refused(label, eid, mutate):
+                man = json.loads(json.dumps(base))   # deep copy
+                man["id"] = eid
+                mutate(man)
+                (Path(tmp) / f"{eid}.json").write_text(json.dumps(man))
+                try:
+                    engagements.load_engagement(eid)
+                    check(f"rejects {label}", False)
+                except VerifyError:
+                    check(f"rejects {label}", True)
+
+            refused("an unknown top-level key", "unknown-top",
+                    lambda m: m.update(scope="everything"))
+            refused("an unknown range profile", "bad-profile",
+                    lambda m: m["ranges"].__setitem__(0, {"profile": "no-such-profile", "count": 1}))
+            refused("a range count of 0", "bad-count",
+                    lambda m: m["ranges"][0].__setitem__("count", 0))
+            refused("a missing authorization", "no-auth",
+                    lambda m: m.pop("authorization"))
+            refused("an empty authorization", "empty-auth",
+                    lambda m: m.__setitem__("authorization", "   "))
+            refused("an empty ranges list", "no-ranges",
+                    lambda m: m.__setitem__("ranges", []))
+
+            # id != filename: valid body, wrong stem.
+            (Path(tmp) / "mismatch.json").write_text(json.dumps(base))  # base["id"] == "demo"
+            try:
+                engagements.load_engagement("mismatch")
+                check("rejects id != filename", False)
+            except VerifyError:
+                check("rejects id != filename", True)
+    finally:
+        engagements.ENGAGEMENTS = saved
+
+
 def test_cli_progress_stream() -> None:
     """#19: cli.py still streams the core's live milestones for `rhubarb new`/`reset` (it
     hands api a progress callback that prints each line), and api's default (no callback)
@@ -577,7 +658,7 @@ def test_reap_run() -> None:
 
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
-              test_rotation_script, test_api_pure, test_cli_progress_stream,
+              test_rotation_script, test_api_pure, test_engagements, test_cli_progress_stream,
               test_hostops_resilience, test_shutdown_reaps_boot_process, test_reap_run,
               test_fs_vms):
         print(t.__name__)

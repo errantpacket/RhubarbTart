@@ -41,22 +41,28 @@ verify_app() { # <id> <app-path> <team_id>
   assert_team "$observed" "$team" "$id"
 }
 
-install_dmg_app() { # <id> <file> <team_id> <app-name>
-  local id=$1 file=$2 team=$3 app=$4 mnt
+install_dmg_app() { # <id> <file> <team_id> <app-name> <signed>
+  local id=$1 file=$2 team=$3 app=$4 signed=$5 mnt
   mnt=$(mktemp -d)
   hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mnt" "$file" >/dev/null
-  verify_app "$id" "$mnt/$app" "$team"
+  # signed=0: the app ships no Apple signature; its integrity is the pinned sha256 already
+  # checked against SHA256SUMS above. Signed apps additionally get codesign/Team ID/Gatekeeper.
+  if [[ "$signed" == 0 ]]; then
+    say "$id: unsigned — integrity from pinned sha256 (no codesign)"
+  else
+    verify_app "$id" "$mnt/$app" "$team"
+  fi
   say "$id: copying $app to /Applications"
   rm -rf "/Applications/$app"
   ditto "$mnt/$app" "/Applications/$app"
   hdiutil detach "$mnt" >/dev/null
 }
 
-while IFS=$'\t' read -r id kind file team app; do
+while IFS=$'\t' read -r id kind file team app signed; do
   [[ -z "$id" ]] && continue
   case "$kind" in
     pkg) install_pkg "$id" "$file" "$team" ;;
-    dmg) install_dmg_app "$id" "$file" "$team" "$app" ;;
+    dmg) install_dmg_app "$id" "$file" "$team" "$app" "$signed" ;;
     *) die "$id: unknown kind '$kind'" ;;
   esac
 done < packages.tsv
@@ -64,7 +70,7 @@ done < packages.tsv
 # Post-install: every installed bundle must still verify with its locked Team ID. The
 # bundle name comes from config/packages/<id>.json ("app"); Perimeter 81's has varied
 # across releases (Perimeter 81 / Harmony SASE), so it is found by pattern.
-while IFS=$'\t' read -r id kind file team app; do
+while IFS=$'\t' read -r id kind file team app signed; do
   [[ -z "$id" ]] && continue
   if [[ "$app" == "-" && "$id" == perimeter81 ]]; then
     app="$(find /Applications -maxdepth 1 \( -iname '*perimeter*81*.app' -o -iname '*harmony*sase*.app' \) \
@@ -72,7 +78,11 @@ while IFS=$'\t' read -r id kind file team app; do
   fi
   [[ -n "$app" && "$app" != "-" ]] || die "$id: installed app bundle unknown (set \"app\" in config/packages/$id.json)"
   [[ -d "/Applications/$app" ]] || die "$id: /Applications/$app missing after install"
-  verify_app "$id" "/Applications/$app" "$team"
+  if [[ "$signed" == 0 ]]; then
+    say "$id: installed (unsigned; integrity from pinned sha256)"
+  else
+    verify_app "$id" "/Applications/$app" "$team"
+  fi
 done < packages.tsv
 
 # Vendor self-updaters would change the image after it was verified; updates are a

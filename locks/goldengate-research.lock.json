@@ -1,0 +1,90 @@
+{
+  "schema": 2,
+  "profile": "goldengate-research",
+  "family": "macos",
+  "base_id": "macos-27",
+  "profile_sha256": "a8136827e47946aa5859739a00274a2d161b0667765b86225d3d8188a993682a",
+  "resolved_at": "2026-09-26T15:41:00+00:00",
+  "resolved_on": {
+    "host_os": "macOS-27.0-arm64-arm-64bit-Mach-O"
+  },
+  "base": {
+    "version": "27.0",
+    "build": "26A428",
+    "image": {
+      "url": "https://updates.cdn-apple.com/2026FallFCS/afcfc88e-bbe6-44bf-a5da-07c56eebc06c/UniversalMac_27.0_26A428_Restore.ipsw",
+      "file": "UniversalMac_27.0_26A428_Restore.ipsw",
+      "sha256": "2a5d3c695d501022b7fad9adaffcf2627bcb867d993fb5662dcd41bac99a2836",
+      "size": 26626436228,
+      "large": true,
+      "hash_sources": [
+        "apple-cdn:x-amz-meta-digest-sha256",
+        "ipsw.me"
+      ]
+    }
+  },
+  "packages": {
+    "chrome": {
+      "url": "https://dl.google.com/dl/chrome/mac/universal/stable/gcem/GoogleChrome.pkg",
+      "file": "GoogleChrome.pkg",
+      "sha256": "81fb269b937fae2f3da79a07a05d52e616b05c132e452f289e605f94c1a68b26",
+      "advertised_version": "155.0.8059.12",
+      "hash_sources": [
+        "tofu:downloaded"
+      ],
+      "kind": "pkg",
+      "size": 264589035,
+      "signature": {
+        "signer": "Developer ID Installer: Google LLC (EQHXZ8M8AV)",
+        "team_id": "EQHXZ8M8AV",
+        "notarized": true
+      },
+      "version": "154.0.8037.58"
+    },
+    "zap": {
+      "version": "2.17.0",
+      "url": "https://github.com/zaproxy/zaproxy/releases/download/v2.17.0/ZAP_2.17.0_aarch64.dmg",
+      "file": "ZAP_2.17.0_aarch64.dmg",
+      "sha256": "3b3c6c8b105a33cb2a7d718e7f9aa41418a6d8aae3887d94a42523b5eeac723b",
+      "size": 276518308,
+      "hash_sources": [
+        "github-release-digest"
+      ],
+      "kind": "dmg"
+    },
+    "warp": {
+      "version": "2026.7.1376.0",
+      "url": "https://downloads.cloudflareclient.com/v1/download/macos/version/2026.7.1376.0",
+      "file": "Cloudflare_WARP_2026.7.1376.0.pkg",
+      "sha256": "d8fea3fff465927076224d4444ca56355a86d034b2001fb4febdc3080f1f745a",
+      "size": 152847432,
+      "hash_sources": [
+        "tofu:downloaded (Cloudflare publishes no package hash)"
+      ],
+      "kind": "pkg",
+      "signature": {
+        "signer": "Developer ID Installer: Cloudflare Inc. (68WVV388M8)",
+        "team_id": "68WVV388M8",
+        "notarized": true
+      }
+    },
+    "tailscale": {
+      "version": "1.102.4",
+      "url": "https://pkgs.tailscale.com/stable/Tailscale-1.102.4-macos.pkg",
+      "file": "Tailscale-1.102.4-macos.pkg",
+      "sha256": "b40b733af76233fd1e4af7acaeb325268e55e6818c15c6e9aa9e78f427245c5b",
+      "distsign": true,
+      "hash_sources": [
+        "pkgs.tailscale.com .sha256",
+        "distsign ed25519 (pinned root)"
+      ],
+      "kind": "pkg",
+      "size": 21185113,
+      "signature": {
+        "signer": "Developer ID Installer: Tailscale Inc. (W5364U7YZB)",
+        "team_id": "W5364U7YZB",
+        "notarized": true
+      }
+    }
+  }
+}

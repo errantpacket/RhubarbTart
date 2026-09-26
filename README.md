@@ -78,10 +78,14 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
 
 | Profile | Base | Tools | Good for |
 |---|---|---|---|
-| `tahoe-research` | macOS 26 | Chrome, ZAP, WARP, Tailscale, Perimeter 81 | macOS client and app testing on any macOS 26+ host |
-| `goldengate-research` | macOS 27 | Chrome, ZAP, WARP, Tailscale, Perimeter 81 | The latest macOS; **needs a macOS 27 host** |
+| `tahoe-research` | macOS 26 | Chrome, ZAP, WARP, Tailscale | macOS client and app testing on any macOS 26+ host |
+| `goldengate-research` | macOS 27 | Chrome, ZAP, WARP, Tailscale | The latest macOS; **needs a macOS 27 host** |
 | `nixos-research` | NixOS 26.05 | Chrome, ZAP, WARP, Tailscale · XFCE · Rosetta | Maximum reproducibility: the whole OS is pinned to one commit |
 | `kali-research` | Kali rolling | Chrome, ZAP, WARP, Tailscale · `kali-linux-default` · XFCE · Rosetta | Batteries-included offensive tooling |
+
+Perimeter 81 / Harmony SASE is an **opt-in tenant package** (its installer isn't a public download):
+add `"perimeter81"` to a macOS profile once you've saved the installer — see
+[Define your own guest](#define-your-own-guest).
 
 ```mermaid
 %%{init: {'theme':'base','fontFamily':'ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#2b2d42','primaryBorderColor':'#c9184a','lineColor':'#8d99ae','edgeLabelBackground':'#ffffff','fontSize':'13px'},'flowchart':{'curve':'basis','nodeSpacing':45,'rankSpacing':55,'padding':8,'useMaxWidth':true}}}%%
@@ -288,9 +292,12 @@ Adding a tool that *isn't* in the catalog requires a trustworthy source first; s
 [Keeping inputs fresh](#keeping-inputs-fresh).
 
 > [!IMPORTANT]
-> Perimeter 81 has no public, versioned download. Save your tenant installer from the Harmony
-> SASE portal (Devices → Downloads → Agents) as exactly `vendor/perimeter81/Perimeter81.pkg`.
-> An image containing it is tenant-specific, so share it only through a private registry.
+> Perimeter 81 has no public, versioned download, so it isn't in the default profiles. To use it,
+> save your tenant installer from the Harmony SASE portal (Devices → Downloads → Agents) as exactly
+> `vendor/perimeter81/Perimeter81.pkg` (git-ignored; see [`vendor/README.md`](vendor/README.md)),
+> add `"perimeter81"` to the profile, and re-resolve — the first resolve pins its hash and surfaces
+> its Team ID to pin. An image containing it is tenant-specific, so share it only through a private
+> registry. This is the pattern for **any** custom/tenant installer (`resolver: "local"`).
 
 ## Trust model
 
@@ -349,7 +356,7 @@ flowchart LR
 | Kali distro packages | Kali archive | apt | Kali archive key; installed versions recorded in the image |
 | NixOS packages | nixpkgs at the pinned rev | Fixed-output hashes in nixpkgs | nixpkgs maintainers + cache signature |
 | Chrome (macOS) | Enterprise pkg (unversioned URL) | First use | Developer ID + notarized, Team `EQHXZ8M8AV` |
-| ZAP (macOS) | GitHub release | GitHub asset digest | Notarized; pin the Team ID after the first resolve |
+| ZAP (macOS) | GitHub release | GitHub asset digest | **Unsigned** (no Apple signature exists); integrity is the pinned digest, enforced on the host and again in-guest (`SHA256SUMS`) |
 | WARP (macOS) | Versioned pkg from Cloudflare's feed | First use (no vendor hash exists) | Developer ID + notarized, Team `68WVV388M8` |
 | Tailscale (macOS) | `pkgs.tailscale.com` | Vendor `.sha256` | **distsign** Ed25519 chain from a pinned root, plus Team `W5364U7YZB` |
 | Perimeter 81 (macOS) | Your tenant portal | First use | Developer ID + notarized; pin the Team ID after the first resolve |
@@ -362,6 +369,11 @@ though, so packages from the Kali archive (such as `zaproxy` and the metapackage
 and current at build time", and their exact versions are recorded in
 `/var/lib/rhubarbtart/installed.txt`. "Reproducible" means identical inputs and process, not
 identical disk bytes; machine identifiers and timestamps always differ.
+
+Most macOS tools are Developer ID-signed and notarized with a pinned Team ID. The one exception is
+ZAP, which ships no Apple signature: it's marked `"signed": false` and verified solely by its
+pinned GitHub-release digest (host **and** in-guest) — a weaker tier, called out in the table
+above. A `"signed": false` tool must always carry a real pinned hash, or resolve refuses it.
 
 ## Security posture
 
@@ -515,10 +527,12 @@ for regressions of the rules above: Homebrew or `packer init` creeping back, def
 
 ## Known gaps
 
-- [ ] **First real build of each family on a Mac.** Only real hardware can confirm the macOS 26
-      keystrokes, the macOS 27 provisioning and password rotation, NixOS boot timing, the Kali
-      GRUB and preseed flow, and `tart ip` for each guest. Everything else (resolvers, locks,
-      NixOS evaluation, templates, scripts) has been verified off-Mac.
+- [x] **NixOS** built end-to-end on a macOS 27 host: install, harden, seal, smoke test and
+      provenance all pass.
+- [ ] **First real build of the other families on a Mac.** Still to confirm on hardware: the
+      macOS 26 keystroke path, the macOS 27 provisioning + password rotation, and the Kali GRUB
+      and preseed flow (each with its `tart ip`). Everything else (resolvers, locks, NixOS
+      evaluation, templates, scripts) is verified off-Mac.
 - [ ] Kali: WARP's Debian `trixie` build and ZAP from the Kali archive are expected to work on
       rolling Kali but are untested.
 - [ ] Perimeter 81 on Linux (no pinned Linux variant yet).
@@ -528,7 +542,9 @@ for regressions of the rules above: Homebrew or `packer init` creeping back, def
 - [ ] Stacked clones (`tart clone --stacked`, an immutable base plus an overlay) once images are
       pulled from a private registry. Tart supports it only for remote images.
 - [ ] `scripts/publish.sh` is an untested draft; `cosign`/`crane` aren't in the pinned toolchain.
-- [ ] Pin `TART_TEAM_ID` and the ZAP/Perimeter 81 Team IDs after the first bootstrap and resolve.
+- [x] `TART_TEAM_ID` (`9M2P8L4D89`) and the Packer signer (`D38WU7D763`) pinned after the first
+      bootstrap. ZAP needs none (unsigned, hash-pinned); pin Perimeter 81's Team ID when its
+      installer is first resolved.
 - [ ] Choose a license for this repository.
 
 ---

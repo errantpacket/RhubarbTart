@@ -1,0 +1,10 @@
+{
+  "id": "lab",
+  "label": "Local lab (built profiles only)",
+  "operator": "errantpacket",
+  "authorization": "internal lab — hardware validation of Phase 1 provisioning",
+  "ranges": [
+    { "profile": "nixos-research", "count": 1 },
+    { "profile": "goldengate-research", "count": 1 }
+  ]
+}

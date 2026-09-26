@@ -152,6 +152,24 @@ def test_records() -> None:
               [r["name"] for r in good] == ["work-1"] and len(problems) == 3)
         clones.log_event("test", "work-1", "detail")
         check("event log is 0600", (os.stat(clones.state_dir() / "events.log").st_mode & 0o777) == 0o600)
+
+        # Stage 1B: engagement tagging on the clone record.
+        eng_rec = clones.new_record("eng-1", prof, "rbt-kali-research-cc4479ae7492", engagement="acme-ctf")
+        clones.save(eng_rec)
+        check("record round-trips with engagement set",
+              clones.load("eng-1") == eng_rec and eng_rec["engagement"] == "acme-ctf")
+        # Back-compat: a record written BEFORE the engagement field (no "engagement" key) must
+        # still load, treated as engagement=None — not rejected as a missing key.
+        old = {k: v for k, v in rec.items() if k != "engagement"}
+        (d / "old-1.json").write_text(json.dumps(dict(old, name="old-1")))
+        os.chmod(d / "old-1.json", 0o600)
+        check("pre-engagement record (no key) still loads as engagement=None",
+              "engagement" not in old and clones.load("old-1")["engagement"] is None)
+        # An invalid engagement value is rejected (must be null or an engagement id string).
+        bad_eng = dict(rec, name="eng-bad", engagement="Bad_ID!")
+        (d / "eng-bad.json").write_text(json.dumps(bad_eng))
+        os.chmod(d / "eng-bad.json", 0o600)
+        refused("invalid engagement value", lambda: clones.load("eng-bad"))
         del os.environ["RHUBARB_STATE_DIR"]
 
 
@@ -466,6 +484,95 @@ def test_engagements() -> None:
         engagements.ENGAGEMENTS = saved
 
 
+def test_engagement_ops() -> None:
+    """Stage 1B: api.provision/teardown group a range set by engagement tag, over a MOCKED
+    core (api.new / api.rm / clones() / hostops.local_vms) — no tart / keychain / network.
+    The committed engagements/demo.json is the reference (kali x2 'demo-offense', goldengate x1)."""
+    from rhubarb import api
+    from rhubarb.common import VerifyError
+
+    # -- provision: resolve each range's verified image (mocked), clone count copies via
+    #    api.new, tagged with the engagement id, named from prefix / <eid>-<profile>. --
+    calls = []
+
+    def fake_new(name, profile=None, image=None, rotate=True, progress=None, engagement=None):
+        calls.append((name, image, engagement))
+        return api.NewResult(name=name, image=image, profile="p", rotated=True,
+                             password_mode="unique", note=None)
+
+    orig = (api._source_image, api.new, api.hostops.local_vms, api._clones.all_records)
+    try:
+        api._source_image = lambda profile, image: (f"rbt-{profile}-000000000000", {"id": profile})
+        api.new = fake_new
+        api.hostops.local_vms = lambda: {}
+        api._clones.all_records = lambda: ([], [])
+
+        res = api.provision("demo")
+        check("provision names ranges from prefix / <eid>-<profile>, suffixed only when count>1",
+              [c.name for c in res.created]
+              == ["demo-offense-1", "demo-offense-2", "demo-goldengate-research"])
+        check("provision tags every clone with the engagement id",
+              all(eng == "demo" for _n, _img, eng in calls) and len(calls) == 3)
+        check("provision clones each range's resolved verified image",
+              [img for _n, img, _e in calls]
+              == ["rbt-kali-research-000000000000", "rbt-kali-research-000000000000",
+                  "rbt-goldengate-research-000000000000"])
+        check("provision reports nothing skipped when no names collide", res.skipped == [])
+
+        # A name already taken (a VM or a record) is skipped, never re-created.
+        calls.clear()
+        api.hostops.local_vms = lambda: {"demo-offense-1": {}}
+        res2 = api.provision("demo")
+        check("provision skips an existing name and still creates the rest",
+              res2.skipped == ["demo-offense-1"]
+              and [c.name for c in res2.created] == ["demo-offense-2", "demo-goldengate-research"])
+
+        # An unbuilt/unverified range image refuses the whole provision (nothing created).
+        calls.clear()
+        api.hostops.local_vms = lambda: {}
+        def refuse(profile, image):
+            raise VerifyError(f"{profile} not built")
+        api._source_image = refuse
+        try:
+            api.provision("demo")
+            check("provision refuses when a range image is not built/verified", False)
+        except VerifyError:
+            check("provision refuses when a range image is not built/verified", len(calls) == 0)
+    finally:
+        api._source_image, api.new, api.hostops.local_vms, api._clones.all_records = orig
+
+    # -- teardown: remove exactly the clones tagged to the engagement, via api.rm. --
+    removed = []
+    tagged = api.CloneList(clones=[
+        api.Clone(name="demo-offense-1", profile="kali-research", family="kali",
+                  image="rbt-kali-research-000000000000", state="stopped", freshness="current",
+                  password_mode="unique", password_account="demo-offense-1", enrollments=[],
+                  created_at="2026-01-02T00:00:00Z", engagement="demo"),
+        api.Clone(name="other", profile="kali-research", family="kali",
+                  image="rbt-kali-research-000000000000", state="stopped", freshness="current",
+                  password_mode="unique", password_account="other", enrollments=[],
+                  created_at="2026-01-02T00:00:00Z", engagement="acme"),
+        api.Clone(name="adhoc", profile="kali-research", family="kali",
+                  image="rbt-kali-research-000000000000", state="stopped", freshness="current",
+                  password_mode="unique", password_account="adhoc", enrollments=[],
+                  created_at="2026-01-02T00:00:00Z", engagement=None),
+    ], problems=[])
+    orig2 = (api.clones, api.rm)
+    try:
+        api.clones = lambda: tagged
+        api.rm = lambda name: (removed.append(name)
+                               or api.RemoveResult(name=name, image="rbt-x", keychain_deleted=True))
+        out = api.teardown("demo")
+        check("teardown removes exactly the engagement's clones (not other/ad-hoc)",
+              out == ["demo-offense-1"] and removed == ["demo-offense-1"])
+        check("teardown is idempotent (an engagement with no tagged clones removes nothing)",
+              api.teardown("no-such") == [])
+        check("engagement_clones returns only the tag's clones",
+              [c.name for c in api.engagement_clones("acme")] == ["other"])
+    finally:
+        api.clones, api.rm = orig2
+
+
 def test_cli_progress_stream() -> None:
     """#19: cli.py still streams the core's live milestones for `rhubarb new`/`reset` (it
     hands api a progress callback that prints each line), and api's default (no callback)
@@ -658,9 +765,9 @@ def test_reap_run() -> None:
 
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
-              test_rotation_script, test_api_pure, test_engagements, test_cli_progress_stream,
-              test_hostops_resilience, test_shutdown_reaps_boot_process, test_reap_run,
-              test_fs_vms):
+              test_rotation_script, test_api_pure, test_engagements, test_engagement_ops,
+              test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
+              test_reap_run, test_fs_vms):
         print(t.__name__)
         t()
     if FAILS:

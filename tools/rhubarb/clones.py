@@ -31,10 +31,14 @@ CLONE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")     # clones never start wit
 IMAGE_RE = re.compile(r"^rbt-[a-z0-9][a-z0-9.-]{1,80}-[0-9a-f]{12}$")
 USER_RE = re.compile(r"^[a-z][a-z0-9]{2,15}$")
 PROFILE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")
+ENGAGEMENT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")   # mirrors profiles.ID_RE / engagements ids (no import: stay standalone)
 FAMILIES = {"macos", "nixos", "kali"}
 SERVICES = {"tailscale", "warp", "perimeter81"}
+# "engagement" was added after schema 1 shipped: it is OPTIONAL, so records written before it
+# (with no "engagement" key) still load and are treated as engagement=None (see _validate).
+OPTIONAL_KEYS = {"engagement"}
 RECORD_KEYS = {"schema", "name", "profile", "family", "image", "username", "rosetta",
-               "password_account", "created_at", "enrollments"}
+               "password_account", "created_at", "enrollments", "engagement"}
 
 
 def state_dir() -> Path:
@@ -78,7 +82,7 @@ def check_clone_name(name: str) -> str:
 def _validate(rec: dict, expected_name: str) -> dict:
     where = f"clone record {expected_name}"
     unknown = set(rec) - RECORD_KEYS
-    missing = RECORD_KEYS - set(rec)
+    missing = (RECORD_KEYS - OPTIONAL_KEYS) - set(rec)   # optional keys may be absent (back-compat)
     if unknown or missing:
         raise VerifyError(f"{where}: unexpected keys {sorted(unknown)} / missing {sorted(missing)}")
     if rec["schema"] != 1:
@@ -94,10 +98,15 @@ def _validate(rec: dict, expected_name: str) -> dict:
         (isinstance(rec["rosetta"], bool), "rosetta"),
         (rec["password_account"] in (rec["name"], rec["image"]), "password_account"),
         (isinstance(rec["enrollments"], dict) and set(rec["enrollments"]) <= SERVICES, "enrollments"),
+        # engagement: absent (old records) or explicit null -> None; else an engagement id string.
+        (rec.get("engagement") is None
+         or (isinstance(rec["engagement"], str) and bool(ENGAGEMENT_RE.match(rec["engagement"]))),
+         "engagement"),
     ]
     for ok, field in checks:
         if not ok:
             raise VerifyError(f"{where}: invalid {field}")
+    rec.setdefault("engagement", None)   # normalize pre-engagement records so callers can read it
     return rec
 
 
@@ -148,12 +157,13 @@ def all_records() -> tuple[list[dict], list[str]]:
     return good, bad
 
 
-def new_record(name: str, prof: dict, image: str) -> dict:
+def new_record(name: str, prof: dict, image: str, engagement: str | None = None) -> dict:
     return {
         "schema": 1, "name": check_clone_name(name), "profile": prof["id"], "family": prof["family"],
         "image": image, "username": prof["username"], "rosetta": bool(prof["options"].get("rosetta")),
         "password_account": image,  # inherited until `new` rotates it to a per-clone password
         "created_at": now(), "enrollments": {},
+        "engagement": engagement,  # the engagement this clone belongs to; None for ad-hoc clones
     }
 
 

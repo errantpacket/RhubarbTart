@@ -110,7 +110,29 @@ fi
 
 # --- assertions --------------------------------------------------------------------------
 say "asserting security posture"
-if grep -rEqs '^[^#]*NOPASSWD' /etc/sudoers /etc/sudoers.d; then die "NOPASSWD in sudoers"; fi
+# No NOPASSWD, with ONE owner-approved exception (#59): kali-linux-default pulls OpenVAS, whose
+# ospd-openvas lets the non-login _gvm service account run the scanner as root. Allowed only
+# as exactly that rule, in exactly that root-owned 0440 file, for a locked nologin account.
+GVM_SUDOERS=/etc/sudoers.d/ospd-openvas
+GVM_RULE='_gvm ALL = NOPASSWD: /usr/sbin/openvas'
+while IFS= read -r hit; do
+  [[ -n "$hit" ]] || continue
+  file="${hit%%:*}"; rule="$(cut -d: -f3- <<<"$hit" | tr -s ' \t' ' ' | sed 's/^ //; s/ $//')"
+  [[ "$file" == "$GVM_SUDOERS" && "$rule" == "$GVM_RULE" ]] && continue
+  die "NOPASSWD in sudoers: $hit"
+done <<<"$(grep -rEHns '^[^#]*NOPASSWD' /etc/sudoers /etc/sudoers.d || true)"
+if [[ -e "$GVM_SUDOERS" ]]; then
+  [[ "$(stat -c '%U:%G %a' "$GVM_SUDOERS")" == "root:root 440" ]] || die "$GVM_SUDOERS is not root:root 0440"
+  [[ "$(grep -Evc '^[[:space:]]*(#|$)' "$GVM_SUDOERS")" == 1 ]] || die "$GVM_SUDOERS holds more than the one allowed rule"
+  case "$(getent passwd _gvm | cut -d: -f7)" in
+    */nologin|*/false) ;;
+    *) die "_gvm (NOPASSWD for openvas) has a login shell" ;;
+  esac
+  case "$(getent shadow _gvm | cut -d: -f2)" in
+    '!'*|'*'*) ;;
+    *) die "_gvm (NOPASSWD for openvas) has a usable password" ;;
+  esac
+fi
 if dpkg -s kali-grant-root >/dev/null 2>&1; then die "kali-grant-root (passwordless root) installed"; fi
 if grep -rEqs '^[[:space:]]*autologin-user[[:space:]]*=[[:space:]]*[^[:space:]]' /etc/lightdm; then
   die "LightDM auto-login configured"

@@ -2,6 +2,8 @@
 
 Four stages turn a small JSON profile into a proven, named image: Define, Resolve, Build, Prove.
 
+Terms such as *lock*, *seal* and *smoke test* are explained in [Key concepts](concepts.md).
+
 ```mermaid
 %%{init: {'theme':'base','fontFamily':'ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#2b2d42','primaryBorderColor':'#c9184a','lineColor':'#8d99ae','edgeLabelBackground':'#ffffff','fontSize':'13px'},'flowchart':{'curve':'basis','nodeSpacing':45,'rankSpacing':55,'padding':8,'useMaxWidth':true}}}%%
 flowchart TB

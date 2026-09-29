@@ -49,7 +49,7 @@ is wrong for a new macOS build, fix it with the same strictness (see the `rhubar
 |---|---|---|
 | `IPSW hash disagreement: apple=… ipsw.me=…` | Mirror metadata stale or wrong | Apple's header is authoritative; wait and retry. Never drop the cross-check |
 | `IPSW URL is not on updates.cdn-apple.com` | Discovery source returned a non-Apple URL | Treat as suspicious; don't allow-list it |
-| `…: cached <file> differs from lock. If upstream moved (…), re-resolve.` | Chrome's unversioned URL now serves a newer build and the cache was cleared, or cache corruption | Restore `cache/artifacts/` from backup, or re-resolve (new lock → new VM name) and review the diff |
+| `…: cached <file> differs from lock. If upstream moved (…), re-resolve.` | The cache is content-addressed (`cache/artifacts/<sha256>/<file>`, #67), so this means the cached copy is corrupt, or an unversioned upstream (Chrome) now serves a different build than the lock pins, so it can't be re-fetched | Re-resolve the profile and review the lock diff. Never hand-edit the hash |
 | `missing local file vendor/perimeter81/Perimeter81.pkg …` | Tenant installer not placed, or named differently | The user downloads it from the Harmony SASE portal (Devices → Downloads → Agents) and saves it as exactly `vendor/perimeter81/Perimeter81.pkg` |
 | `…: not notarized` / `not signed with a Developer ID Installer cert` | Vendor shipped an unsigned build or a wrong file | Get a proper build from the vendor; don't relax the check |
 | `…: Team ID X != pinned Y` | Vendor changed signing identity, or it's not the vendor's file | Verify out-of-band with the vendor before re-pinning in `config/packages/<id>.json` |

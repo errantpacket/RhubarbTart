@@ -468,6 +468,33 @@ def test_build_cleanup_trap() -> None:
                   res.returncode == 0 and "body-done" in res.stdout and not work.exists())
 
 
+def test_content_addressed_cache() -> None:
+    """Artifacts live at artifacts/<sha256>/<file>: two builds behind one file name (Chrome's
+    unversioned URL) coexist; a legacy flat file is adopted only if its hash matches. (#67)"""
+    import hashlib
+    import resolve
+    with tempfile.TemporaryDirectory() as d:
+        cache = Path(d)
+        old, new = b"chrome .58", b"chrome .93"
+        e_old = {"file": "GoogleChrome.pkg", "sha256": hashlib.sha256(old).hexdigest()}
+        e_new = {"file": "GoogleChrome.pkg", "sha256": hashlib.sha256(new).hexdigest()}
+        check("same file name, different builds -> distinct cache paths",
+              resolve.cached(cache, e_old) != resolve.cached(cache, e_new))
+        (cache / "GoogleChrome.pkg").write_bytes(new)  # legacy flat file holding the .93 build
+        p_old = resolve.cached(cache, e_old)
+        check("legacy file with another hash is left alone (not adopted for .58)",
+              not p_old.exists() and (cache / "GoogleChrome.pkg").exists())
+        p_new = resolve.cached(cache, e_new)
+        check("legacy file with the matching hash is adopted (moved, no re-download)",
+              p_new.read_bytes() == new and not (cache / "GoogleChrome.pkg").exists()
+              and p_new == cache / e_new["sha256"] / "GoogleChrome.pkg")
+    # verify must not leave a wrong download under a hash it doesn't have (#67)
+    src = (Path(__file__).resolve().parent / "resolve.py").read_text()
+    body = src[src.index("def cmd_verify"):src.index("def ", src.index("def cmd_verify") + 5)]
+    check("verify deletes a download whose hash doesn't match the lock",
+          "path.unlink()" in body.split("differs from lock")[0].rsplit("fetch(e, path)", 1)[-1])
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -1074,7 +1101,7 @@ if __name__ == "__main__":
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
-              test_build_cleanup_trap):
+              test_build_cleanup_trap, test_content_addressed_cache):
         print(t.__name__)
         t()
     if FAILS:

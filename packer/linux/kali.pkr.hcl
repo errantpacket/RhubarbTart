@@ -75,15 +75,15 @@ variable "bootstrap_password" {
 }
 
 source "tart-cli" "kali" {
-  from_iso      = [var.iso_path]
-  vm_name       = var.vm_name
-  cpu_count     = var.cpu_count
-  memory_gb     = var.memory_gb
-  disk_size_gb  = var.disk_gb
-  headless      = true
-  ssh_username  = var.username
-  ssh_password  = var.bootstrap_password
-  ssh_timeout   = "120m" # the whole unattended install happens before SSH is up
+  from_iso     = [var.iso_path]
+  vm_name      = var.vm_name
+  cpu_count    = var.cpu_count
+  memory_gb    = var.memory_gb
+  disk_size_gb = var.disk_gb
+  headless     = true
+  ssh_username = var.username
+  ssh_password = var.bootstrap_password
+  ssh_timeout  = "120m" # the whole unattended install happens before SSH is up
 
   # GRUB command line: kernel + initrd from the ISO's install.a64/, preseed by URL.
   boot_command = [

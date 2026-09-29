@@ -133,6 +133,8 @@ class Provenance:
     lock_sha256:   sha256 of the committed lock file.
     lock:          the full parsed lock (``locks/<profile>.lock.json``).
     build_files:   ``{repo-relative path: sha256}`` for every tracked build file.
+    ssh:           ``{"enabled", "key_fingerprints", "from"}`` — the SSH access the image
+                   was sealed with — or ``None`` for records written before it was recorded.
     """
 
     vm: str
@@ -146,6 +148,7 @@ class Provenance:
     lock_sha256: str
     lock: dict
     build_files: dict[str, str]
+    ssh: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -318,6 +321,16 @@ def _source_image(profile: str | None, image: str | None) -> tuple[str, dict]:
     return img, prof
 
 
+def _image_ssh_enabled(image: str) -> bool | None:
+    """Whether ``image`` was sealed with SSH access, per its provenance record; ``None`` when
+    unknown (no record, or one written before the ``ssh`` field existed)."""
+    try:
+        ssh = provenance(image).ssh
+    except (FileNotFoundError, VerifyError):
+        return None
+    return None if ssh is None else bool(ssh.get("enabled"))
+
+
 def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | None]:
     """Give the clone its own password (keychain account = clone name), proven via PAM.
 
@@ -330,6 +343,12 @@ def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | 
     ``"<name>: unique password set ..."`` on a clean rotation; ``None`` is silent.
     """
     name = rec["name"]
+    # Rotation runs over SSH; an image sealed without authorized keys has sshd disabled, so
+    # booting it would only wait out two full SSH timeouts before soft-failing. (#46)
+    if _image_ssh_enabled(rec["image"]) is False:
+        return False, (f"{name}: image {rec['image']} was built with SSH disabled "
+                       f"(RHUBARB_SSH_PUBKEYS unset), so the password can't be rotated; keeping "
+                       f"the image's password. Rebuild with RHUBARB_SSH_PUBKEYS=<pubkey file>.")
     old = hostops.keychain_get(rec["password_account"])
     new_pw = hostops.random_password()
     # A fresh clone's first boot is normally SSH-reachable in seconds, but that first boot can
@@ -337,7 +356,8 @@ def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | 
     # wait_for_ssh time out and soft-fail the rotation. A second boot reliably comes up, so retry
     # the boot on "unreachable" before giving up; "denied" (a key problem) won't improve, so bail. (#23)
     note = (f"{name}: SSH not reachable after 2 boots; keeping the image's password. "
-            f"Retry later with: rhubarb reset {name} --same-image")
+            f"Retry later with: rhubarb reset {name} --same-image (if the image was built "
+            f"without RHUBARB_SSH_PUBKEYS, its SSH is disabled and a retry won't help)")
     for attempt in range(2):
         _emit(progress, f"{name}: booting headless to rotate its password"
               + (" (retry)" if attempt else ""))
@@ -488,7 +508,7 @@ def provenance(vm: str) -> Provenance:
             git_commit=rec["git_commit"], git_dirty=rec["git_dirty"],
             toolchain=rec["toolchain"], tart_vm=rec["tart_vm"],
             inputs_sha256=rec["inputs_sha256"], lock_sha256=rec["lock_sha256"],
-            lock=rec["lock"], build_files=rec["build_files"])
+            lock=rec["lock"], build_files=rec["build_files"], ssh=rec.get("ssh"))
     except (KeyError, TypeError) as e:
         raise VerifyError(f"{path.name}: malformed provenance record ({e})") from None
 

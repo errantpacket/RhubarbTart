@@ -763,11 +763,91 @@ def test_reap_run() -> None:
         hostops.subprocess.run = orig
 
 
+def test_ssh_client() -> None:
+    """ssh_args ignores ~/.ssh/config; wait_for_ssh keeps waiting only on boot-time errors and
+    fails fast (with ssh's message) on client-side ones instead of reporting 'unreachable'. (#46)"""
+    from rhubarb import hostops
+    from rhubarb.common import VerifyError
+    CP = subprocess.CompletedProcess
+
+    argv = hostops.ssh_args("vm1", "admin", "192.168.64.9")
+    check("ssh_args ignores the operator's ssh config", argv[1:3] == ["-F", "/dev/null"])
+    check("ssh_args leaves identity to agent/defaults by default", "IdentitiesOnly=yes" not in argv)
+    os.environ["RHUBARB_SSH_IDENTITY"] = "/k/id_ed25519"
+    try:
+        argv = hostops.ssh_args("vm1", "admin", "192.168.64.9")
+    finally:
+        del os.environ["RHUBARB_SSH_IDENTITY"]
+    check("RHUBARB_SSH_IDENTITY pins the key", "/k/id_ed25519" in argv and "IdentitiesOnly=yes" in argv)
+
+    def run_with(stderrs):
+        seq = iter(stderrs)
+        calls = []
+
+        def fake_run(a, **k):
+            calls.append(a)
+            err = next(seq)
+            return CP(a, 0 if err is None else 255, "", err or "")
+        orig_run, orig_sleep = hostops.subprocess.run, hostops.time.sleep
+        hostops.subprocess.run, hostops.time.sleep = fake_run, lambda s: None
+        try:
+            return hostops.wait_for_ssh("vm1", "admin", "192.168.64.9", timeout=60), len(calls)
+        finally:
+            hostops.subprocess.run, hostops.time.sleep = orig_run, orig_sleep
+
+    refused = "ssh: connect to host 192.168.64.9 port 22: Connection refused"
+    timeout = "ssh: connect to host 192.168.64.9 port 22: Operation timed out"
+    check("boot-time errors keep waiting until ok", run_with([refused, timeout, None]) == ("ok", 3))
+    check("key rejection is final", run_with([refused, "admin@x: Permission denied (publickey)."])[0] == "denied")
+    try:
+        run_with([refused, "Load key \"/k\": No such file\n$SSH_SK_PROVIDER did not resolve; disabling"])
+        check("client-side ssh error fails fast", False)
+    except VerifyError as e:
+        check("client-side ssh error fails fast with ssh's message", "SSH_SK_PROVIDER" in str(e))
+
+
+def test_ssh_provenance() -> None:
+    """Provenance records the image's SSH mode; rotation refuses an SSH-disabled image up front
+    instead of booting it and waiting out two SSH timeouts. (#46)"""
+    import resolve
+    from rhubarb import api
+    pub = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl test"
+    with tempfile.TemporaryDirectory() as d:
+        keys = Path(d) / "authorized_keys"
+        keys.write_text(f"# comment\n{pub}\n")
+        on = resolve.ssh_record(str(keys), "192.168.64.1")
+        keys.write_text("")
+        off = resolve.ssh_record(str(keys), "192.168.64.1")
+    check("ssh_record: keys => enabled with fingerprint",
+          on["enabled"] and len(on["key_fingerprints"]) == 1 and on["key_fingerprints"][0].startswith("SHA256:")
+          and on["from"] == "192.168.64.1")
+    check("ssh_record: no keys => disabled", off == {"enabled": False, "key_fingerprints": [], "from": ""})
+    check("ssh_record: no file => disabled", resolve.ssh_record(None, "")["enabled"] is False)
+
+    booted = []
+    orig = (api.provenance, api.hostops.start_vm)
+    api.hostops.start_vm = lambda *a, **k: booted.append(a)
+    try:
+        api.provenance = lambda vm: types.SimpleNamespace(ssh={"enabled": False})
+        rotated, note = api._rotate({"name": "c1", "image": "rbt-p-000000000000"})
+        check("ssh-disabled image: no boot, clear note",
+              rotated is False and not booted and "SSH disabled" in note)
+        api.provenance = lambda vm: types.SimpleNamespace(ssh=None)
+        check("pre-#46 record => unknown", api._image_ssh_enabled("rbt-p-000000000000") is None)
+
+        def missing(vm):
+            raise FileNotFoundError(vm)
+        api.provenance = missing
+        check("no record => unknown", api._image_ssh_enabled("rbt-p-000000000000") is None)
+    finally:
+        api.provenance, api.hostops.start_vm = orig
+
+
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops,
               test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
-              test_reap_run, test_fs_vms):
+              test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance):
         print(t.__name__)
         t()
     if FAILS:

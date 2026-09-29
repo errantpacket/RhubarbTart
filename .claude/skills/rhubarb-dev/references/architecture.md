@@ -124,7 +124,7 @@ name. Every mutating command appends to `events.log`.
   `verify nixos-research --skip-image`, so that `cache/artifacts/` and `cache/stage/` exist:
   ```sh
   N=nixos/nix@sha256:85169a7ff4ac6928b70b15ced20c74770e07e8fbc7f97e92f64c1fca47ea9486
-  mkdir -p /tmp/np /tmp/cfg && tar -xzf cache/artifacts/nixpkgs-*.tar.gz -C /tmp/np --strip-components=1
+  mkdir -p /tmp/np /tmp/cfg && tar -xzf cache/artifacts/*/nixpkgs-*.tar.gz -C /tmp/np --strip-components=1
   cp -r nix/. /tmp/cfg/ && cp cache/stage/nixos-research/{profile.json,lock.json} /tmp/cfg/
   echo '{"from":"192.168.64.1"}' > /tmp/cfg/ssh.json && cp ~/.ssh/id_ed25519.pub /tmp/cfg/authorized_keys
   docker run --rm -v /tmp/np:/nixpkgs:ro -v /tmp/cfg:/cfg $N nix-instantiate \

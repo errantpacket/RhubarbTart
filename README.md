@@ -147,6 +147,13 @@ Direction and roadmap: [`docs/PLAN.md`](docs/PLAN.md).
       provenance all pass.
 - [x] **macOS 27** (`goldengate-research`) built end-to-end on a macOS 27 host: provisioning API
       → password rotation → Chrome/ZAP/WARP/Tailscale install → seal → smoke → provenance.
+- [x] **macOS 26** (`tahoe-research`, [#24](https://github.com/errantpacket/RhubarbTart/issues/24)) and **Kali**
+      (`kali-research`, [#25](https://github.com/errantpacket/RhubarbTart/issues/25)) built end-to-end on a macOS 27 host,
+      including the keystroke Setup Assistant path and the Kali preseed/GRUB flow; Kali ZAP-from-archive
+      ([#26](https://github.com/errantpacket/RhubarbTart/issues/26)). Setup Assistant timing is occasionally flaky
+      ([#63](https://github.com/errantpacket/RhubarbTart/issues/63)).
+- [x] Chrome can't update itself inside macOS clones: auto-updates are off (manual only) via Google's managed
+      update policy ([#29](https://github.com/errantpacket/RhubarbTart/issues/29)).
 - [x] `TART_TEAM_ID` (`9M2P8L4D89`) and the Packer signer (`D38WU7D763`) pinned after the first
       bootstrap. ZAP needs none (unsigned, hash-pinned); pin Perimeter 81's Team ID when its
       installer is first resolved.
@@ -157,8 +164,7 @@ Direction and roadmap: [`docs/PLAN.md`](docs/PLAN.md).
 
 Remaining work is tracked as issues (see the [issue tracker](https://github.com/errantpacket/RhubarbTart/issues)):
 
-- First real build on a Mac of **macOS 26** ([#24](https://github.com/errantpacket/RhubarbTart/issues/24)) and **Kali** ([#25](https://github.com/errantpacket/RhubarbTart/issues/25)); Kali WARP-trixie + ZAP-from-archive ([#26](https://github.com/errantpacket/RhubarbTart/issues/26)).
-- Perimeter 81 Linux variant ([#27](https://github.com/errantpacket/RhubarbTart/issues/27)) · non-admin daily-use account ([#28](https://github.com/errantpacket/RhubarbTart/issues/28)) · disable Chrome's updater in macOS clones ([#29](https://github.com/errantpacket/RhubarbTart/issues/29)).
+- Perimeter 81 Linux variant ([#27](https://github.com/errantpacket/RhubarbTart/issues/27)) · non-admin daily-use account ([#28](https://github.com/errantpacket/RhubarbTart/issues/28)).
 - Per-clone isolation via `--net-softnet` ([#30](https://github.com/errantpacket/RhubarbTart/issues/30)) · stacked clones from a private registry ([#31](https://github.com/errantpacket/RhubarbTart/issues/31)) · finish `scripts/publish.sh` + pin `cosign`/`crane` ([#32](https://github.com/errantpacket/RhubarbTart/issues/32)).
 - `herdr` service ([#33](https://github.com/errantpacket/RhubarbTart/issues/33)) · choose a license ([#34](https://github.com/errantpacket/RhubarbTart/issues/34)).
 

@@ -98,6 +98,16 @@ fi
 if grep -Eq 'NOPASSWD' /etc/sudoers; then die "NOPASSWD entry in /etc/sudoers"; fi
 launchctl print-disabled system | grep -Eq '"com.apple.screensharing" => (disabled|true)' \
   || die "Screen Sharing not disabled"
+# Chrome must not update itself in a clone (managed Keystone policy, install.sh; #29).
+if [[ -d "/Applications/Google Chrome.app" ]]; then
+  KEYSTONE_POLICY="/Library/Managed Preferences/com.google.Keystone.plist"
+  [[ "$(stat -f '%Su:%Sg' "$KEYSTONE_POLICY" 2>/dev/null)" == "root:wheel" ]] \
+    || die "Chrome update policy missing or not root-owned"
+  for scope in global com.google.Chrome; do
+    [[ "$(/usr/libexec/PlistBuddy -c "Print :updatePolicies:$scope:UpdateDefault" "$KEYSTONE_POLICY" 2>/dev/null)" == 2 ]] \
+      || die "Chrome UpdateDefault for $scope is not 2 (manual only)"
+  done
+fi
 
 # --- remove build inputs and per-build state --------------------------------------------
 say "removing build inputs, caches, histories, logs"

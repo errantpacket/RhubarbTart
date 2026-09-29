@@ -495,6 +495,30 @@ def test_content_addressed_cache() -> None:
           "path.unlink()" in body.split("differs from lock")[0].rsplit("fetch(e, path)", 1)[-1])
 
 
+def test_chrome_update_policy() -> None:
+    """macOS: install.sh's Keystone policy parses and sets UpdateDefault 2 (manual only) for both
+    scopes, and the seal and smoke test assert that same file and value. (#29)"""
+    import plistlib
+    import re
+    root = Path(__file__).resolve().parent.parent
+    install = (root / "guest/macos/install.sh").read_text()
+    m = re.search(r'cat > "\$KEYSTONE_POLICY" <<\'EOF\'\n(.*?)\nEOF\n', install, re.S)
+    check("install.sh writes the Keystone policy", m is not None)
+    if m:
+        pol = plistlib.loads(m.group(1).encode())["updatePolicies"]
+        check("policy: UpdateDefault 2 for global and com.google.Chrome",
+              pol["global"]["UpdateDefault"] == 2 and pol["com.google.Chrome"]["UpdateDefault"] == 2)
+    path = "/Library/Managed Preferences/com.google.Keystone.plist"
+    fin = (root / "guest/macos/finalize.sh").read_text()
+    smoke = (root / "scripts/smoke-test.sh").read_text()
+    check("seal asserts the policy (path, both scopes, value 2)",
+          path in fin and "for scope in global com.google.Chrome" in fin and '== 2 ]]' in fin)
+    check("smoke test checks the policy from the clone",
+          path in smoke and ":updatePolicies:com.google.Chrome:UpdateDefault" in smoke)
+    check("finalize's residue cleanup doesn't delete the policy",
+          not re.search(r"rm [^\n]*com\.google\.Keystone", fin))
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -1101,7 +1125,7 @@ if __name__ == "__main__":
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
-              test_build_cleanup_trap, test_content_addressed_cache):
+              test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy):
         print(t.__name__)
         t()
     if FAILS:

@@ -98,7 +98,34 @@ while IFS=$'\t' read -r id kind file team app signed _more; do
 done < packages.tsv
 
 # Vendor self-updaters would change the image after it was verified; updates are a
-# re-resolve + rebuild. (Chrome's GoogleUpdater: see README "Known gaps".)
+# re-resolve + rebuild.
+# Chrome's GoogleUpdater re-registers itself whenever Chrome runs, so it is governed by Google's
+# documented update policy instead (support.google.com/chrome/a/answer/7591084), delivered as a
+# managed preference. UpdateDefault 2 = never auto-apply; a user can still update deliberately
+# (Chrome > About) for an urgent fix. Owner decision, #29.
+KEYSTONE_POLICY="/Library/Managed Preferences/com.google.Keystone.plist"
+if [[ -d "/Applications/Google Chrome.app" ]]; then
+  say "chrome: auto-updates off (manual only) via managed Keystone policy"
+  install -d -m 755 -o root -g wheel "/Library/Managed Preferences"
+  cat > "$KEYSTONE_POLICY" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>updatePolicies</key>
+  <dict>
+    <key>global</key>
+    <dict><key>UpdateDefault</key><integer>2</integer></dict>
+    <key>com.google.Chrome</key>
+    <dict><key>UpdateDefault</key><integer>2</integer></dict>
+  </dict>
+</dict>
+</plist>
+EOF
+  chown root:wheel "$KEYSTONE_POLICY"
+  chmod 644 "$KEYSTONE_POLICY"
+  plutil -lint "$KEYSTONE_POLICY" >/dev/null || die "chrome: update policy plist does not parse"
+fi
 if launchctl print system/com.cloudflare.warp.updater >/dev/null 2>&1 || \
    [[ -e /Library/LaunchDaemons/com.cloudflare.warp.updater.plist ]]; then
   say "warp: disabling the WARP self-updater"

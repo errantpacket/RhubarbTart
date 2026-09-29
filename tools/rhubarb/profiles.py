@@ -19,6 +19,19 @@ LOCKS = ROOT / "locks"
 FAMILIES = {"macos", "nixos", "kali"}
 ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")
 USER_RE = re.compile(r"^[a-z][a-z0-9]{2,15}$")
+# Debian-installer's user-setup refuses these as the first user and stops on an error screen,
+# which a preseeded install can't get past (it idles until Packer's 120 min timeout). Source:
+# /usr/lib/user-setup/reserved-usernames in user-setup-udeb 1.109 (Kali 2026.2 installer ISO),
+# filtered to names USER_RE could accept. Note `admin`, the default username. (#25)
+DI_RESERVED_USERS = frozenset("""
+adm admin alias asterisk audio backup bin bind cdrom ceph crontab cupsys daemon dcc dhcp
+dialout dictd dip disk dnsmasq dovecot fax fetchmail firebird floppy ftn ftp fuse games gdm
+gnats haclient hacluster haldaemon hplilp identd input irc jwhois klog kmem kvm list
+lpadmin mail man messagebus mysql mythtv netdev netplan news nobody nogroup opensrf
+operator plugdev powerdev proxy qmail qmaild qmaill qmailp qmailq qmailr qmails radvd
+render root saned sasl sbuild scanner shadow slocate slurm src ssh sshd sslwrap staff statd
+sudo sync sys syslog tape telnetd tftpd tty users utmp uucp vchkpw video voice vpopmail
+""".split())
 
 
 PROFILE_KEYS = {"id", "description", "base", "packages", "username", "vm", "options"}
@@ -89,6 +102,9 @@ def load_profile(pid: str) -> dict:
     username = prof.get("username", "admin")
     if not USER_RE.match(username):
         raise VerifyError(f"profiles/{pid}.json: username must match {USER_RE.pattern}")
+    if family == "kali" and username in DI_RESERVED_USERS:
+        raise VerifyError(f"profiles/{pid}.json: username {username!r} is reserved by the Debian "
+                          f"installer (Kali would stop at an error screen); set \"username\"")
     return {
         "id": pid,
         "description": prof.get("description", ""),

@@ -342,6 +342,33 @@ def test_toolchain_gpg() -> None:
         gpg.platform.system, gpg.TOOLCHAIN_GPG = orig
 
 
+def test_profile_usernames() -> None:
+    """Kali refuses Debian-installer reserved usernames at profile load, not 14 min into an
+    install; other families keep them (macOS/NixOS use `admin`). (#25)"""
+    from rhubarb import profiles
+    from rhubarb.common import VerifyError
+    check("kali-research uses a non-reserved username",
+          profiles.load_profile("kali-research")["username"] == "kaliresearcher")
+    orig = profiles.PROFILES
+    with tempfile.TemporaryDirectory() as d:
+        profiles.PROFILES = Path(d)
+        try:
+            for pid, base in (("k-admin", "kali-rolling"), ("n-admin", "nixos-26.05")):
+                (Path(d) / f"{pid}.json").write_text(json.dumps(
+                    {"id": pid, "base": base, "username": "admin", "packages": []}))
+            try:
+                profiles.load_profile("k-admin")
+                check("kali + reserved username rejected", False)
+            except VerifyError as e:
+                check("kali + reserved username rejected, names the installer", "reserved" in str(e))
+            check("nixos may still use admin", profiles.load_profile("n-admin")["username"] == "admin")
+        finally:
+            profiles.PROFILES = orig
+    check("reserved list covers the default username", "admin" in profiles.DI_RESERVED_USERS)
+    check("reserved list only holds names USER_RE accepts",
+          all(profiles.USER_RE.match(u) for u in profiles.DI_RESERVED_USERS))
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -935,7 +962,7 @@ if __name__ == "__main__":
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops,
               test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
-              test_pgp_ed25519, test_toolchain_gpg):
+              test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames):
         print(t.__name__)
         t()
     if FAILS:

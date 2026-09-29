@@ -110,6 +110,11 @@ check "downloads use curl with --proto =https (no plain http fetches)" \
   'curl[^#]*http://' "${BUILD_CODE[@]}"
 check "the host-only toolchain is not bypassed with 'source' of the pin file" \
   '(^|[;&|[:space:]])(source|\.)[[:space:]]+[^[:space:]]*toolchain\.env' scripts tools
+# gpg.py alone picks the binary (on macOS: the pinned one bootstrap built, never PATH's).
+NOT_GPG_PY=()
+for f in tools/resolve.py tools/rhubarb/*.py; do [[ "$f" == tools/rhubarb/gpg.py ]] || NOT_GPG_PY+=("$f"); done
+check "gpg is only invoked through tools/rhubarb/gpg.py (pinned toolchain gpg on macOS)" \
+  '\[[[:space:]]*"gpg"[[:space:]]*,|,[[:space:]]*"gpg"[[:space:]]*[],]|which\("gpg"\)' "${NOT_GPG_PY[@]}"
 
 # Plugin version must agree between the pin file and every template.
 pin="$(sed -n 's/^PACKER_PLUGIN_TART_VERSION=//p' config/toolchain.env)"

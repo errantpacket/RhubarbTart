@@ -1,5 +1,6 @@
 """Host toolchain: pins (config/toolchain.env), pin derivation, preflight."""
 
+import hashlib
 import platform
 import shutil
 import subprocess
@@ -7,14 +8,35 @@ import tempfile
 from pathlib import Path
 import re
 
-from .common import ROOT, VerifyError, get_bytes, get_json, log, parse_sums, sha256_file, warn
+from . import gpg, pgp_ed25519
+from .common import KEYS, ROOT, VerifyError, get_bytes, get_json, log, parse_sums, sha256_file, warn
 from .macos import verify_app
 
 PINS = ROOT / "config" / "toolchain.env"
 TOOLCHAIN = ROOT / ".toolchain"
-HASHICORP_KEY = ROOT / "config" / "keys" / "hashicorp-72D7468F.asc"
+HASHICORP_KEYFILE = "hashicorp-72D7468F.asc"
 HASHICORP_FPR = "C874011F0AB405110D02105534365D9472D7468F"
 PIN_RE = re.compile(r"^([A-Z0-9_]+)=([A-Za-z0-9._:/+-]*)$")
+
+# GnuPG is built from source into .toolchain by bootstrap (#54). Its release tarballs are
+# dual-signed with these Ed25519 keys (config/keys/gnupg-release-signing.asc, fingerprints
+# cross-checked against https://gnupg.org/signature_key.html), verified in pure Python so
+# pinning never depends on an already-trusted gpg.
+GNUPG_KEYFILE = "gnupg-release-signing.asc"
+GNUPG_SIGNERS = {
+    "6DAA6E64A76D2840571B4902528897B826403ADA",  # Werner Koch (dist signing 2020)
+    "AC8E115BF73E2D8D47FA9908E98E9B2D19C6C8BD",  # NIIBE Yutaka (GnuPG Release Key)
+}
+GNUPG_FTP = "https://gnupg.org/ftp/gcrypt"
+# (pin prefix, ftp dir / tarball name, swdb.lst key) in build order
+GNUPG_COMPONENTS = [
+    ("LIBGPG_ERROR", "libgpg-error", "libgpg_error"),
+    ("LIBGCRYPT", "libgcrypt", "libgcrypt"),
+    ("LIBASSUAN", "libassuan", "libassuan"),
+    ("LIBKSBA", "libksba", "libksba"),
+    ("NPTH", "npth", "npth"),
+    ("GNUPG", "gnupg", "gnupg26"),
+]
 PINS_HEADER = """\
 # Pinned host toolchain, installed into ./.toolchain by tools/bootstrap.sh (no Homebrew).
 # Update with: uv run tools/resolve.py toolchain-pin [--latest]  (then review the diff)
@@ -22,6 +44,9 @@ PINS_HEADER = """\
 # Each SHA256 was accepted only when two upstream views agreed:
 #   GitHub assets: release checksums file == GitHub asset digest
 #   Packer:        HashiCorp SHA256SUMS, GPG-verified with config/keys/hashicorp-72D7468F.asc
+#   GnuPG + libs:  tarball signature by a pinned GnuPG release key (config/keys/
+#                  gnupg-release-signing.asc) == sha256 in gnupg.org's signed swdb.lst
+#                  (built from source by bootstrap; needs the Xcode Command Line Tools)
 # *_TEAM_ID: Apple Developer Team ID of the notarized signature; empty = record-and-warn.
 # Pin after confirming the value printed by bootstrap out-of-band.
 """
@@ -62,21 +87,12 @@ def github_latest(repo: str) -> str:
 
 def packer_asset(version: str) -> dict:
     """darwin_arm64 zip hash from HashiCorp's SHA256SUMS, after verifying its GPG signature."""
-    if not shutil.which("gpg"):
-        raise VerifyError("gpg is required to verify HashiCorp's signature (run this on any "
-                          "machine with gnupg; the result is just config/toolchain.env)")
     base = f"https://releases.hashicorp.com/packer/{version}/packer_{version}"
-    with tempfile.TemporaryDirectory() as home:
-        sums, sig = Path(home, "SHA256SUMS"), Path(home, "SHA256SUMS.sig")
+    with tempfile.TemporaryDirectory() as tmp:
+        sums, sig = Path(tmp, "SHA256SUMS"), Path(tmp, "SHA256SUMS.sig")
         sums.write_bytes(get_bytes(f"{base}_SHA256SUMS"))
         sig.write_bytes(get_bytes(f"{base}_SHA256SUMS.72D7468F.sig"))
-        gpg = ["gpg", "--homedir", home, "--batch", "--no-tty"]
-        subprocess.run([*gpg, "--import", str(HASHICORP_KEY)], check=True, capture_output=True)
-        res = subprocess.run([*gpg, "--status-fd", "1", "--verify", str(sig), str(sums)],
-                             capture_output=True, text=True)
-        valid = [ln.split() for ln in res.stdout.splitlines() if ln.startswith("[GNUPG:] VALIDSIG")]
-        if res.returncode != 0 or not valid or valid[0][-1] != HASHICORP_FPR:
-            raise VerifyError(f"HashiCorp signature check failed for packer {version}\n{res.stderr}")
+        gpg.verify_detached(sums, sig, HASHICORP_KEYFILE, HASHICORP_FPR)
         name = f"packer_{version}_darwin_arm64.zip"
         sha = parse_sums(sums.read_text()).get(name)
     if not sha:
@@ -84,23 +100,68 @@ def packer_asset(version: str) -> dict:
     return {"url": f"https://releases.hashicorp.com/packer/{version}/{name}", "sha256": sha}
 
 
+def _gnupg_verify(data: bytes, sig: bytes, what: str) -> None:
+    signers = pgp_ed25519.verify_detached(data, sig, (KEYS / GNUPG_KEYFILE).read_text(), GNUPG_SIGNERS)
+    log(f"{what}: signed by {', '.join(sorted(s[-16:] for s in signers))}")
+
+
+def gnupg_assets(old: dict, latest: bool) -> dict[str, dict]:
+    """{prefix: {version, url, sha256}} for GnuPG and its libraries. Two views must agree: each
+    tarball's detached signature by a pinned release key, and the sha256 published in gnupg.org's
+    swdb.lst (itself signed). A pinned version swdb no longer lists (not --latest) is accepted on
+    its signature alone, and reported."""
+    swdb_text = get_bytes("https://versions.gnupg.org/swdb.lst")
+    _gnupg_verify(swdb_text, get_bytes("https://versions.gnupg.org/swdb.lst.sig"), "swdb.lst")
+    swdb = dict(ln.split(" ", 1) for ln in swdb_text.decode().splitlines() if " " in ln)
+    out = {}
+    for prefix, name, key in GNUPG_COMPONENTS:
+        version = swdb[f"{key}_ver"].strip() if latest or f"{prefix}_VERSION" not in old \
+            else old[f"{prefix}_VERSION"]
+        if not re.fullmatch(r"[0-9][0-9.]*[0-9]", version):
+            raise VerifyError(f"unexpected {name} version {version!r}")
+        url = f"{GNUPG_FTP}/{name}/{name}-{version}.tar.bz2"
+        data = get_bytes(url)
+        _gnupg_verify(data, get_bytes(f"{url}.sig"), f"{name} {version}")
+        sha = hashlib.sha256(data).hexdigest()
+        if swdb.get(f"{key}_ver", "").strip() == version:
+            if swdb.get(f"{key}_sha2", "").strip() != sha:
+                raise VerifyError(f"{name} {version}: sha256 {sha} != signed swdb.lst value")
+        else:
+            warn(f"{name} {version} is no longer current in swdb.lst; pinned on its signature alone")
+        out[prefix] = {"version": version, "url": url, "sha256": sha}
+    return out
+
+
 def cmd_toolchain_pin(args) -> None:
     old = load_pins()
     latest = args.latest
-    tart_v = github_latest("openai/tart") if latest else old["TART_VERSION"]
-    plugin_v = (github_latest("cirruslabs/packer-plugin-tart").lstrip("v") if latest
-                else old["PACKER_PLUGIN_TART_VERSION"])
-    uv_v = github_latest("astral-sh/uv") if latest else old["UV_VERSION"]
-    packer_v = (get_json("https://api.releases.hashicorp.com/v1/releases/packer/latest")["version"]
-                if latest else old["PACKER_VERSION"])
+    if getattr(args, "only", None) == "gnupg":
+        # Re-derive only the GnuPG block (pure-Python signature checks, no gpg needed); keep the
+        # other, already-verified pins exactly as committed. This is how a Mac without a
+        # toolchain gpg yet gets its first GnuPG pins.
+        def kept(p: str) -> dict:
+            return {"url": old[f"{p}_URL"], "sha256": old[f"{p}_SHA256"]}
+        tart_v, plugin_v = old["TART_VERSION"], old["PACKER_PLUGIN_TART_VERSION"]
+        uv_v, packer_v = old["UV_VERSION"], old["PACKER_VERSION"]
+        tart, plugin, uv, packer = kept("TART"), kept("PACKER_PLUGIN_TART"), kept("UV"), kept("PACKER")
+    else:
+        tart_v = github_latest("openai/tart") if latest else old["TART_VERSION"]
+        plugin_v = (github_latest("cirruslabs/packer-plugin-tart").lstrip("v") if latest
+                    else old["PACKER_PLUGIN_TART_VERSION"])
+        uv_v = github_latest("astral-sh/uv") if latest else old["UV_VERSION"]
+        packer_v = (get_json("https://api.releases.hashicorp.com/v1/releases/packer/latest")["version"]
+                    if latest else old["PACKER_VERSION"])
 
-    tart = github_asset("openai/tart", tart_v, "tart.tar.gz", f"tart_{tart_v}_checksums.txt")
-    plugin_zip = f"packer-plugin-tart_v{plugin_v}_x5.0_darwin_arm64.zip"
-    plugin = github_asset("cirruslabs/packer-plugin-tart", f"v{plugin_v}", plugin_zip,
-                          f"packer-plugin-tart_v{plugin_v}_SHA256SUMS")
-    uv = github_asset("astral-sh/uv", uv_v, "uv-aarch64-apple-darwin.tar.gz",
-                      "uv-aarch64-apple-darwin.tar.gz.sha256")
-    packer = packer_asset(packer_v)
+        tart = github_asset("openai/tart", tart_v, "tart.tar.gz", f"tart_{tart_v}_checksums.txt")
+        plugin_zip = f"packer-plugin-tart_v{plugin_v}_x5.0_darwin_arm64.zip"
+        plugin = github_asset("cirruslabs/packer-plugin-tart", f"v{plugin_v}", plugin_zip,
+                              f"packer-plugin-tart_v{plugin_v}_SHA256SUMS")
+        uv = github_asset("astral-sh/uv", uv_v, "uv-aarch64-apple-darwin.tar.gz",
+                          "uv-aarch64-apple-darwin.tar.gz.sha256")
+        packer = packer_asset(packer_v)
+    gnupg = gnupg_assets(old, latest)
+    gnupg_body = "".join(f"\n{p}_VERSION={a['version']}\n{p}_URL={a['url']}\n{p}_SHA256={a['sha256']}\n"
+                         for p, a in gnupg.items())
 
     # A version bump invalidates a Team ID pin only if the signer actually changes;
     # keep pins and let bootstrap enforce them.
@@ -123,9 +184,10 @@ UV_VERSION={uv_v}
 UV_URL={uv["url"]}
 UV_SHA256={uv["sha256"]}
 """
-    PINS.write_text(PINS_HEADER + body)
+    PINS.write_text(PINS_HEADER + body + gnupg_body)
     log(f"wrote {PINS.relative_to(ROOT)}: tart {tart_v}, packer {packer_v}, "
-        f"plugin {plugin_v}, uv {uv_v}. Review the diff, commit, then run tools/bootstrap.sh")
+        f"plugin {plugin_v}, uv {uv_v}, gnupg {gnupg['GNUPG']['version']}. "
+        f"Review the diff, commit, then run tools/bootstrap.sh")
     if plugin_v != old["PACKER_PLUGIN_TART_VERSION"]:
         warn("plugin version changed: update required_plugins in packer/*/*.pkr.hcl to match")
 
@@ -146,6 +208,7 @@ def toolchain() -> dict:
                            if app.exists() and platform.system() == "Darwin" else None),
         "packer": version(["packer", "version"]),
         "uv": version(["uv", "--version"]),
+        "gpg": gpg.gpg_version(),
         "pins_sha256": sha256_file(PINS),
         "installed": installed.read_text().splitlines() if installed.exists() else None,
     }
@@ -156,7 +219,7 @@ def cmd_preflight(_args) -> None:
     pins = load_pins()
     problems = []
     bindir = (TOOLCHAIN / "bin").resolve()
-    for tool in ("tart", "packer", "uv"):
+    for tool in ("tart", "packer", "uv", "gpg"):
         found = shutil.which(tool)
         if not found or Path(found).parent.resolve() != bindir:
             problems.append(f"{tool} resolves to {found}, not {bindir}/{tool}")
@@ -167,6 +230,8 @@ def cmd_preflight(_args) -> None:
         problems.append(f"packer {tc['packer']!r} != pinned {pins['PACKER_VERSION']}")
     if not tc["uv"] or pins["UV_VERSION"] not in tc["uv"]:
         problems.append(f"uv {tc['uv']!r} != pinned {pins['UV_VERSION']}")
+    if not tc["gpg"] or not tc["gpg"].endswith(f" {pins['GNUPG_VERSION']}"):
+        problems.append(f"gpg {tc['gpg']!r} != pinned {pins['GNUPG_VERSION']}")
     stamp = dict(ln.split(" ", 1) for ln in (tc["installed"] or []) if ln.startswith("pins_sha256 "))
     if stamp.get("pins_sha256") != tc["pins_sha256"]:
         problems.append("config/toolchain.env changed since the last tools/bootstrap.sh")
@@ -179,4 +244,4 @@ def cmd_preflight(_args) -> None:
         warn(f"Tart.app signed by {sig['signer']}; confirm and pin TART_TEAM_ID")
     if problems:
         raise VerifyError("; ".join(problems) + " (run tools/bootstrap.sh; scripts use scripts/env.sh)")
-    log(f"toolchain ok: tart {tc['tart']}, {tc['packer']}, {tc['uv']}")
+    log(f"toolchain ok: tart {tc['tart']}, {tc['packer']}, {tc['uv']}, {tc['gpg']}")

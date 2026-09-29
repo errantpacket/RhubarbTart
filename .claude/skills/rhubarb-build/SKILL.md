@@ -80,8 +80,10 @@ Built images are templates; all work happens in clones managed by `./rhubarb` (o
   It only acts on clones it created, and never on built `rbt-…` images or other VMs.
 - **`new` gives each clone its own random password** (keychain account = clone name), proven
   through `sudo` that the old one is rejected. This needs key SSH: an image built with
-  `RHUBARB_SSH_PUBKEYS` and the key in `ssh-agent`. Otherwise the clone keeps the image's
-  password (`list` shows `inherited`). Suggest `reset NAME --same-image` once the key is loaded.
+  `RHUBARB_SSH_PUBKEYS` and the key in `ssh-agent` (or `RHUBARB_SSH_IDENTITY=<keyfile>`).
+  Otherwise the clone keeps the image's password (`list` shows `inherited`) — an image whose
+  provenance records SSH *disabled* is refused up front with a rebuild hint. Suggest
+  `reset NAME --same-image` once the key is loaded.
 - **`outdated`** in `list` means the profile's lock has moved on since that clone was made.
   Offer `rhubarb reset NAME` (a fresh clone of the current image); warn that it discards the
   clone's state and enrollment.

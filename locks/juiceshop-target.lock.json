@@ -1,0 +1,50 @@
+{
+  "schema": 2,
+  "profile": "juiceshop-target",
+  "family": "nixos",
+  "base_id": "nixos-26.05",
+  "profile_sha256": "456beca25119d8d2a97e323b8df693b3c11009f428249a31e800ec13e8ec82fe",
+  "resolved_at": "2026-09-29T23:50:24+00:00",
+  "resolved_on": {
+    "host_os": "macOS-27.0-arm64-arm-64bit-Mach-O"
+  },
+  "base": {
+    "channel": "nixos-26.05",
+    "release": "nixos-26.05.10882.7fc6f2c20af0",
+    "image": {
+      "url": "https://releases.nixos.org/nixos/26.05/nixos-26.05.10882.7fc6f2c20af0/nixos-minimal-26.05.10882.7fc6f2c20af0-aarch64-linux.iso",
+      "file": "nixos-minimal-26.05.10882.7fc6f2c20af0-aarch64-linux.iso",
+      "sha256": "2ea91dd45b48932b811b22878a4b0f5680310fef26430d8a784e60a68593cc04",
+      "large": true,
+      "hash_sources": [
+        "releases.nixos.org nixos-minimal-26.05.10882.7fc6f2c20af0-aarch64-linux.iso.sha256 (HTTPS)"
+      ],
+      "size": 1827756032
+    },
+    "nixpkgs": {
+      "rev": "7fc6f2c20af09cdcaf48b92ec3121860139ec668",
+      "url": "https://github.com/NixOS/nixpkgs/archive/7fc6f2c20af09cdcaf48b92ec3121860139ec668.tar.gz",
+      "file": "nixpkgs-7fc6f2c20af0.tar.gz",
+      "sha256": "0de9bc97f3941e6c12a2b2d8babbb59153b0e8d9e75e720f1ffe8df87eacc3ce",
+      "nar_sha256": "sha256-bNyvoIyOCu7lzoCpWKWGIsHpTtERUWzqYWFPlN++WTw=",
+      "hash_sources": [
+        "tofu:downloaded (github archive of the channel's git-revision)",
+        "nar_sha256 re-verified by nix in the guest"
+      ],
+      "size": 51183105
+    }
+  },
+  "packages": {
+    "juice-shop": {
+      "version": "20.2.0",
+      "url": "https://github.com/juice-shop/juice-shop/releases/download/v20.2.0/juice-shop-20.2.0_node22_linux_arm64.tgz",
+      "file": "juice-shop-20.2.0_node22_linux_arm64.tgz",
+      "sha256": "56d356ac687403bee7c06e2c55e891521f9cbb6bed63011392a1d47f591a7ab3",
+      "size": 98721619,
+      "hash_sources": [
+        "github-release-digest"
+      ],
+      "kind": "tarball"
+    }
+  }
+}

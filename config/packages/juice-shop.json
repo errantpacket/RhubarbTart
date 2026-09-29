@@ -1,0 +1,13 @@
+{
+  "description": "OWASP Juice Shop (intentionally vulnerable web app; a lab target, never for attacker VMs)",
+  "variants": {
+    "nixos": {
+      "resolver": "github-release",
+      "repo": "juice-shop/juice-shop",
+      "asset": "juice-shop-{version}_node22_linux_arm64.tgz",
+      "kind": "tarball",
+      "service": "juice-shop",
+      "ports": [3000]
+    }
+  }
+}

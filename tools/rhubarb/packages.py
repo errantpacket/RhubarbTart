@@ -95,10 +95,40 @@ def nix(v: dict) -> dict:
             "hash_sources": ["nixpkgs pinned by base (rev + nar_sha256)"]}
 
 
+GITHUB_REPO_RE = re.compile(r"^[A-Za-z0-9-]+/[A-Za-z0-9._-]+$")
+
+
+def github_release(v: dict) -> dict:
+    """Latest release asset of a GitHub repo, pinned by GitHub's published sha256 digest.
+
+    v: {repo: "owner/name", asset: "name-{version}-....tgz"}. The tag's leading "v" is dropped
+    for {version}. Refuses assets without a digest (the release's own .md5 files are too weak).
+    """
+    repo = v["repo"]
+    if not GITHUB_REPO_RE.match(repo):
+        raise VerifyError(f"bad GitHub repo {repo!r}")
+    release = get_json(f"https://api.github.com/repos/{repo}/releases/latest")
+    version = release["tag_name"].removeprefix("v")
+    if not re.fullmatch(r"[0-9][0-9A-Za-z.+-]*", version):
+        raise VerifyError(f"{repo}: unexpected release tag {release['tag_name']!r}")
+    name = v["asset"].format(version=version)
+    asset = next((a for a in release["assets"] if a["name"] == name), None)
+    if asset is None:
+        raise VerifyError(f"{repo} {version} has no asset {name}")
+    url = asset["browser_download_url"]
+    if not url.startswith(f"https://github.com/{repo}/releases/download/"):
+        raise VerifyError(f"{repo}: unexpected asset URL {url}")
+    digest = asset.get("digest") or ""
+    if not digest.startswith("sha256:"):
+        raise VerifyError(f"GitHub publishes no sha256 digest for {name}")
+    return {"version": version, "url": url, "file": name, "sha256": digest.removeprefix("sha256:"),
+            "size": asset["size"], "hash_sources": ["github-release-digest"]}
+
+
 RESOLVERS = {
     "chrome-mac": chrome_mac, "zap-mac": zap_mac, "warp-mac": warp_mac,
     "tailscale-mac": tailscale_mac, "local": local, "apt": apt_deb,
-    "distro": distro, "nix": nix,
+    "distro": distro, "nix": nix, "github-release": github_release,
 }
 
 

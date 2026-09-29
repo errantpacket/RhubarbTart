@@ -94,6 +94,7 @@ STAGE="$(json_field stage_dir "$info")"
 OS_BUILD="$(json_field os_build "$info")"
 INPUTS_SHA="$(json_field inputs_sha256 "$info")"
 ROSETTA="$(json_field rosetta "$info")"
+OPEN_PORTS="$(json_field open_ports "$info")"
 export PKR_VAR_username PKR_VAR_cpu_count PKR_VAR_memory_gb PKR_VAR_disk_gb
 PKR_VAR_username="$(json_field username "$info")"
 PKR_VAR_cpu_count="$(json_field cpu "$info")"
@@ -179,7 +180,7 @@ case "$FAMILY" in
 esac
 
 # --- prove the hardening on a throwaway clone; only then give it the real name --------
-RHUBARB_FAMILY="$FAMILY" RHUBARB_USER="$PKR_VAR_username" RHUBARB_ROSETTA="$ROSETTA" \
+RHUBARB_FAMILY="$FAMILY" RHUBARB_USER="$PKR_VAR_username" RHUBARB_ROSETTA="$ROSETTA" RHUBARB_OPEN_PORTS="$OPEN_PORTS" \
 RHUBARB_SSH_ENABLED="$([[ -s "$AUTH_KEYS" ]] && echo 1 || echo 0)" \
   ./scripts/smoke-test.sh "$CANDIDATE" \
   || die "smoke test failed; unverified image left as $CANDIDATE for inspection"

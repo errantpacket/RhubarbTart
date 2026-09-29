@@ -637,6 +637,45 @@ def test_stacked_clones() -> None:
                 os.environ["RHUBARB_STATE_DIR"] = prev
 
 
+def test_github_release_resolver() -> None:
+    """github-release (#83): pins a release asset by GitHub's sha256 digest and refuses anything
+    weaker or unexpected. GitHub's API is faked."""
+    from rhubarb import packages
+    from rhubarb.common import VerifyError
+    v = {"repo": "juice-shop/juice-shop", "asset": "juice-shop-{version}_node22_linux_arm64.tgz"}
+    name = "juice-shop-20.2.0_node22_linux_arm64.tgz"
+    url = f"https://github.com/juice-shop/juice-shop/releases/download/v20.2.0/{name}"
+
+    def release(**asset):
+        return {"tag_name": "v20.2.0", "assets": [{"name": name, "browser_download_url": url,
+                                                    "digest": "sha256:" + "a" * 64, "size": 1, **asset}]}
+    orig = packages.get_json
+    try:
+        packages.get_json = lambda u: release()
+        e = packages.github_release(v)
+        check("github-release: version, file, sha256 from GitHub's digest",
+              e["version"] == "20.2.0" and e["file"] == name and e["sha256"] == "a" * 64
+              and e["hash_sources"] == ["github-release-digest"])
+        for label, asset, needle in (
+                ("asset without a digest refused", {"digest": None}, "no sha256 digest"),
+                ("asset from an unexpected host refused", {"browser_download_url": "https://evil.example/x.tgz"},
+                 "unexpected asset URL"),
+                ("missing asset refused", {"name": "other.tgz"}, "has no asset")):
+            packages.get_json = lambda u, a=asset: release(**a)
+            try:
+                packages.github_release(v)
+                check(f"github-release: {label}", False)
+            except VerifyError as err:
+                check(f"github-release: {label}", needle in str(err))
+        try:
+            packages.github_release({**v, "repo": "not a repo"})
+            check("github-release: malformed repo refused", False)
+        except VerifyError:
+            check("github-release: malformed repo refused", True)
+    finally:
+        packages.get_json = orig
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -1244,7 +1283,7 @@ if __name__ == "__main__":
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
               test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
-              test_stacked_clones):
+              test_stacked_clones, test_github_release_resolver):
         print(t.__name__)
         t()
     if FAILS:

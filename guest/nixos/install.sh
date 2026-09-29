@@ -52,6 +52,13 @@ say "staging configuration"
 install -d -m 755 /mnt/etc/nixos
 cp -r nix/. /mnt/etc/nixos/
 install -m 644 profile.json lock.json /mnt/etc/nixos/
+# Package files a NixOS module builds from (e.g. Juice Shop). Every staged file except the
+# nixpkgs tarball, all already verified against SHA256SUMS above.
+install -d -m 755 /mnt/etc/nixos/artifacts
+while read -r _sum f; do
+  [[ "$f" == "$TARBALL" ]] && continue
+  install -m 644 "$f" /mnt/etc/nixos/artifacts/
+done < SHA256SUMS
 install -m 644 authorized_keys /mnt/etc/nixos/authorized_keys
 printf '{"from": "%s"}\n' "$RB_SSH_FROM" > /mnt/etc/nixos/ssh.json
 # Dir is traversable (755) so the non-secret provenance (installed.txt, 644) is readable by the

@@ -80,9 +80,13 @@ spctl --status | grep -qx 'assessments enabled'
 /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode | grep -Eiq 'stealth mode (is )?(on|enabled)'
 test ! -e /etc/kcpassword
 test -f /Library/RhubarbTart/lock.json
+if [ -d "/Applications/Google Chrome.app" ]; then
+  test "$(/usr/libexec/PlistBuddy -c 'Print :updatePolicies:com.google.Chrome:UpdateDefault' \
+    '/Library/Managed Preferences/com.google.Keystone.plist')" = 2
+fi
 cat /Library/RhubarbTart/installed.txt
 EOF
-    log "ok: SIP, Gatekeeper, firewall on; no auto-login; no passwordless sudo"
+    log "ok: SIP, Gatekeeper, firewall on; no auto-login; no passwordless sudo; Chrome auto-update off"
   else
     "${SSH[@]}" "FAMILY=$FAMILY ROSETTA=${RHUBARB_ROSETTA:-false} bash -s" <<'EOF' || fail "in-guest posture checks failed"
 set -e

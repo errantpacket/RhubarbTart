@@ -38,7 +38,7 @@ ranges that agents drive and that produce evidence you can trust.
 | | |
 |---|---|
 | 🧾 **Known inputs** | Apple IPSW, NixOS/Kali ISOs, apps and host tools are pinned by hash, checked against vendor signatures where they exist, and locked per guest |
-| 🧱 **Hardened by default** | No default passwords, no auto-login, no passwordless sudo, key-only SSH (or none), firewall on, no shared machine or VPN identity |
+| 🧱 **Hardened by default** | No default passwords, no auto-login, no passwordless sudo for users ([one scoped Kali service-account exception](docs/trust-model.md)), key-only SSH (or none), firewall on, no shared machine or VPN identity |
 | 🔬 **Proven, not assumed** | Every image is smoke-tested from outside on a disposable clone before it gets its final name |
 | 🧩 **Configurable** | A guest is a small JSON profile: OS base + tools + options. No code needed for new guests |
 | 🔐 **Secrets stay yours** | Passwords live in your macOS keychain, each clone gets its own, and VPN enrollment happens per clone at runtime, never baked in |

@@ -414,6 +414,39 @@ def test_sshd_T_normalization() -> None:
               and norm("AllowUsers KaliResearcher\n") == ["allowusers KaliResearcher"])
 
 
+def test_kali_nopasswd_allowlist() -> None:
+    """The Kali seal allows exactly one NOPASSWD rule (#59: OpenVAS's _gvm) and nothing else.
+    Runs finalize.sh's actual allowlist loop against planted sudoers trees."""
+    import re
+    root = Path(__file__).resolve().parent.parent
+    src = (root / "guest/kali/finalize.sh").read_text()
+    m = re.search(r"^GVM_SUDOERS=.*?\n(GVM_RULE=.*?\n)(while IFS= read -r hit; do\n.*?\ndone <<<[^\n]*\n)", src, re.S | re.M)
+    check("kali finalize: NOPASSWD allowlist loop found", m is not None)
+    if not m:
+        return
+    cases = {
+        "exact allowed rule": ("ospd-openvas", "_gvm ALL = NOPASSWD: /usr/sbin/openvas\n", True),
+        "allowed rule, tabs/extra spaces": ("ospd-openvas", "_gvm\tALL  =  NOPASSWD:\t/usr/sbin/openvas \n", True),
+        "comment mentioning NOPASSWD": ("ospd-openvas", "# NOPASSWD is scary\n_gvm ALL = NOPASSWD: /usr/sbin/openvas\n", True),
+        "kali-grant-root rule": ("kali-grant-root", "%kali-trusted   ALL=(ALL:ALL) NOPASSWD: ALL\n", False),
+        "allowed rule widened": ("ospd-openvas", "_gvm ALL = NOPASSWD: /usr/sbin/openvas, /bin/sh\n", False),
+        "allowed rule, other user": ("ospd-openvas", "kaliresearcher ALL = NOPASSWD: /usr/sbin/openvas\n", False),
+        "allowed rule in another file": ("zz-sneaky", "_gvm ALL = NOPASSWD: /usr/sbin/openvas\n", False),
+        "second rule appended": ("ospd-openvas", "_gvm ALL = NOPASSWD: /usr/sbin/openvas\nkaliresearcher ALL=(ALL) NOPASSWD: ALL\n", False),
+    }
+    for label, (name, content, allowed) in cases.items():
+        with tempfile.TemporaryDirectory() as d:
+            (Path(d) / "sudoers.d").mkdir()
+            (Path(d) / "sudoers").write_text("root ALL=(ALL:ALL) ALL\n@includedir /etc/sudoers.d\n")
+            (Path(d) / "sudoers.d" / name).write_text(content)
+            loop = (m.group(2).replace("/etc/sudoers.d", f"{d}/sudoers.d").replace("/etc/sudoers ", f"{d}/sudoers "))
+            script = (f'set -euo pipefail\ndie() {{ echo "DIE: $*"; exit 1; }}\n'
+                      f'GVM_SUDOERS={d}/sudoers.d/ospd-openvas\n{m.group(1)}{loop}echo PASS\n')
+            res = subprocess.run(["/bin/bash", "-c", script], capture_output=True, text=True)
+            ok = res.stdout.strip().endswith("PASS")
+            check(f"nopasswd allowlist: {label} -> {'allowed' if allowed else 'refused'}", ok is allowed)
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -1008,7 +1041,7 @@ if __name__ == "__main__":
               test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
-              test_sshd_T_normalization):
+              test_sshd_T_normalization, test_kali_nopasswd_allowlist):
         print(t.__name__)
         t()
     if FAILS:

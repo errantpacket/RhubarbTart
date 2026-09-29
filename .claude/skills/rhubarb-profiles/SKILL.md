@@ -65,7 +65,8 @@ something to improvise in a profile.
 
 Anything else is rejected, including unknown keys, options for the wrong family, and bad values.
 That's deliberate: a typo must never silently produce a different image. Metapackages that grant
-passwordless root (`kali-grant-root`) fail the build's seal checks.
+passwordless root fail the build's seal checks. `kali-grant-root`, a hard dependency of the XFCE
+desktop, is purged and pinned out automatically (#59).
 
 ## Workflow
 

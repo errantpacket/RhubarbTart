@@ -389,6 +389,31 @@ def test_packages_tsv_readers() -> None:
               res.stdout == "zaproxy|1")
 
 
+def test_sshd_T_normalization() -> None:
+    """The seal compares `sshd -T` lines exactly. OpenSSH >= 10.5 prints CamelCase keywords, so
+    each finalize lowercases field 1 only; values must still compare exactly. Runs each script's
+    actual awk filter. (#57)"""
+    import re
+    root = Path(__file__).resolve().parent.parent
+    filters = []
+    for script in ("guest/kali/finalize.sh", "guest/macos/finalize.sh"):
+        m = re.search(r"sshd -T[^|\n]*\| awk '([^']*)'", (root / script).read_text())
+        check(f"{script}: sshd -T output is keyword-normalized", m is not None)
+        if m:
+            filters.append((script, m.group(1)))
+    for script, prog in filters:
+        def norm(text, prog=prog):
+            return subprocess.run(["awk", prog], input=text, capture_output=True, text=True).stdout.splitlines()
+        new = norm("PasswordAuthentication no\nAllowUsers kaliresearcher\nAuthenticationMethods publickey\n")
+        old = norm("passwordauthentication no\nallowusers kaliresearcher\n")
+        check(f"{script}: 10.5 CamelCase and older lowercase both match",
+              "passwordauthentication no" in new and "allowusers kaliresearcher" in new
+              and "authenticationmethods publickey" in new and "passwordauthentication no" in old)
+        check(f"{script}: values stay exact (yes != no, user case kept)",
+              "passwordauthentication no" not in norm("PasswordAuthentication yes\n")
+              and norm("AllowUsers KaliResearcher\n") == ["allowusers KaliResearcher"])
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -982,7 +1007,8 @@ if __name__ == "__main__":
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops,
               test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
-              test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers):
+              test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
+              test_sshd_T_normalization):
         print(t.__name__)
         t()
     if FAILS:

@@ -74,13 +74,18 @@ variable "bootstrap_password" {
   }
 }
 
+variable "headless" {
+  type    = bool
+  default = true
+}
+
 source "tart-cli" "kali" {
   from_iso     = [var.iso_path]
   vm_name      = var.vm_name
   cpu_count    = var.cpu_count
   memory_gb    = var.memory_gb
   disk_size_gb = var.disk_gb
-  headless     = true
+  headless     = var.headless # RHUBARB_HEADLESS=false shows the installer in a Tart window
   ssh_username = var.username
   ssh_password = var.bootstrap_password
   ssh_timeout  = "120m" # the whole unattended install happens before SSH is up

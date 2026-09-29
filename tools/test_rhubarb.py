@@ -447,6 +447,27 @@ def test_kali_nopasswd_allowlist() -> None:
             check(f"nopasswd allowlist: {label} -> {'allowed' if allowed else 'refused'}", ok is allowed)
 
 
+def test_build_cleanup_trap() -> None:
+    """build.sh's actual EXIT-trap cleanup, under macOS /bin/bash 3.2 with set -euo pipefail and
+    an already-exited server PID: the script must still exit 0 and $WORK must be gone. (#61)"""
+    import re
+    root = Path(__file__).resolve().parent.parent
+    m = re.search(r"^cleanup\(\) \{(?:[^\n]*\}\n|\n.*?^\}\n)", (root / "scripts/build.sh").read_text(), re.S | re.M)
+    check("build.sh: cleanup() found", m is not None)
+    if not m:
+        return
+    for label, pid in (("server already exited", "$(sh -c 'echo $$')"), ("no server (macOS)", "")):
+        with tempfile.TemporaryDirectory() as d:
+            work = Path(d) / "work"
+            work.mkdir()
+            (work / "password").write_text("x")
+            script = (f'set -euo pipefail\nWORK={work}\nSERVER_PID="{pid}"\n{m.group(0)}'
+                      f'trap cleanup EXIT\necho body-done\n')
+            res = subprocess.run(["/bin/bash", "-c", script], capture_output=True, text=True)
+            check(f"build.sh cleanup ({label}): exit 0 and $WORK removed",
+                  res.returncode == 0 and "body-done" in res.stdout and not work.exists())
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -1041,7 +1062,8 @@ if __name__ == "__main__":
               test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
-              test_sshd_T_normalization, test_kali_nopasswd_allowlist):
+              test_sshd_T_normalization, test_kali_nopasswd_allowlist,
+              test_build_cleanup_trap):
         print(t.__name__)
         t()
     if FAILS:

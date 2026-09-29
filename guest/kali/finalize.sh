@@ -72,7 +72,17 @@ EOF
   for want in "passwordauthentication no" "kbdinteractiveauthentication no" \
               "authenticationmethods publickey" "permitrootlogin no" \
               "allowusers $RB_USER" "allowagentforwarding no"; do
-    grep -qx "$want" <<<"$effective" || die "sshd -T missing '$want'"
+    if ! grep -qx "$want" <<<"$effective"; then
+      # Same hard failure, but leave the evidence: what sshd resolved and every line that
+      # could have set it (sshd takes the first value; Match blocks override). (#57)
+      {
+        echo "[kali-finalize] effective: $(grep -E "^${want%% *} " <<<"$effective" || echo "(key absent)")"
+        echo "[kali-finalize] sshd_config.d: $(find /etc/ssh/sshd_config.d -mindepth 1 -maxdepth 1 -printf '%f ' 2>/dev/null)"
+        grep -rniE "^[[:space:]]*(${want%% *}|Match|Include)([[:space:]]|$)" \
+          /etc/ssh/sshd_config /etc/ssh/sshd_config.d 2>/dev/null | sed 's/^/[kali-finalize]   /'
+      } >&2
+      die "sshd -T missing '$want'"
+    fi
   done
   # Debian doesn't recreate deleted host keys by itself; do it once per clone.
   cat > /etc/systemd/system/rhubarb-ssh-hostkeys.service <<'EOF'

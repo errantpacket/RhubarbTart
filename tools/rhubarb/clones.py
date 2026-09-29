@@ -36,9 +36,14 @@ FAMILIES = {"macos", "nixos", "kali"}
 SERVICES = {"tailscale", "warp", "perimeter81"}
 # "engagement" was added after schema 1 shipped: it is OPTIONAL, so records written before it
 # (with no "engagement" key) still load and are treated as engagement=None (see _validate).
-OPTIONAL_KEYS = {"engagement"}
+# "base" (#31) is optional too: null for ordinary APFS clones; for a stacked clone pulled from a
+# registry, {"ref": <registry>/rhubarbtart/<profile>@sha256:…, "disk_digest": sha256:…} (the
+# immutable base disk blob in Tart's content store the clone's overlay depends on).
+OPTIONAL_KEYS = {"engagement", "base"}
 RECORD_KEYS = {"schema", "name", "profile", "family", "image", "username", "rosetta",
-               "password_account", "created_at", "enrollments", "engagement"}
+               "password_account", "created_at", "enrollments", "engagement", "base"}
+BASE_REF_RE = re.compile(r"^[A-Za-z0-9.-]+(:[0-9]{2,5})?/rhubarbtart/[a-z0-9-]+@sha256:[0-9a-f]{64}$")
+DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
 
 def state_dir() -> Path:
@@ -102,11 +107,17 @@ def _validate(rec: dict, expected_name: str) -> dict:
         (rec.get("engagement") is None
          or (isinstance(rec["engagement"], str) and bool(ENGAGEMENT_RE.match(rec["engagement"]))),
          "engagement"),
+        (rec.get("base") is None
+         or (isinstance(rec["base"], dict) and set(rec["base"]) == {"ref", "disk_digest"}
+             and bool(BASE_REF_RE.match(str(rec["base"]["ref"])))
+             and bool(DIGEST_RE.match(str(rec["base"]["disk_digest"])))),
+         "base"),
     ]
     for ok, field in checks:
         if not ok:
             raise VerifyError(f"{where}: invalid {field}")
     rec.setdefault("engagement", None)   # normalize pre-engagement records so callers can read it
+    rec.setdefault("base", None)         # and pre-#31 records (ordinary clones)
     return rec
 
 
@@ -157,13 +168,15 @@ def all_records() -> tuple[list[dict], list[str]]:
     return good, bad
 
 
-def new_record(name: str, prof: dict, image: str, engagement: str | None = None) -> dict:
+def new_record(name: str, prof: dict, image: str, engagement: str | None = None,
+               base: dict | None = None) -> dict:
     return {
         "schema": 1, "name": check_clone_name(name), "profile": prof["id"], "family": prof["family"],
         "image": image, "username": prof["username"], "rosetta": bool(prof["options"].get("rosetta")),
         "password_account": image,  # inherited until `new` rotates it to a per-clone password
         "created_at": now(), "enrollments": {},
         "engagement": engagement,  # the engagement this clone belongs to; None for ad-hoc clones
+        "base": base,              # registry base of a stacked clone (#31); None for APFS clones
     }
 
 

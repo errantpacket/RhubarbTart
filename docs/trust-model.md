@@ -87,7 +87,8 @@ config names no CA, OIDC, transparency-log or timestamp service, and cosign's ne
 pinned to the registry host, so nothing about these images reaches public Sigstore services. The
 trade-off is that there's no public transparency log, so trust rests on the committed public key
 `config/keys/rhubarb-cosign.pub`. Consumers verify with `publish.sh verify <ref@digest>` and
-always use images by digest.
+always use images by digest. `rhubarb new --from-registry` (macOS) runs that same verification before it
+stacks a clone on the published copy, and refuses to clone anything that fails it.
 
 ## Security posture
 

@@ -67,6 +67,7 @@ Built images are templates; all work happens in clones managed by `./rhubarb` (o
 ```sh
 ./rhubarb images                              # built images, current vs outdated per profile
 ./rhubarb new web-1 --profile kali-research   # clone + per-clone password rotation
+./rhubarb new mac-1 --profile tahoe-research --from-registry  # macOS: stacked on the verified registry copy (#31)
 ./rhubarb run web-1 [--headless] [--detach]   # applies Rosetta etc. from the record
 ./rhubarb ssh web-1 [-- CMD]
 ./rhubarb enroll web-1 tailscale              # or: warp --org TEAM | perimeter81

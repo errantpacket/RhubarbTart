@@ -248,11 +248,38 @@ elif a[0] == "delete-generic-password":
         check("reset: re-clones and keeps the record", r.returncode == 0 and (t / "state" / "clones" / "work-1.json").exists())
         r = rb("rm", "work-1", inp="n\n")
         check("rm: asks for confirmation and aborts on no", "work-1" in json.loads((t / "vms.json").read_text()))
+        r = rb("rm", "work-1", inp="")  # closed stdin (script/agent/CI): clean refusal, not EOFError (#47)
+        check("rm: no answer on stdin -> refuses cleanly, non-zero, nothing removed",
+              r.returncode != 0 and "--yes" in r.stderr and "Traceback" not in r.stderr
+              and "work-1" in json.loads((t / "vms.json").read_text()))
         r = rb("rm", "work-1", "--yes")
         check("rm: deletes VM + record", r.returncode == 0 and "work-1" not in json.loads((t / "vms.json").read_text())
               and not (t / "state" / "clones" / "work-1.json").exists())
         check("event log records new/reset/rm", all(e in (t / "state" / "events.log").read_text()
                                                     for e in ("\tnew\t", "\treset\t", "\trm\t")))
+
+
+def test_confirm_prompt() -> None:
+    """The shared [y/N] prompt behind rm and engagement teardown (#47)."""
+    import builtins
+    from rhubarb import cli
+    from rhubarb.common import VerifyError
+    orig = builtins.input
+    try:
+        for ans, want in (("y\n", True), ("YES", True), ("n", False), ("", False)):
+            builtins.input = lambda _p, a=ans: a
+            check(f"_confirm({ans!r}) -> {want}", cli._confirm("? ") is want)
+
+        def eof(_p):
+            raise EOFError
+        builtins.input = eof
+        try:
+            cli._confirm("? ")
+            check("_confirm: EOF refuses with VerifyError", False)
+        except VerifyError as e:
+            check("_confirm: EOF refuses with VerifyError naming --yes", "--yes" in str(e))
+    finally:
+        builtins.input = orig
 
 
 def test_rotation_script() -> None:
@@ -847,7 +874,7 @@ if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops,
               test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
-              test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance):
+              test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt):
         print(t.__name__)
         t()
     if FAILS:

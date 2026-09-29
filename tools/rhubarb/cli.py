@@ -117,11 +117,22 @@ def cmd_reset(a) -> None:
     _say_clone(res)
 
 
+def _confirm(prompt: str) -> bool:
+    """[y/N] prompt. With no answer to read (closed stdin: scripts, agents, CI) refuse loudly
+    instead of dying on EOFError; nothing destructive has happened yet at this point. (#47)"""
+    try:
+        answer = input(prompt)
+    except EOFError:
+        print(file=sys.stderr)
+        raise VerifyError("no confirmation on stdin (not interactive); nothing removed — "
+                          "pass --yes to confirm") from None
+    return answer.strip().lower() in ("y", "yes")
+
+
 def cmd_rm(a) -> None:
     if not a.yes:
         rec = clones.load(a.name)  # StrictModes-trusted read, for the confirmation prompt
-        answer = input(f"Delete clone {rec['name']} (from {rec['image']}) and its keychain entry? [y/N] ")
-        if answer.strip().lower() not in ("y", "yes"):
+        if not _confirm(f"Delete clone {rec['name']} (from {rec['image']}) and its keychain entry? [y/N] "):
             say("aborted")
             return
     res = api.rm(a.name)
@@ -181,9 +192,8 @@ def cmd_engagement_teardown(a) -> None:
         if not victims:
             say(f"engagement {eid}: no clones to tear down")
             return
-        answer = input(f"Tear down {len(victims)} clone(s) of engagement {eid} "
-                       f"({', '.join(victims)}) and their keychain entries? [y/N] ")
-        if answer.strip().lower() not in ("y", "yes"):
+        if not _confirm(f"Tear down {len(victims)} clone(s) of engagement {eid} "
+                        f"({', '.join(victims)}) and their keychain entries? [y/N] "):
             say("aborted")
             return
     removed = api.teardown(eid)

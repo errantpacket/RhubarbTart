@@ -1,6 +1,7 @@
 {
   "id": "kali-research",
   "description": "Kali research workstation",
+  "username": "kaliresearcher",
   "base": "kali-rolling",
   "packages": [
     "chrome",

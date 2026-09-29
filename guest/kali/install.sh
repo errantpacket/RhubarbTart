@@ -3,7 +3,7 @@
 # Re-verifies staged .debs, installs the profile's packages, sets up Rosetta.
 #
 # usage: install.sh <stage-dir>
-#   SHA256SUMS, packages.tsv (id kind file team app|package), profile.json, lock.json
+#   SHA256SUMS, packages.tsv (id kind file team app|package signed), profile.json, lock.json
 
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -24,7 +24,9 @@ echo 'repo_add_once="false"' > /etc/default/google-chrome
 echo 'repo_reenable_on_distupgrade="false"' >> /etc/default/google-chrome
 
 debs=() distro=()
-while IFS=$'\t' read -r id kind file _team pkg; do
+# packages.tsv has 6 columns (resolve.py): the 6th, "signed", only matters on macOS. `_more`
+# swallows it and any future column; without it read(1) appends them to $pkg (#26).
+while IFS=$'\t' read -r id kind file _team pkg _signed _more; do
   [[ -z "$id" ]] && continue
   case "$kind" in
     deb) debs+=("./$file") ;;

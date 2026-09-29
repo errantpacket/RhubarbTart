@@ -369,6 +369,26 @@ def test_profile_usernames() -> None:
           all(profiles.USER_RE.match(u) for u in profiles.DI_RESERVED_USERS))
 
 
+def test_packages_tsv_readers() -> None:
+    """Every guest install script's packages.tsv `read` line, run as-is by bash on a row with an
+    extra (future) column: no column may leak into the package/app or signed fields. (#26: Kali
+    read 5 of 6 columns and asked apt for 'zaproxy<TAB>1'.)"""
+    import re
+    root = Path(__file__).resolve().parent.parent
+    row = "zap\tdistro\t-\t-\tzaproxy\t1\tFUTURE\n"
+    lines = []
+    for script in sorted((root / "guest").glob("*/install.sh")):
+        lines += [(script, m) for m in re.findall(r"^\s*(while IFS=\$'\\t' read -r [^;]+);\s*do",
+                                                   script.read_text(), re.M)]
+    check("found the packages.tsv readers (kali + 2x macos)", len(lines) == 3)
+    for script, loop in lines:
+        read = loop.removeprefix("while ").strip()
+        res = subprocess.run(["/bin/bash", "-c", f'{read}; printf "%s|%s" "${{pkg-}}${{app-}}" "${{signed-}}${{_signed-}}"'],
+                             input=row, capture_output=True, text=True)
+        check(f"{script.parent.name}/install.sh: package/app field is exactly 'zaproxy', signed '1'",
+              res.stdout == "zaproxy|1")
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -962,7 +982,7 @@ if __name__ == "__main__":
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops,
               test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
-              test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames):
+              test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers):
         print(t.__name__)
         t()
     if FAILS:

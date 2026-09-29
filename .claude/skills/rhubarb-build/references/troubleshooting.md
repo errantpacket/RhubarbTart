@@ -24,7 +24,10 @@ is wrong for a new macOS build, fix it with the same strictness (see the `rhubar
 | `toolchain missing; run ./tools/bootstrap.sh` | `.toolchain/` absent (fresh clone) | Run bootstrap |
 | `tart resolves to …, not …/.toolchain/bin/tart` | env.sh not sourced; Homebrew or other install first on PATH | `source scripts/env.sh` in the same command |
 | `config/toolchain.env changed since the last tools/bootstrap.sh` | Pins bumped (e.g. after a pull) | Re-run bootstrap |
-| `sha256 mismatch for <url>` (bootstrap) | Upstream re-published the asset, download corrupted, or tampering | Bootstrap already deleted the bad download, so retry once. If it persists, run `uv run tools/resolve.py toolchain-pin` (same versions) on a machine with gpg and compare. Report the discrepancy; never hand-edit the hash |
+| `the Xcode Command Line Tools are required to build gpg` (bootstrap) | GnuPG is built from pinned source | `xcode-select --install`, then re-run bootstrap |
+| `building <component> failed` / `gpg links non-system libraries` (bootstrap) | A compiler/SDK change broke the build, or a non-system library leaked in | The log tail shows the step. Bootstrap's build is hermetic (minimal PATH, no pkg-config), so report a leak as a bug. Never skip the check |
+| `the pinned gpg is missing from .toolchain` (resolve) | Bootstrap not run since GnuPG was added | Run bootstrap |
+| `sha256 mismatch for <url>` (bootstrap) | Upstream re-published the asset, download corrupted, or tampering | Bootstrap already deleted the bad download, so retry once. If it persists, run `uv run tools/resolve.py toolchain-pin` (same versions) and compare. Report the discrepancy; never hand-edit the hash |
 | `TART Team ID 'X' != pinned 'Y'` / `Tart.app Team ID …` | Tart's signer changed | Stop. Confirm with upstream release notes before re-pinning |
 | `tart.app is not notarized` | Wrong/partial download or unsigned build | As for sha mismatch |
 | `tart.app signature invalid` / `URL not on the allow-list: …` | Corrupt or unexpected download; `toolchain.env` points somewhere new | Retry once; a URL change must come from `toolchain-pin` plus a reviewed diff, never a hand edit |
@@ -51,7 +54,7 @@ is wrong for a new macOS build, fix it with the same strictness (see the `rhubar
 | `…: not notarized` / `not signed with a Developer ID Installer cert` | Vendor shipped an unsigned build or a wrong file | Get a proper build from the vendor; don't relax the check |
 | `…: Team ID X != pinned Y` | Vendor changed signing identity, or it's not the vendor's file | Verify out-of-band with the vendor before re-pinning in `config/packages/<id>.json` |
 | HTTP 403 from api.github.com | Rate limit | `export GITHUB_TOKEN=…` |
-| `macOS profiles must be resolved on macOS …` (resolve) / `signature verification needs macOS …` (verify) | A macOS profile's resolve/verify ran on Linux | Run it on the Mac. Linux profiles resolve anywhere with gpg |
+| `macOS profiles must be resolved on macOS …` (resolve) / `signature verification needs macOS …` (verify) | A macOS profile's resolve/verify ran on Linux | Run it on the Mac. Linux profiles resolve on the Mac (toolchain gpg) or anywhere with gpg |
 
 ## Stage 1
 

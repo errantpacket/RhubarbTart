@@ -73,7 +73,7 @@ box; macOS guests let you study Mac-targeted samples on the platform they actual
 On an Apple silicon Mac (macOS 26 or later):
 
 ```sh
-# 1. Install the pinned toolchain (Tart, Packer, plugin, uv) into ./.toolchain. No Homebrew, no sudo.
+# 1. Install the pinned toolchain (Tart, Packer, plugin, uv, GnuPG built from source) into ./.toolchain. No Homebrew, no sudo.
 ./tools/bootstrap.sh && source scripts/env.sh && uv run tools/resolve.py preflight
 
 # 2. Resolve a guest's inputs into a lock file, then review and commit it.

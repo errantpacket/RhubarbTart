@@ -7,7 +7,7 @@ Keeping a profile's inputs fresh, plus the configuration variables, host require
 ```sh
 uv run tools/resolve.py plan kali-research       # what would change (no downloads)
 uv run tools/resolve.py resolve kali-research    # re-pin; then review the diff and commit
-uv run tools/resolve.py toolchain-pin --latest   # host tools; needs gpg, any OS
+uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchain gpg) or any OS with gpg
 ```
 
 - **Review every lock diff.** Look for signer changes, URL hosts, TOFU entries and version jumps.

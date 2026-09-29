@@ -9,7 +9,7 @@ flowchart TB
         direction LR
         PR["profiles/<br/>NAME.json"] ~~~ BA["config/bases/<br/>*.json"] ~~~ PK["config/packages/<br/>*.json"]
     end
-    subgraph R["&nbsp;② Resolve &amp; review &nbsp;·&nbsp; any host with gpg (Mac for macOS)&nbsp;"]
+    subgraph R["&nbsp;② Resolve &amp; review &nbsp;·&nbsp; the Mac, or any host with gpg&nbsp;"]
         direction LR
         RS["resolve.py<br/>resolve"] --> LK[("locks/<br/>NAME.lock.json")] --> RV{{"you review<br/>&amp; commit"}}
     end

@@ -546,6 +546,97 @@ def test_publish_offline_signing() -> None:
           "COSIGN_PRIVATE_KEY=" in code and not re.search(r"--key [^ ]*\.key", code))
 
 
+def test_stacked_clones() -> None:
+    """#31: `rhubarb new --from-registry` (macOS only) verifies the published copy, stacks the
+    clone on it, records its base blob, flags a missing base, and releases an unused base."""
+    from rhubarb import api
+    from rhubarb import clones as cl
+    from rhubarb.common import VerifyError
+    ref = "127.0.0.1:5780/rhubarbtart/tahoe-research@sha256:" + "a" * 64
+    digest = "sha256:" + "b" * 64
+    mac = {"id": "tahoe-research", "family": "macos", "username": "admin", "options": {}}
+    kali = {"id": "kali-research", "family": "kali", "username": "kaliresearcher", "options": {}}
+    img = "rbt-tahoe-research-edbb1008a6c0"
+
+    def raises(label, fn, needle):
+        try:
+            fn()
+            check(label, False)
+        except VerifyError as e:
+            check(label, needle in str(e))
+
+    good = cl.new_record("st-1", mac, img, base={"ref": ref, "disk_digest": digest})
+    check("record with a registry base validates", cl._validate(dict(good), "st-1")["base"]["ref"] == ref)
+    old = dict(good)
+    del old["base"]
+    check("pre-#31 record (no base key) still loads, base=None", cl._validate(old, "st-1")["base"] is None)
+    raises("record with a malformed base ref is rejected",
+           lambda: cl._validate({**good, "base": {"ref": "evil.example/x", "disk_digest": digest}}, "st-1"),
+           "invalid base")
+
+    calls = []
+    saved = (api.hostops.tart, api.hostops.delete_vm, api.hostops.VMS_DIR, api.TART_CONTENT,
+             api._published_ref, api._verify_published, os.environ.get("RHUBARB_STATE_DIR"))
+    with tempfile.TemporaryDirectory() as d:
+        os.environ["RHUBARB_STATE_DIR"] = f"{d}/state"
+        api.hostops.VMS_DIR = Path(d) / "vms"
+        api.TART_CONTENT = Path(d) / "content"
+        api.TART_CONTENT.mkdir()
+        api.hostops.tart = lambda *a, **k: calls.append(list(a)) or subprocess.CompletedProcess(a, 0, "", "")
+        api.hostops.delete_vm = lambda n: calls.append(["delete_vm", n]) or True
+        try:
+            raises("NixOS/Kali refused before touching tart",
+                   lambda: api._clone("st-k", "rbt-kali-research-0ff4b8e78398", kali, False, from_registry=True),
+                   "only for macOS")
+            check("... and no tart call was made", calls == [])
+
+            api._published_ref = lambda image: (_ for _ in ()).throw(VerifyError(f"{image} is not published"))
+            raises("unpublished image refused", lambda: api._clone("st-1", img, mac, False, from_registry=True),
+                   "not published")
+
+            api._published_ref = lambda image: (ref, "127.0.0.1:5780")
+            api._verify_published = lambda r, reg: (_ for _ in ()).throw(VerifyError("failed verification"))
+            raises("verification failure refuses to clone",
+                   lambda: api._clone("st-1", img, mac, False, from_registry=True), "failed verification")
+            check("... and nothing was cloned", not any(c[:1] == ["clone"] for c in calls))
+
+            api._verify_published = lambda r, reg: None
+            raises("unreadable stacked manifest -> error",
+                   lambda: api._clone("st-1", img, mac, False, from_registry=True), "manifest")
+            check("... and the half-made clone is deleted", ["delete_vm", "st-1"] in calls)
+
+            calls.clear()
+            (api.hostops.VMS_DIR / "st-1").mkdir(parents=True)
+            (api.hostops.VMS_DIR / "st-1" / "manifest.json").write_text(json.dumps({"layers": [
+                {"annotations": {}}, {"annotations": {api._DISK_DIGEST_KEY: digest}},
+                {"annotations": {api._DISK_DIGEST_KEY: digest}}]}))
+            api._clone("st-1", img, mac, False, from_registry=True)
+            check("stacked clone: tart clone --insecure --stacked <ref> <name>",
+                  ["clone", "--insecure", "--stacked", ref, "st-1"] in calls)
+            rec = cl.load("st-1")
+            check("record carries the base ref + disk digest", rec["base"] == {"ref": ref, "disk_digest": digest})
+            check("base blob absent -> base_present False", api.base_present(rec) is False)
+            (api.TART_CONTENT / ("b" * 64)).write_text("x")
+            check("base blob present -> base_present True", api.base_present(rec) is True)
+
+            other = cl.new_record("st-2", mac, img, base={"ref": ref, "disk_digest": digest})
+            cl.save(other)
+            check("base kept while another clone is stacked on it", api._release_base(rec["base"], "st-1") is False
+                  and (api.TART_CONTENT / ("b" * 64)).exists())
+            cl.delete("st-2")
+            calls.clear()
+            check("last clone gone -> base released (OCI entry + blob)",
+                  api._release_base(rec["base"], "st-1") is True and not (api.TART_CONTENT / ("b" * 64)).exists()
+                  and ["delete", ref] in calls)
+        finally:
+            (api.hostops.tart, api.hostops.delete_vm, api.hostops.VMS_DIR, api.TART_CONTENT,
+             api._published_ref, api._verify_published, prev) = saved
+            if prev is None:
+                os.environ.pop("RHUBARB_STATE_DIR", None)
+            else:
+                os.environ["RHUBARB_STATE_DIR"] = prev
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -887,7 +978,7 @@ def test_cli_progress_stream() -> None:
     # cli.cmd_new must pass api.new a live progress callback and stream what it emits.
     seen = {}
 
-    def fake_new(name, profile=None, image=None, rotate=True, progress=None):
+    def fake_new(name, profile=None, image=None, rotate=True, progress=None, from_registry=False):
         seen["callable"] = callable(progress)
         if progress:
             progress(f"cloned rbt-x -> {name}")
@@ -900,7 +991,7 @@ def test_cli_progress_stream() -> None:
     api.new = fake_new
     try:
         args = types.SimpleNamespace(name="work-1", profile="kali-research",
-                                     image=None, no_rotate=False)
+                                     image=None, no_rotate=False, from_registry=False)
         err = io.StringIO()
         with redirect_stderr(err):
             cli.cmd_new(args)
@@ -1152,7 +1243,8 @@ if __name__ == "__main__":
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
-              test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing):
+              test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
+              test_stacked_clones):
         print(t.__name__)
         t()
     if FAILS:

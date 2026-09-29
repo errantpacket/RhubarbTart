@@ -10,6 +10,7 @@ destructive ones).
 ```sh
 ./rhubarb images                              # built images; which one is current per profile
 ./rhubarb new web-1 --profile kali-research   # clone the current image; give it its OWN password
+./rhubarb new mac-1 --profile tahoe-research --from-registry   # macOS: stack on the verified registry copy
 ./rhubarb run web-1                           # GUI (Rosetta applied if the profile uses it)
 ./rhubarb ssh web-1                           # key-only SSH, host key pinned per clone
 ./rhubarb enroll web-1 tailscale              # VPN identity for this clone only
@@ -20,7 +21,7 @@ destructive ones).
 
 | Command | What it does |
 |---|---|
-| `new NAME --profile P` / `--image IMG` | Clones a **verified** image (never `-unverified`), records its lineage, then boots it headless and rotates it to a **unique random password** (keychain account = clone name), proving through `sudo` that the old one is rejected. `--no-rotate` keeps the image's password |
+| `new NAME --profile P` / `--image IMG` | Clones a **verified** image (never `-unverified`), records its lineage, then boots it headless and rotates it to a **unique random password** (keychain account = clone name), proving through `sudo` that the old one is rejected. `--no-rotate` keeps the image's password. `--from-registry` (macOS only, #31): verify the image's published copy by digest (signature + provenance, `scripts/publish.sh`) and stack the clone on it (`tart clone --stacked`, tens of MB instead of a full copy). `list` shows `base-missing` if the pulled base is gone, and `rm` releases the base when no other clone uses it |
 | `run NAME [--headless] [--detach]` | Starts the clone with the right flags for its profile (`--rosetta=rosetta` for Linux Rosetta profiles) |
 | `stop NAME` | Stops a running clone (the VM and its records stay) |
 | `ssh NAME [-- CMD]` | Connects as the profile's user, host key pinned per clone name |

@@ -78,7 +78,8 @@ def cmd_list(_a) -> None:
 
 
 def cmd_new(a) -> None:
-    res = api.new(a.name, profile=a.profile, image=a.image, rotate=not a.no_rotate, progress=say)
+    res = api.new(a.name, profile=a.profile, image=a.image, rotate=not a.no_rotate, progress=say,
+                  from_registry=a.from_registry)
     _say_clone(res)
     say(f"ready: rhubarb run {res.name}")
 
@@ -137,6 +138,8 @@ def cmd_rm(a) -> None:
             return
     res = api.rm(a.name)
     say(f"removed {res.name}")
+    if res.base_released:
+        say("released its registry base (no other clone was stacked on it)")
 
 
 # ---- engagement commands -------------------------------------------------------------------
@@ -214,6 +217,8 @@ def main(argv: list[str] | None = None) -> None:
     n.add_argument("--profile")
     n.add_argument("--image")
     n.add_argument("--no-rotate", action="store_true", help="keep the image's password")
+    n.add_argument("--from-registry", action="store_true",
+                   help="macOS: stack on the image's verified registry copy (scripts/publish.sh)")
     n.set_defaults(fn=cmd_new)
     r = sub.add_parser("run")
     r.add_argument("name")

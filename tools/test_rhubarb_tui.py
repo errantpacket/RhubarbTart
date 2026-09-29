@@ -379,8 +379,8 @@ def _test_action_handlers() -> None:
     api.enroll = lambda name, service, org=None: api.EnrollResult(
         name=name, service=service, recorded=False, enrolled_at=None)
     out = enroll.handle(actions.ActionContext(name="work-1", clone=clone,
-                                              params={"service": "perimeter81"}, progress=seen.append))
-    check("enroll.handle (perimeter81 manual) -> ok, no refresh, manual note",
+                                              params={"service": "tailscale"}, progress=seen.append))
+    check("enroll.handle (core reports not recorded) -> ok, no refresh, manual note",
           out.ok and not out.needs_refresh and "manual" in out.summary.lower())
     out = enroll.handle(actions.ActionContext(name="work-1", clone=clone, progress=seen.append))
     check("enroll.handle refuses when no service was chosen", not out.ok and not out.needs_refresh)
@@ -634,7 +634,7 @@ async def _action_prompts() -> None:
         await pilot.pause()
         check("enroll: pressing 'e' on a highlighted clone opens the service SelectScreen",
               isinstance(app.screen, SelectScreen))
-        await pilot.press("down")   # highlight index 1: warp (SERVICES = tailscale, warp, perimeter81)
+        await pilot.press("down")   # highlight index 1: warp (SERVICES = tailscale, warp)
         await pilot.press("enter")
         await pilot.pause()
         check("enroll: choosing warp opens the required team/org InputScreen",

@@ -86,7 +86,7 @@ class Clone:
                       ``"inherited"`` (still shares the image's password).
     password_account: the keychain account holding its password (``name`` or ``image``).
     enrollments:      sorted service names it is enrolled in (subset of tailscale/warp/
-                      perimeter81); empty when none.
+                      warp); empty when none.
     created_at:       ISO-8601 UTC timestamp the record was created.
     engagement:       the engagement id this clone belongs to (its lineage tag), or ``None``
                       for an ad-hoc clone. Holds no secret. Populated from the record.
@@ -223,10 +223,9 @@ class EnrollResult:
     """The result of ``enroll()``.
 
     name:        the clone.
-    service:     the service enrolled — ``"tailscale"`` | ``"warp"`` | ``"perimeter81"``.
-    recorded:    whether the enrollment was written to the clone record. ``False`` for
-                 ``perimeter81`` (manual — the script only prints instructions), ``True``
-                 otherwise.
+    service:     the service enrolled — ``"tailscale"`` | ``"warp"``.
+    recorded:    whether the enrollment was written to the clone record (``True`` for every
+                 current service; kept so a manual-only service can report ``False``).
     enrolled_at: the ISO-8601 UTC timestamp recorded, or ``None`` when not recorded.
     detail:      captured enroll.sh output (status lines / manual instructions), for the
                  caller to surface. No secrets (those move over SSH stdin, never printed).
@@ -704,11 +703,9 @@ def ssh_args(name: str) -> SSHArgs:
 def enroll(name: str, service: str, org: str | None = None) -> EnrollResult:
     """Enroll the clone into a VPN/ZTNA service via ``scripts/enroll.sh``.
 
-    ``service`` is one of ``tailscale`` | ``warp`` | ``perimeter81``; ``org`` is the optional
-    team/organization. The enrollment secret is handled by the core (keychain), never by the
-    caller. On success the enrollment is recorded in the clone's record — except
-    ``perimeter81``, which is manual (the script only prints instructions), so nothing is
-    recorded. Mirrors ``rhubarb enroll``.
+    ``service`` is one of ``tailscale`` | ``warp``; ``org`` is the optional team/organization.
+    The enrollment secret is handled by the core (keychain), never by the caller. On success
+    the enrollment is recorded in the clone's record. Mirrors ``rhubarb enroll``.
 
     Returns an ``EnrollResult``. Raises ``VerifyError`` (unknown/untrusted clone, unknown
     service, or the enrollment script failed) / ``FileNotFoundError`` per the module
@@ -729,9 +726,6 @@ def enroll(name: str, service: str, org: str | None = None) -> EnrollResult:
     if res.returncode != 0:
         reason = next((ln for ln in reversed(out.splitlines()) if ln.strip()), "enroll.sh failed")
         raise VerifyError(f"enrollment failed ({service}): {reason}")
-    if service == "perimeter81":  # P81 is manual; the script only prints instructions
-        return EnrollResult(name=rec["name"], service=service, recorded=False,
-                            enrolled_at=None, detail=out or None)
     ts = _clones.now()
     rec["enrollments"][service] = ts
     _clones.save(rec)

@@ -1,6 +1,6 @@
 ---
 name: rhubarb-profiles
-description: Design, create and customize RhubarbTart guest profiles, i.e. decide what goes into a security-research VM. Covers choosing the OS base (macOS 26, macOS 27, NixOS, Kali), picking tools from the package catalog and which OS each is available on (Chrome, OWASP ZAP, Cloudflare WARP, Tailscale, Perimeter 81), VM size, username, desktop, Rosetta for x86 binaries, Kali metapackages, and validating the profile file. Use this whenever the user wants a new VM or guest for some kind of research or testing, asks what a guest can contain or which OS to pick, wants to change a profile's tools, options or sizes, or wants to copy or compare profiles. For refreshing versions or pins use rhubarb-update-inputs; for building and running use rhubarb-build.
+description: Design, create and customize RhubarbTart guest profiles, i.e. decide what goes into a security-research VM. Covers choosing the OS base (macOS 26, macOS 27, NixOS, Kali), picking tools from the package catalog and which OS each is available on (Chrome, OWASP ZAP, Cloudflare WARP, Tailscale), VM size, username, desktop, Rosetta for x86 binaries, Kali metapackages, and validating the profile file. Use this whenever the user wants a new VM or guest for some kind of research or testing, asks what a guest can contain or which OS to pick, wants to change a profile's tools, options or sizes, or wants to copy or compare profiles. For refreshing versions or pins use rhubarb-update-inputs; for building and running use rhubarb-build.
 ---
 
 # Designing RhubarbTart guest profiles
@@ -32,7 +32,6 @@ Check the live catalog with `ls config/packages/`; each file lists the OS famili
 | `zap` | ✓ | ✓ | ✓ | Kali: from the Kali archive (`zaproxy`) |
 | `warp` | ✓ | ✓ | ✓ | Enrolled per clone with a service token (`enroll.sh … warp --org`) |
 | `tailscale` | ✓ | ✓ | ✓ | macOS: one system-extension approval per clone |
-| `perimeter81` | ✓ | – | – | Tenant installer, placed at exactly `vendor/perimeter81/Perimeter81.pkg`; makes the image private |
 
 A tool that isn't in the catalog needs a trustworthy source first (vendor-signed or
 vendor-hashed). That's a `rhubarb-update-inputs` task (`references/adding-inputs.md`), not
@@ -85,6 +84,6 @@ desktop, is purged and pinned out automatically (#59).
   macOS for testing Apple clients.
 - **VPN/ZTNA needs.** Enrollment is always per clone and at runtime, never baked, so they'll
   need tokens or auth keys in their host keychain (the `rhubarb-build` skill covers `enroll.sh`).
-- **Whether the image will be shared.** Tenant-specific tools (Perimeter 81) mean private
-  registries only.
+- **Whether the image will be shared.** Tools installed from a vendor portal (licensed,
+  tenant-specific installers) mean private registries only.
 - **Sizing.** Kali with `kali-linux-default` plus a desktop wants 80 GB+ of disk and 8 GB+ of RAM.

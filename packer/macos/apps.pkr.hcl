@@ -1,5 +1,5 @@
 # Stage 2 (macOS): clone the vanilla VM, install the profile's locked packages
-# (e.g. Chrome, ZAP, WARP, Tailscale, Perimeter 81), then harden and seal the image.
+# (e.g. Chrome, ZAP, WARP, Tailscale), then harden and seal the image.
 #
 # Inputs come only from the verified stage dir built by `tools/resolve.py verify`;
 # the guest re-verifies hashes and signatures before installing anything.

@@ -33,7 +33,7 @@ USER_RE = re.compile(r"^[a-z][a-z0-9]{2,15}$")
 PROFILE_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")
 ENGAGEMENT_RE = re.compile(r"^[a-z0-9][a-z0-9-]{1,40}$")   # mirrors profiles.ID_RE / engagements ids (no import: stay standalone)
 FAMILIES = {"macos", "nixos", "kali"}
-SERVICES = {"tailscale", "warp", "perimeter81"}
+SERVICES = {"tailscale", "warp"}
 # "engagement" was added after schema 1 shipped: it is OPTIONAL, so records written before it
 # (with no "engagement" key) still load and are treated as engagement=None (see _validate).
 # "base" (#31) is optional too: null for ordinary APFS clones; for a stacked clone pulled from a

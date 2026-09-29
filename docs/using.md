@@ -31,8 +31,9 @@ destructive ones).
 > [!NOTE]
 > `rhubarb` only touches clones it created. It never modifies built images (`rbt-…`) or VMs
 > made some other way, and clone names can't start with `rbt-`. Per-clone rotation needs key
-> SSH (images built with `RHUBARB_SSH_PUBKEYS`, key loaded in `ssh-agent`). Without it the clone
-> keeps the image's password, and `rhubarb list` says `inherited`.
+> SSH (images built with `RHUBARB_SSH_PUBKEYS`, with the key in `ssh-agent` or `RHUBARB_SSH_IDENTITY`
+> pointing at it). Without it the clone keeps the image's password, and `rhubarb list` says
+> `inherited` — an image built with SSH disabled is refused up front with a rebuild hint.
 
 <details>
 <summary><b>Where clone records live, and why</b></summary>

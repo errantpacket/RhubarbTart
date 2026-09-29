@@ -3,10 +3,10 @@
   "profile": "kali-research",
   "family": "kali",
   "base_id": "kali-rolling",
-  "profile_sha256": "87a27eade61d66ed00398ee9271eb47daac6ece5d5b01fe62c503668ccd231e6",
-  "resolved_at": "2026-09-25T18:05:55+00:00",
+  "profile_sha256": "b3431f0cb89313ed16d25f212f4df07f301f1861ffc401d7c2ec5d37314609c1",
+  "resolved_at": "2026-09-29T16:53:46+00:00",
   "resolved_on": {
-    "host_os": "Linux-7.2.6-zen2-1-zen-x86_64-with-glibc2.44"
+    "host_os": "macOS-27.0-arm64-arm-64bit-Mach-O"
   },
   "base": {
     "version": "2026.2",
@@ -17,7 +17,8 @@
       "large": true,
       "hash_sources": [
         "kali-2026.2/SHA256SUMS signed by 827C8569F2518CC677FECA1AED65462EC8D5E4C5"
-      ]
+      ],
+      "size": 3972624384
     }
   },
   "packages": {

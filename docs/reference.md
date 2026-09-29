@@ -33,6 +33,9 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` | Where `rhubarb` keeps clone records and `events.log` |
 | `RHUBARB_SSH_WAIT` | `180` | Seconds each rotation (`new`/`reset`/`engagement provision`) waits for a clone's SSH **per boot attempt** (the boot is retried twice) before keeping the inherited password |
 | `RHUBARB_CACHE` | `./cache` | Downloads, content-addressed as `artifacts/<sha256>/<file>` so builds of the same file name never collide, and per-profile guest stage dirs (`stage/`) |
+| `RHUBARB_REGISTRY` | `127.0.0.1:5780` | `publish.sh`: registry to publish to and verify from. Localhost is plain HTTP; anything else is HTTPS |
+| `RHUBARB_REGISTRY_PORT` | `5780` | `registry.sh`: port of the local zot registry (5000 is macOS's AirPlay Receiver) |
+| `RHUBARB_COSIGN_PUB` | `config/keys/rhubarb-cosign.pub` | `publish.sh verify`: public key to verify against (another publisher's) |
 | `GITHUB_TOKEN` | unset | Optional; avoids GitHub API rate limits while resolving |
 
 ### Requirements
@@ -99,7 +102,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `nix/` | The NixOS system definition (reads the staged profile) |
 | `kali/preseed.cfg.tmpl` | Unattended Kali install (rendered per build, never committed rendered) |
 | `rhubarb` · `tools/rhubarb_cli.py` · `tools/rhubarb/{cli,clones,hostops}.py` | Clone management CLI, record store, tart/keychain/SSH operations |
-| `scripts/` | `build.sh` · `smoke-test.sh` · `ssh.sh` · `enroll.sh` · `env.sh` · `publish.sh` (draft) |
+| `scripts/` | `build.sh` · `smoke-test.sh` · `ssh.sh` · `enroll.sh` · `env.sh` · `registry.sh` (localhost OCI registry) · `signing-key.sh` (cosign key pair) · `publish.sh` (publish + verify signed images) |
 | `.claude/skills/` | Guides for Claude Code sessions (see [Development](development.md)) |
 
 </details>

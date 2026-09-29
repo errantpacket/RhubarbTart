@@ -106,8 +106,12 @@ check "Linux guests never trust unsigned repos" \
   'trusted=yes|allow-unauthenticated|AllowInsecureRepositories|require-sigs[[:space:]]*=[[:space:]]*false' guest nix kali
 check "VPN secrets never baked (no auth keys / service tokens in build code)" \
   'tskey-(auth|client)-[A-Za-z0-9]|auth_client_secret</key><string>[^$%<]' packer guest nix kali config
-check "downloads use curl with --proto =https (no plain http fetches)" \
-  'curl[^#]*http://' "${BUILD_CODE[@]}"
+# Plain http is allowed only to loopback (the localhost-only registry, #32), never the network.
+hits="$(grep -rnE 'curl[^#]*http://' "${BUILD_CODE[@]}" 2>/dev/null \
+  | grep -vE 'http://(127\.0\.0\.1|localhost)[:/"]' || true)"
+if [[ -z "$hits" ]]; then ok "downloads use curl with --proto =https (no plain http fetches; loopback excepted)"
+else bad "downloads use curl with --proto =https (no plain http fetches; loopback excepted)"
+  while IFS= read -r line; do echo "          $line"; done <<<"$hits"; fi
 check "the host-only toolchain is not bypassed with 'source' of the pin file" \
   '(^|[;&|[:space:]])(source|\.)[[:space:]]+[^[:space:]]*toolchain\.env' scripts tools
 # gpg.py alone picks the binary (on macOS: the pinned one bootstrap built, never PATH's).

@@ -221,6 +221,9 @@ def cmd_verify(args) -> None:
         "inputs_sha256": inputs_sha256(lock), "username": prof["username"],
         "cpu": prof["vm"].get("cpu", 4), "memory_gb": prof["vm"].get("memory_gb", 8),
         "disk_gb": prof["vm"].get("disk_gb", 80), "rosetta": bool(prof["options"].get("rosetta")),
+        # ports a package's service listens on (e.g. Juice Shop 3000): the smoke test must reach them
+        "open_ports": " ".join(str(p) for p in sorted({int(p) for v in prof["packages"].values()
+                                                        for p in v.get("ports", [])})),
     }))
 
 

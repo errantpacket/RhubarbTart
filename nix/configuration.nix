@@ -8,6 +8,7 @@
 #   ssh.json          { "from": "<authorized_keys from= pattern>" }
 #   authorized_keys   public keys allowed to SSH in (empty => sshd disabled)
 #   lock.json         the reviewed lock this image was built from (copied into /etc for audit)
+#   artifacts/        staged package files a module builds from (e.g. Juice Shop), hash-checked
 { lib, pkgs, ... }:
 let
   profile = lib.importJSON ./profile.json;
@@ -18,6 +19,7 @@ in
     ./modules/hardening.nix
     ./modules/packages.nix
     ./modules/desktop.nix
+    ./modules/juice-shop.nix
   ];
 
   _module.args.profile = profile;

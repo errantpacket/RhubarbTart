@@ -1,0 +1,16 @@
+{
+  "id": "juiceshop-target",
+  "description": "Lab target: OWASP Juice Shop on NixOS (port 3000); for engagements, not for attacking from",
+  "base": "nixos-26.05",
+  "packages": [
+    "juice-shop"
+  ],
+  "vm": {
+    "cpu": 2,
+    "memory_gb": 4,
+    "disk_gb": 40
+  },
+  "options": {
+    "desktop": "none"
+  }
+}

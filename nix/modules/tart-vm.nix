@@ -33,5 +33,7 @@ in
   # Rosetta runs x86_64 Linux binaries; the share exists only when the VM is started
   # with `tart run --rosetta=rosetta`, so the mount must not block boot without it.
   virtualisation.rosetta.enable = rosetta;
-  fileSystems."/run/rosetta".options = lib.mkIf rosetta [ "nofail" ];
+  # mkIf must wrap the whole entry: on the value alone it still declares "/run/rosetta" (with no
+  # device or fsType) when Rosetta is off, which fails evaluation (first seen with #83).
+  fileSystems = lib.mkIf rosetta { "/run/rosetta".options = [ "nofail" ]; };
 }

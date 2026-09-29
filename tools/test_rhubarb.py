@@ -560,8 +560,19 @@ def test_api_pure() -> None:
           isinstance(cur, str) and bool(IMAGE_RE.match(cur)) and cur.startswith("rbt-kali-research-"))
     check("_current_image is consistent with _profile_of (round-trip)",
           api._profile_of(cur) == "kali-research")
-    check("_current_image: profile with no committed lock (tahoe-research) -> None",
-          api._current_image("tahoe-research") is None)
+    # A throwaway profile that can never have a committed lock (a real profile gains one the
+    # day it's resolved, which silently broke this check once).
+    from rhubarb import profiles as _profiles
+    orig_profiles = _profiles.PROFILES
+    with tempfile.TemporaryDirectory() as d:
+        (Path(d) / "nolock-test.json").write_text(json.dumps(
+            {"id": "nolock-test", "base": "nixos-26.05", "packages": []}))
+        _profiles.PROFILES = Path(d)
+        try:
+            check("_current_image: profile with no committed lock -> None",
+                  api._current_image("nolock-test") is None)
+        finally:
+            _profiles.PROFILES = orig_profiles
     check("_current_image: unknown / invalid profile id -> None",
           api._current_image("no-such-profile") is None)
 

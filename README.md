@@ -2,9 +2,9 @@
 
 # 🍎 RhubarbTart
 
-**Provenance-first, hardened security-research VMs for Apple silicon.**
-<br/>Pick a profile, get a sealed [Tart](https://tart.run) guest whose every input is pinned,
-verified and proven, then work in disposable clones of it.
+**Security-research VMs for Apple silicon, built from verified vendor installers.**
+<br/>Describe a guest in a short profile, build a hardened [Tart](https://tart.run) image from
+pinned and checked inputs, then do your work in disposable copies of it.
 
 ![Apple silicon](https://img.shields.io/badge/host-Apple%20silicon-c9184a)
 ![Guests](https://img.shields.io/badge/guests-macOS%2026%20·%20macOS%2027%20·%20NixOS%20·%20Kali-c9184a)
@@ -17,87 +17,86 @@ verified and proven, then work in disposable clones of it.
 
 ## Why RhubarbTart
 
-**A security result is only as trustworthy as the machine it came from.** Research VMs usually
-start from someone else's snapshot and drift from there. You can't say what was really on the
-box, you can't reproduce a finding a month later, and one job's contamination (or one client's
-data) can leak into the next.
+Research VMs are often built from a snapshot someone else made, then changed over time. After a
+while it's hard to say what software the machine contained, to reproduce a result on the same
+setup, or to be sure nothing from one job carried over into the next.
 
-RhubarbTart removes that doubt:
+RhubarbTart is built to answer those questions:
 
 | | |
 |---|---|
-| 🧾 **Known inputs** | Guests start from the OS vendor's own installer. Every download is pinned by hash, checked against the vendor's signature where one exists, and verified twice: on the host, then again inside the guest |
-| 🔬 **Proven, not assumed** | An image only gets its final name after a throwaway copy has passed a hardening check from the outside |
-| 🧱 **Hardened by default** | No default passwords, no auto-login, no passwordless sudo for users ([one scoped Kali exception](docs/trust-model.md)), key-only SSH or none, firewall on, no shared machine or VPN identity |
-| 🔐 **Secrets stay yours** | Passwords live in your macOS keychain, every clone gets its own, and VPN enrollment happens per clone, never baked in |
-| 🧩 **Configurable** | A guest is a small JSON profile: OS + tools + options. No code needed |
+| **Verified inputs** | Each guest starts from the OS vendor's own installer. Every download is pinned by its hash, checked against the vendor's signature where one exists, and checked again inside the guest before it's installed |
+| **Tested before use** | A new image only gets its final name after a temporary copy of it passes a set of security checks run from outside the VM |
+| **Hardened defaults** | No default passwords, no automatic login, no password-free `sudo` for users ([one narrow Kali exception](docs/trust-model.md)), SSH by key only or not at all, firewall on, and no machine or VPN identity shared between copies |
+| **Secrets on the host** | Passwords are stored in your macOS keychain. Every copy gets its own password, and VPN sign-in happens per copy, never inside the image |
+| **Configured in JSON** | A guest is defined by a short profile: an OS, a list of tools and a few options |
 
 ## How it fits together
 
-Four words carry most of the design:
+There are four main parts:
 
 > **Profile** → **Lock** → **Image** → **Clone**
 
-1. A **profile** says what you want: an OS and a list of tools.
-2. **Resolving** it produces a **lock**: the exact version, download URL and hash of every
-   **input** (each installer and package). You review the lock like code and commit it.
-3. **Building** turns the lock into a hardened **image**. The image is proven from the outside,
-   then kept as a template that is never booted.
-4. You **work in clones** of the image: disposable copies, each with its own password. Delete a
-   clone when you're done; the next one starts identical.
+1. A **profile** describes the guest you want: an OS and a list of tools.
+2. **Resolving** the profile produces a **lock** file. It lists the exact version, download URL
+   and hash of every **input** (each installer and package). You review the lock and commit it,
+   like code.
+3. **Building** installs everything the lock lists into a hardened **image**. The image is tested
+   from the outside, then kept as a template and never started.
+4. You **work in a clone** of the image: a disposable copy with its own password. When you're
+   done, delete the clone. The next clone starts from the same state.
 
-The image's name is derived from its inputs (`rbt-<profile>-<hash>`), so the same lock always
-means the same image, and a record of exactly what went into it is kept alongside.
+An image's name is derived from its inputs (`rbt-<profile>-<hash>`), so the same lock always gives
+the same image name. A record of what went into each image is saved next to it.
 
 > [!TIP]
-> New here? **[Key concepts](docs/concepts.md)** explains every term in plain language, including
-> the build steps (vanilla VM, seal, smoke test, provenance) and optional extras like
-> **stacked clones**.
+> New to the terms? **[Key concepts](docs/concepts.md)** explains each one, including the build
+> steps (vanilla VM, seal, smoke test, provenance) and optional features such as **stacked
+> clones**.
 
 ## What it's for
 
-The pattern is always the same: build a hardened guest whose contents you can prove, work in a
-**throwaway clone**, delete it when done.
+Each use follows the same steps: build a hardened guest with known contents, work in a
+**disposable clone**, and delete the clone afterwards.
 
 <details>
-<summary><b>macOS / iOS / Apple-app penetration testing</b></summary>
+<summary><b>macOS, iOS and Apple-app penetration testing</b></summary>
 
-Assessing a macOS app, an iOS app and its backend, or an Apple-ecosystem service needs a clean
-Apple environment you can trust and repeat. RhubarbTart gives you a hardened **macOS** guest with
-your tooling (Chrome, ZAP, a VPN/ZTNA agent) pinned and verified: no drift from a colleague's
-snapshot, no mystery software. Because each image's provenance is recorded and each clone is
-isolated and disposable, findings are **attributable and reproducible**. You can state exactly
-what the box contained, re-run from an identical base, and never carry one client's state into
+Testing a macOS app, an iOS app and its backend, or an Apple service needs a clean Apple
+environment that you can set up the same way each time. RhubarbTart builds a hardened **macOS**
+guest with your tools (Chrome, ZAP, a VPN or ZTNA client) pinned and verified. Each image's
+contents are recorded and each clone is separate and disposable, so you can state what the
+machine contained, repeat a test from the same starting point, and keep one client's data out of
 the next engagement.
 
-The macOS guest is the *workbench* for Apple work (simulators, intercepting proxies, static and
-dynamic tooling). It isn't an iOS VM; Tart runs macOS and Linux guests.
+The macOS guest is a workstation for Apple work, such as simulators, intercepting proxies and
+analysis tools. It isn't an iOS VM: Tart runs macOS and Linux guests.
 
 </details>
 
 <details>
-<summary><b>Ephemeral boxes for research and malware analysis</b></summary>
+<summary><b>Disposable machines for research and malware analysis</b></summary>
 
-Detonating a sample or probing something hostile needs a box you can trust *before* the run and
-discard *after* it. Clone the verified image, do the work in the clone, delete it. The image
-itself never boots, so it can't be contaminated, and the next analysis starts from the same
-**known-clean** state. Because the provenance is recorded, anything present that *wasn't* in the
-image is the sample's doing, not leftover tooling.
+Running a malware sample or examining something hostile calls for a machine you can trust before
+the run and throw away after it. Clone the image, do the work in the clone, then delete it. The
+image itself is never started, so it can't be infected, and the next analysis starts from the same
+clean state. Because the image's contents are recorded, anything you find that wasn't in the
+image came from the sample, not from leftover tools.
 
-NixOS and Kali give a fully pinned Linux analysis box; macOS guests let you study Mac-targeted
-samples on the platform they target. Per-clone network isolation is on the roadmap
+NixOS and Kali give you a fully pinned Linux machine for analysis. macOS guests let you study
+Mac malware on the platform it targets. Network isolation between clones is planned
 ([#30](https://github.com/errantpacket/RhubarbTart/issues/30)).
 
 </details>
 
 <details>
-<summary><b>Where this is heading: agent-driven engagements</b></summary>
+<summary><b>Where the project is going: agent-driven engagements</b></summary>
 
-The goal is to run agents through a management interface (herdr) for scoped research, pentests
-and CTFs inside these VMs, capturing evidence to a secure per-engagement vault outside them. A
-verified, disposable guest is the unit that builds on. Today you can already stand up and tear
-down a whole scoped set of clones as an [engagement](docs/using.md#engagements). See
-[`docs/PLAN.md`](docs/PLAN.md).
+The longer-term goal is to run AI agents through a management interface (herdr) for scoped
+research, penetration tests and CTFs inside these VMs, with evidence saved to a separate store
+outside them. A verified, disposable guest is the building block for that. You can already
+create and remove a whole set of clones for one scope as an
+[engagement](docs/using.md#engagements). See [`docs/PLAN.md`](docs/PLAN.md) for the plan.
 
 </details>
 
@@ -106,50 +105,53 @@ down a whole scoped set of clones as an [engagement](docs/using.md#engagements).
 On an Apple silicon Mac running macOS 26 or later:
 
 ```sh
-# 1. Install the pinned toolchain into ./.toolchain (no Homebrew, no sudo)
+# 1. Install the pinned tools into ./.toolchain (no Homebrew, no sudo)
 ./tools/bootstrap.sh && source scripts/env.sh && uv run tools/resolve.py preflight
 
-# 2. Resolve a guest's inputs into its lock file, then review it
+# 2. Resolve a guest's inputs into its lock file, then review the changes
 uv run tools/resolve.py resolve kali-research && git diff locks/
 
-# 3. Build, harden, seal and prove the image (the SSH key is optional: no key = no SSH)
+# 3. Build and test the image (the SSH key is optional; without one, SSH is disabled)
 ssh-add ~/.ssh/id_ed25519
 RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
 
-# 4. Work in a clone, never in the image itself
+# 4. Make a clone and start it; don't use the image directly
 ./rhubarb new web-1 --profile kali-research && ./rhubarb run web-1
 ```
 
 <details>
 <summary><b>What each step does</b></summary>
 
-1. **Bootstrap** downloads Tart, Packer and its Tart plugin, uv, zot and cosign, and builds GnuPG from source, each
-   checked against a pinned hash, into the repo-local `.toolchain/`. `preflight` confirms the
-   right versions are the ones on your `PATH`. It needs the Xcode Command Line Tools.
-2. **Resolve** finds the newest versions of the profile's inputs, verifies them, and writes
-   `locks/kali-research.lock.json`. The four bundled profiles already have committed locks, so
-   you can skip this step until you want newer versions.
-3. **Build** installs the OS from the vendor's installer, adds the tools, **seals** the guest
-   (hardening plus checks that the hardening holds), then smoke-tests a throwaway copy from the
-   outside. Only then does the image get its final name. It's a full OS install, so expect tens
-   of minutes; run it in a spare terminal. `./scripts/build.sh --list` shows every profile.
-4. **`rhubarb new`** makes a disposable clone and gives it its own password (kept in your
-   keychain). `rhubarb run` starts it. See [Using your VMs](docs/using.md) for `ssh`, `enroll`,
-   `reset`, `rm` and the `./rhubarb-tui` dashboard.
+1. **Bootstrap** downloads Tart, Packer and its Tart plugin, uv, zot and cosign, and builds GnuPG
+   from source. Each is checked against a pinned hash and installed into the repository's own
+   `.toolchain/` folder. `preflight` then confirms that these are the versions on your `PATH`.
+   Building GnuPG needs the Xcode Command Line Tools.
+2. **Resolve** looks up the newest versions of the profile's inputs, verifies them, and writes
+   `locks/kali-research.lock.json`. The four included profiles already have committed locks, so
+   you only need this step when you want newer versions.
+3. **Build** installs the OS from the vendor's installer, adds the tools, and **seals** the guest:
+   it applies the hardening and checks that each setting took effect. It then starts a temporary
+   copy and tests it from the outside. Only if those tests pass does the image get its final name.
+   A build is a full OS install and can take 15 to 45 minutes, so run it in a separate terminal.
+   `./scripts/build.sh --list` lists the available profiles.
+4. **`rhubarb new`** creates a clone and sets its own password, which is stored in your keychain.
+   `rhubarb run` starts it. [Using your VMs](docs/using.md) covers `ssh`, `enroll`, `reset`, `rm`
+   and the `./rhubarb-tui` dashboard.
 
 </details>
 
 ## Choose a guest
 
-| Profile | OS | Tools | Good for |
+| Profile | OS | Tools | Suited to |
 |---|---|---|---|
-| `tahoe-research` | macOS 26 | Chrome, ZAP, WARP, Tailscale | macOS client and app testing on any macOS 26+ host |
-| `goldengate-research` | macOS 27 | Chrome, ZAP, WARP, Tailscale | The latest macOS; **needs a macOS 27 host** |
-| `nixos-research` | NixOS 26.05 | Chrome, ZAP, WARP, Tailscale · XFCE · Rosetta | Maximum reproducibility: the whole OS is pinned to one commit |
-| `kali-research` | Kali rolling | Chrome, ZAP, WARP, Tailscale · `kali-linux-default` · XFCE · Rosetta | Batteries-included offensive tooling |
+| `tahoe-research` | macOS 26 | Chrome, ZAP, WARP, Tailscale | macOS app and client testing on any macOS 26 or newer host |
+| `goldengate-research` | macOS 27 | Chrome, ZAP, WARP, Tailscale | The current macOS release; **needs a macOS 27 host** |
+| `nixos-research` | NixOS 26.05 | Chrome, ZAP, WARP, Tailscale · XFCE · Rosetta | The most reproducible option: the whole OS is pinned to a single commit |
+| `kali-research` | Kali rolling | Chrome, ZAP, WARP, Tailscale · `kali-linux-default` · XFCE · Rosetta | Kali's standard set of security tools |
 
-Guests are arm64 (Tart runs native guests on Apple silicon). Linux profiles with Rosetta can
-still run x86_64 Linux binaries. Want something else? [Define your own guest](docs/profiles.md).
+All guests are arm64, because Tart runs native guests on Apple silicon. Linux profiles with
+Rosetta enabled can still run x86_64 Linux programs. If none of these fit, you can
+[define your own guest](docs/profiles.md).
 
 <details>
 <summary><b>Which one should I pick?</b></summary>
@@ -178,36 +180,37 @@ flowchart TD
 
 ## Documentation
 
-| Page | Read it when you want to… |
+| Page | Covers |
 |---|---|
-| **[Key concepts](docs/concepts.md)** | understand the vocabulary: profile, input, lock, image, clone, seal, provenance, stacked clone |
-| **[How it works](docs/how-it-works.md)** | see the Define → Resolve → Build → Prove pipeline end to end |
-| **[Using your VMs](docs/using.md)** | work with clones: `rhubarb` CLI and TUI, SSH, VPN/ZTNA enrollment, engagements |
-| **[Define your own guest](docs/profiles.md)** | write a profile: the format, which tools exist per OS, validation rules |
-| **[Trust model and security posture](docs/trust-model.md)** | know exactly what's verified how, and which hardening each OS asserts and proves |
-| **[Publishing and stacked clones](docs/publishing.md)** | sign and publish images to a registry, and make stacked macOS clones from them |
-| **[Reference](docs/reference.md)** | keep inputs fresh, set configuration variables, check host requirements and the toolchain |
-| **[Development](docs/development.md)** | change the code safely: `check.sh`, off-Mac validation, the project's Claude Code skills |
+| **[Key concepts](docs/concepts.md)** | The terms used throughout: profile, input, lock, image, clone, seal, provenance, stacked clone |
+| **[How it works](docs/how-it-works.md)** | The four build stages (Define, Resolve, Build, Prove) from start to finish |
+| **[Using your VMs](docs/using.md)** | Working with clones: the `rhubarb` CLI and dashboard, SSH, VPN sign-in, engagements |
+| **[Define your own guest](docs/profiles.md)** | Writing a profile: the format, which tools each OS supports, validation rules |
+| **[Trust model and security posture](docs/trust-model.md)** | How each input is verified, and which security settings each OS applies and tests |
+| **[Publishing and stacked clones](docs/publishing.md)** | Signing and publishing images to a registry, and making stacked macOS clones from them |
+| **[Reference](docs/reference.md)** | Updating inputs, configuration variables, host requirements and the toolchain |
+| **[Development](docs/development.md)** | Changing the code safely: `check.sh`, testing without a Mac, the Claude Code skills |
 
-Direction and roadmap: [`docs/PLAN.md`](docs/PLAN.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md).
-Security issues: [`SECURITY.md`](SECURITY.md).
+Roadmap: [`docs/PLAN.md`](docs/PLAN.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Reporting security issues: [`SECURITY.md`](SECURITY.md).
 
 ## Open issues
 
-Everything still open is tracked in the [issue tracker](https://github.com/errantpacket/RhubarbTart/issues):
+Open work is tracked in the [issue tracker](https://github.com/errantpacket/RhubarbTart/issues):
 
-| | Issue |
+| Type | Issue |
 |---|---|
-| 🐞 **Bug** | [#63](https://github.com/errantpacket/RhubarbTart/issues/63) macOS 26 builds: the automated Setup Assistant step occasionally misses and the build times out (a rerun passes) |
-| ✨ **Enhancement** | [#30](https://github.com/errantpacket/RhubarbTart/issues/30) Network isolation between clones (`--net-softnet`) |
-| ✨ **Enhancement** | [#74](https://github.com/errantpacket/RhubarbTart/issues/74) Publishing to remote registries that require a login |
-| ⏸️ **On hold** | [#28](https://github.com/errantpacket/RhubarbTart/issues/28) A standard (non-admin) daily-use account; design options are in the issue |
-| 🧭 **Roadmap** | [#33](https://github.com/errantpacket/RhubarbTart/issues/33) The `herdr` agent-platform service · [#37](https://github.com/errantpacket/RhubarbTart/issues/37) A published docs site |
-| 📝 **Decision** | [#34](https://github.com/errantpacket/RhubarbTart/issues/34) Choose a license |
+| Bug | [#63](https://github.com/errantpacket/RhubarbTart/issues/63) macOS 26 builds: the automated Setup Assistant step sometimes fails and the build times out; running it again usually works |
+| Enhancement | [#30](https://github.com/errantpacket/RhubarbTart/issues/30) Network isolation between clones (`--net-softnet`) |
+| Enhancement | [#74](https://github.com/errantpacket/RhubarbTart/issues/74) Publishing to remote registries that require a login |
+| On hold | [#28](https://github.com/errantpacket/RhubarbTart/issues/28) A standard (non-admin) account for daily use; the design options are in the issue |
+| Roadmap | [#33](https://github.com/errantpacket/RhubarbTart/issues/33) The `herdr` agent management service |
+| Roadmap | [#37](https://github.com/errantpacket/RhubarbTart/issues/37) A published documentation site |
+| Decision | [#34](https://github.com/errantpacket/RhubarbTart/issues/34) Choose a license |
 
 ---
 
 <div align="center">
 <sub>Setup Assistant automation adapted from <a href="https://github.com/cirruslabs/macos-image-templates">cirruslabs/macos-image-templates</a> ·
-VMs by <a href="https://github.com/openai/tart">Tart</a> · built with Packer, uv, Nix and a healthy distrust of <code>latest</code>.</sub>
+VMs run on <a href="https://github.com/openai/tart">Tart</a> · built with Packer, uv and Nix.</sub>
 </div>

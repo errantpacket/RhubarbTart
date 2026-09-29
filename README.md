@@ -8,6 +8,13 @@ you need. RhubarbTart downloads the vendor installers, checks each one against a
 where there is one, the vendor's signature, and builds a hardened [Tart](https://tart.run) VM image from them. Before
 the image is used, a temporary copy of it is tested from outside the VM. You then work in
 disposable clones of the image, each with its own password, and delete them when you're done.
+<br/><br/>It's meant for security work where you need to know what was on the machine. When testing
+macOS or iOS apps and their backends, you can state what the test machine contained and repeat a
+test from the same starting point. When analysing malware, you run the sample in a clone and delete
+it afterwards, so the next analysis starts clean and anything that wasn't in the image points to the sample. For
+client work, each engagement gets its own clones, so one client's data doesn't carry over to the
+next. The same setup is intended as the base for running AI agents on scoped research, penetration
+tests and CTFs (planned).
 
 ![Apple silicon](https://img.shields.io/badge/host-Apple%20silicon-c9184a)
 ![Guests](https://img.shields.io/badge/guests-macOS%2026%20·%20macOS%2027%20·%20NixOS%20·%20Kali-c9184a)

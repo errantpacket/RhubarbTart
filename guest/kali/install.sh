@@ -53,7 +53,19 @@ Package: kali-grant-root
 Pin: version *
 Pin-Priority: -1
 EOF
-if dpkg -s kali-grant-root >/dev/null 2>&1; then apt-get purge -y -q kali-grant-root; fi
+if dpkg -s kali-grant-root >/dev/null 2>&1; then
+  # apt 3's solver won't cascade-remove the manually installed metapackages that depend on it,
+  # so purge them explicitly. Mark what they pulled in as manual first: the desktop itself must
+  # survive a later `apt autoremove` in a clone.
+  metas=(kali-desktop-xfce kali-desktop-core)
+  keep=()
+  while IFS= read -r p; do keep+=("$p"); done < <(
+    apt-cache depends --installed --no-suggests --no-conflicts --no-breaks --no-replaces --no-enhances "${metas[@]}" \
+      | awk '/^ +(PreDepends|Depends|Recommends): [^<]/ {print $2}' \
+      | grep -vxF -e kali-grant-root -e kali-desktop-core -e kali-desktop-xfce | sort -u)
+  if ((${#keep[@]})); then apt-mark manual "${keep[@]}" >/dev/null; fi
+  apt-get purge -y -q kali-grant-root "${metas[@]}"
+fi
 
 if [[ "$(opt rosetta)" == true ]]; then
   say "enabling Rosetta for x86_64 binaries (needs: tart run --rosetta=rosetta)"

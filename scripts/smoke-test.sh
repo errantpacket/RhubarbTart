@@ -4,6 +4,7 @@
 #
 #   RHUBARB_FAMILY=macos|nixos|kali RHUBARB_SSH_ENABLED=1|0 ./scripts/smoke-test.sh <vm>
 #   (scripts/build.sh sets these; RHUBARB_USER and RHUBARB_ROSETTA=true are optional)
+#   RHUBARB_OPEN_PORTS="3000 8080" (optional): ports a package's service declares; each must be reachable
 #
 # With SSH enabled, the private key for one of the authorized keys must be
 # available to ssh (agent or default identity).
@@ -116,6 +117,15 @@ else
   port_open 22 && fail "SSH reachable but should be disabled"
   log "ok: SSH disabled"
 fi
+
+# Ports a package's service declares (e.g. Juice Shop on 3000) must answer from outside.
+# Services such as Node can take a little while after boot.
+for p in ${RHUBARB_OPEN_PORTS:-}; do
+  [[ "$p" =~ ^[0-9]{1,5}$ ]] || fail "bad RHUBARB_OPEN_PORTS entry '$p'"
+  for _ in $(seq 1 60); do port_open "$p" && break; sleep 3; done
+  port_open "$p" || fail "declared service port $p not reachable"
+  log "ok: declared service port $p reachable"
+done
 
 port_open 5900 && fail "Screen Sharing (5900) reachable"
 log "ok: Screen Sharing not reachable"

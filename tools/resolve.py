@@ -198,6 +198,23 @@ def cmd_verify(args) -> None:
     }))
 
 
+def ssh_record(keys_file: str | None, ssh_from: str) -> dict:
+    """What SSH access the image was sealed with. Without it a key-less build (SSH disabled,
+    smoke test asserting port 22 *closed*) is indistinguishable from a working one (#46)."""
+    lines = []
+    if keys_file and Path(keys_file).is_file():
+        lines = [ln for ln in Path(keys_file).read_text().splitlines()
+                 if ln.strip() and not ln.lstrip().startswith("#")]
+    fps = []
+    for ln in lines:
+        res = subprocess.run(["ssh-keygen", "-lf", "/dev/stdin"], input=ln + "\n",
+                             capture_output=True, text=True)
+        if res.returncode != 0:
+            raise VerifyError(f"cannot fingerprint authorized key: {ln[:40]}…")
+        fps.append(res.stdout.split()[1])  # "256 SHA256:... comment (ED25519)"
+    return {"enabled": bool(fps), "key_fingerprints": fps, "from": ssh_from if fps else ""}
+
+
 def cmd_provenance(args) -> None:
     prof = load_profile(args.profile)
     lock = load_lock(prof)
@@ -217,6 +234,7 @@ def cmd_provenance(args) -> None:
         "lock_sha256": sha256_file(lock_path(prof["id"])),
         "lock": lock,
         "build_files": {str(p.relative_to(ROOT)): sha256_file(p) for p in tracked},
+        "ssh": ssh_record(args.ssh_keys, args.ssh_from),
     }
     out = ROOT / "out" / f"{args.vm}.provenance.json"
     out.parent.mkdir(exist_ok=True)
@@ -242,6 +260,9 @@ def main() -> None:
     pv = sub.add_parser("provenance")
     pv.add_argument("profile")
     pv.add_argument("vm")
+    pv.add_argument("--ssh-keys", metavar="FILE",
+                    help="the authorized_keys baked into the image (empty/absent => SSH disabled)")
+    pv.add_argument("--ssh-from", default="", help="the authorized_keys from= pattern used")
     pv.set_defaults(fn=cmd_provenance)
     sub.add_parser("preflight").set_defaults(fn=cmd_preflight)
     tp = sub.add_parser("toolchain-pin")

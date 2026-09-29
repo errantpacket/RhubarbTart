@@ -191,10 +191,25 @@ def random_password(n: int = 32) -> str:
 # ---- ssh ------------------------------------------------------------------------------------
 
 def ssh_args(name: str, username: str, ip: str, batch: bool = True) -> list[str]:
-    """Host key pinned per VM *name* (DHCP reuses IPs), trust-on-first-use, no forwarding."""
-    return ["ssh", "-o", f"HostKeyAlias={name}", "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
+    """Host key pinned per VM *name* (DHCP reuses IPs), trust-on-first-use, no forwarding.
+
+    ``-F /dev/null``: the operator's ~/.ssh/config (Host *, ProxyJump, IdentityFile, …) must not
+    change how we reach a clone. Keys come from the agent and the default ~/.ssh/id_* files, or
+    only from ``RHUBARB_SSH_IDENTITY`` when that is set.
+    """
+    ident = os.environ.get("RHUBARB_SSH_IDENTITY")
+    return ["ssh", "-F", "/dev/null", "-o", f"HostKeyAlias={name}",
+            "-o", f"UserKnownHostsFile={KNOWN_HOSTS}",
             "-o", "StrictHostKeyChecking=accept-new", "-o", "ForwardAgent=no", "-o", "ForwardX11=no",
+            *(["-i", ident, "-o", "IdentitiesOnly=yes"] if ident else []),
             "-o", "ConnectTimeout=10", *(["-o", "BatchMode=yes"] if batch else []), f"{username}@{ip}"]
+
+
+# ssh stderr while the guest is still booting (sshd not up yet, stealth firewall, stale lease).
+# Anything else from a failed ssh is a client-side problem that waiting won't fix.
+_SSH_TRANSIENT = ("Connection refused", "timed out", "No route to host", "Host is down",
+                  "Network is unreachable", "Connection reset", "Connection closed",
+                  "kex_exchange_identification", "banner exchange")
 
 
 def forget_host_key(name: str) -> None:
@@ -205,6 +220,10 @@ def forget_host_key(name: str) -> None:
 def wait_for_ssh(name: str, username: str, ip: str, timeout: int | None = None,
                  progress=None) -> str:
     """'ok' | 'denied' (reachable, but our key isn't accepted: final) | 'unreachable'.
+
+    Raises ``VerifyError`` with ssh's own message on a client-side failure (bad identity or
+    SK provider, host key mismatch, config error): retrying can't fix those, and reporting
+    them as 'unreachable' after the full wait sends the operator after a healthy guest. (#46)
 
     ``progress`` (optional callable): emits a "waiting for SSH … Ns/Ms" line every ~20s so a
     long wait (a slow macOS first-boot clone) isn't a silent stall.
@@ -219,6 +238,9 @@ def wait_for_ssh(name: str, username: str, ip: str, timeout: int | None = None,
             return "ok"
         if "Permission denied" in res.stderr:
             return "denied"
+        if not any(t in res.stderr for t in _SSH_TRANSIENT):
+            detail = res.stderr.strip().splitlines()[-1:] or [f"ssh exited {res.returncode}"]
+            raise VerifyError(f"{name}: ssh failed on the host side, not waiting for it: {detail[0]}")
         elapsed = int(time.time() - start)
         if progress and elapsed - ticked >= 20:
             ticked = elapsed

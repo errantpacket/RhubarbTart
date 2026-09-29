@@ -182,6 +182,7 @@ tart rename "$CANDIDATE" "$VM"
 keychain_put "$VM" "$PKR_VAR_password"
 unset PKR_VAR_password PKR_VAR_bootstrap_password
 
-record="$(uv run --quiet tools/resolve.py provenance "$PROFILE" "$VM")"
+record="$(uv run --quiet tools/resolve.py provenance "$PROFILE" "$VM" \
+  --ssh-keys "$AUTH_KEYS" --ssh-from "$SSH_FROM")"
 log "done: $VM"
 log "provenance: $record"

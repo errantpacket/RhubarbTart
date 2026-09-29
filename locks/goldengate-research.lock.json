@@ -4,18 +4,18 @@
   "family": "macos",
   "base_id": "macos-27",
   "profile_sha256": "a8136827e47946aa5859739a00274a2d161b0667765b86225d3d8188a993682a",
-  "resolved_at": "2026-09-26T15:41:00+00:00",
+  "resolved_at": "2026-09-29T20:22:49+00:00",
   "resolved_on": {
     "host_os": "macOS-27.0-arm64-arm-64bit-Mach-O"
   },
   "base": {
-    "version": "27.0",
-    "build": "26A428",
+    "version": "27.0.1",
+    "build": "26A434",
     "image": {
-      "url": "https://updates.cdn-apple.com/2026FallFCS/afcfc88e-bbe6-44bf-a5da-07c56eebc06c/UniversalMac_27.0_26A428_Restore.ipsw",
-      "file": "UniversalMac_27.0_26A428_Restore.ipsw",
-      "sha256": "2a5d3c695d501022b7fad9adaffcf2627bcb867d993fb5662dcd41bac99a2836",
-      "size": 26626436228,
+      "url": "https://updates.cdn-apple.com/2026FallFCS/59241290-5d51-4ca8-9df4-31624b9a4eac/UniversalMac_27.0.1_26A434_Restore.ipsw",
+      "file": "UniversalMac_27.0.1_26A434_Restore.ipsw",
+      "sha256": "2f016638293c3e641b8b25391a76fbc16563b3711915a5551cf8aa0f5598a5c1",
+      "size": 26637307067,
       "large": true,
       "hash_sources": [
         "apple-cdn:x-amz-meta-digest-sha256",
@@ -27,19 +27,19 @@
     "chrome": {
       "url": "https://dl.google.com/dl/chrome/mac/universal/stable/gcem/GoogleChrome.pkg",
       "file": "GoogleChrome.pkg",
-      "sha256": "81fb269b937fae2f3da79a07a05d52e616b05c132e452f289e605f94c1a68b26",
+      "sha256": "815037cf44f62959ab1490509f12750823ebea4310677034d684806b651f273f",
       "advertised_version": "155.0.8059.12",
       "hash_sources": [
         "tofu:downloaded"
       ],
       "kind": "pkg",
-      "size": 264589035,
+      "size": 264543182,
       "signature": {
         "signer": "Developer ID Installer: Google LLC (EQHXZ8M8AV)",
         "team_id": "EQHXZ8M8AV",
         "notarized": true
       },
-      "version": "154.0.8037.58"
+      "version": "154.0.8037.93"
     },
     "zap": {
       "version": "2.17.0",

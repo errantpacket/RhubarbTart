@@ -30,6 +30,7 @@ See docs/INTERFACE-PLAN.md, Stage A.
 """
 
 import json
+import os
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -78,8 +79,9 @@ class Clone:
     state:            the live Tart state (e.g. ``"running"``/``"stopped"``), or
                       ``"MISSING"`` when no such VM exists on this host.
     freshness:        ``"current"`` (image is what the profile's lock now produces),
-                      ``"outdated"`` (a newer image exists), or ``"image-deleted"``
-                      (the lineage image is no longer present locally).
+                      ``"outdated"`` (a newer image exists), ``"image-deleted"``
+                      (the lineage image is no longer present locally), or, for a stacked
+                      clone, ``"base-missing"`` (its registry base blob is gone; it won't boot).
     password_mode:    ``"unique"`` (its own keychain password, account == ``name``) or
                       ``"inherited"`` (still shares the image's password).
     password_account: the keychain account holding its password (``name`` or ``image``).
@@ -88,6 +90,8 @@ class Clone:
     created_at:       ISO-8601 UTC timestamp the record was created.
     engagement:       the engagement id this clone belongs to (its lineage tag), or ``None``
                       for an ad-hoc clone. Holds no secret. Populated from the record.
+    base_ref:         for a stacked clone (#31), the registry ``ref@digest`` it is stacked
+                      on; ``None`` for an ordinary APFS clone.
     """
 
     name: str
@@ -101,6 +105,7 @@ class Clone:
     enrollments: list[str]
     created_at: str
     engagement: str | None = None
+    base_ref: str | None = None
 
 
 @dataclass(frozen=True)
@@ -242,11 +247,14 @@ class RemoveResult:
     image:            the ``rbt-...`` image it had been cloned from (its lineage).
     keychain_deleted: whether a per-clone keychain entry was deleted (only when the clone
                       had its own unique password, i.e. account == ``name``).
+    base_released:    for a stacked clone (#31): whether its pulled registry base was dropped
+                      because no other clone uses it. Always ``False`` for ordinary clones.
     """
 
     name: str
     image: str
     keychain_deleted: bool
+    base_released: bool = False
 
 
 @dataclass(frozen=True)
@@ -393,18 +401,107 @@ def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | 
     return False, note
 
 
+# ---- registry-backed stacked clones (#31) ----------------------------------------------
+# Tart can stack a clone on an immutable base pulled from a registry, but only for macOS images.
+# The base disk lands in Tart's content store; the clone's overlay depends on that blob, which
+# `tart list` stops showing once the OCI entry is pruned, so its digest is recorded and checked.
+TART_CONTENT = hostops.VMS_DIR.parent / "cache" / "content" / "sha256"
+_DISK_DIGEST_KEY = "org.cirruslabs.tart.disk-file-content-digest"
+
+
+def _published_ref(image: str) -> tuple[str, str]:
+    """(ref@digest, registry) this host published ``image`` as (scripts/publish.sh)."""
+    path = ROOT / "out" / f"{image}.published.json"
+    try:
+        rec = json.loads(path.read_text())
+    except FileNotFoundError:
+        raise VerifyError(f"{image} is not published; run ./scripts/publish.sh publish {image}") from None
+    except json.JSONDecodeError as e:
+        raise VerifyError(f"{path.name}: malformed publication record ({e})") from None
+    ref, registry = str(rec.get("ref", "")), str(rec.get("registry", ""))
+    if rec.get("image") != image or not _clones.BASE_REF_RE.match(ref) or not ref.startswith(f"{registry}/"):
+        raise VerifyError(f"{path.name}: malformed publication record")
+    return ref, registry
+
+
+def _verify_published(ref: str, registry: str) -> None:
+    """Signature + provenance attestation against the committed key, via the same
+    ``publish.sh verify`` path consumers use (cosign egress pinned to the registry)."""
+    res = subprocess.run([str(ROOT / "scripts" / "publish.sh"), "verify", ref], capture_output=True,
+                         text=True, env={**os.environ, "RHUBARB_REGISTRY": registry})
+    if res.returncode != 0:
+        why = (res.stderr.strip().splitlines() or ["verification failed"])[-1]
+        raise VerifyError(f"registry image failed verification, not cloning: {why}")
+
+
+def _stacked_disk_digest(name: str) -> str:
+    """The base disk blob a stacked clone's overlay depends on (from its OCI manifest)."""
+    try:
+        manifest = json.loads((hostops.VMS_DIR / name / "manifest.json").read_text())
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        raise VerifyError(f"{name}: stacked clone has no readable manifest ({e})") from None
+    digests = {(layer.get("annotations") or {}).get(_DISK_DIGEST_KEY) for layer in manifest.get("layers", [])}
+    digests.discard(None)
+    if len(digests) != 1 or not _clones.DIGEST_RE.match(next(iter(digests))):
+        raise VerifyError(f"{name}: cannot tell which base disk the stacked clone uses ({sorted(digests)})")
+    return digests.pop()
+
+
+def base_present(rec: dict) -> bool:
+    """False only for a stacked clone whose base blob is gone from Tart's content store."""
+    base = rec.get("base")
+    return base is None or (TART_CONTENT / base["disk_digest"].removeprefix("sha256:")).is_file()
+
+
+def _release_base(base: dict, removed: str) -> bool:
+    """After the last stacked clone on ``base`` is removed, drop the pulled base (Tart's OCI
+    entry + the content blob) so it doesn't linger invisibly (26 GB for a macOS image).
+    Returns whether it was released; keeps it while any record or VM still references it."""
+    recs, _problems = _clones.all_records()
+    if any((r.get("base") or {}).get("disk_digest") == base["disk_digest"]
+           for r in recs if r["name"] != removed):
+        return False
+    hexd = base["disk_digest"].removeprefix("sha256:")
+    for manifest in hostops.VMS_DIR.glob("*/manifest.json"):
+        if manifest.parent.name != removed and hexd in manifest.read_text():
+            return False
+    hostops.tart("delete", base["ref"], capture=True, check=False)  # the OCI cache entry, if any
+    (TART_CONTENT / hexd).unlink(missing_ok=True)
+    return True
+
+
 def _clone(name: str, image: str, prof: dict, rotate: bool,
-           progress: ProgressFn | None = None, engagement: str | None = None) -> tuple[bool, str | None]:
+           progress: ProgressFn | None = None, engagement: str | None = None,
+           from_registry: bool = False) -> tuple[bool, str | None]:
     """Clone ``image`` to ``name``, write and log the record, then optionally rotate.
+
+    ``from_registry`` (#31, macOS only): verify the image's published copy (signature +
+    provenance, by digest) and stack the clone on it instead of an APFS copy of the local image.
 
     Returns ``(rotated, note)`` describing the password outcome. ``progress`` (optional)
     streams milestones live (``"cloned <image> -> <name>"``, then the rotation lines); it is
     forwarded to ``_rotate``. ``None`` is silent. ``engagement`` (optional) tags the clone
     record with the engagement it belongs to (``None`` for an ad-hoc clone).
     """
-    hostops.tart("clone", image, name)
-    _emit(progress, f"cloned {image} -> {name}")
-    rec = _clones.new_record(name, prof, image, engagement=engagement)
+    base = None
+    if from_registry:
+        if prof["family"] != "macos":
+            raise VerifyError("--from-registry: Tart supports stacked clones only for macOS images")
+        ref, registry = _published_ref(image)
+        _emit(progress, f"verifying {ref}")
+        _verify_published(ref, registry)
+        net = ["--insecure"] if registry.startswith(("127.0.0.1:", "localhost:")) else []
+        hostops.tart("clone", *net, "--stacked", ref, name)
+        try:
+            base = {"ref": ref, "disk_digest": _stacked_disk_digest(name)}
+        except VerifyError:
+            hostops.delete_vm(name)  # never leave an unrecorded half-made clone behind
+            raise
+        _emit(progress, f"stacked {name} on {ref}")
+    else:
+        hostops.tart("clone", image, name)
+        _emit(progress, f"cloned {image} -> {name}")
+    rec = _clones.new_record(name, prof, image, engagement=engagement, base=base)
     _clones.save(rec)
     _clones.log_event("new", name, image)
     if rotate:
@@ -476,14 +573,19 @@ def clones() -> CloneList:
         vm = vms.get(r["name"])
         state = vm.get("State", "?") if vm else "MISSING"
         cur = _current_image(r["profile"])
-        fresh = ("image-deleted" if r["image"] not in vms else
-                 "current" if cur == r["image"] else "outdated")
+        if r.get("base"):   # stacked (#31): what matters is the base blob, not the local image
+            fresh = ("base-missing" if not base_present(r) else
+                     "current" if cur == r["image"] else "outdated")
+        else:
+            fresh = ("image-deleted" if r["image"] not in vms else
+                     "current" if cur == r["image"] else "outdated")
         pw = "unique" if r["password_account"] == r["name"] else "inherited"
         out.append(Clone(
             name=r["name"], profile=r["profile"], family=r["family"], image=r["image"],
             state=state, freshness=fresh, password_mode=pw,
             password_account=r["password_account"], enrollments=sorted(r["enrollments"]),
-            created_at=r["created_at"], engagement=r["engagement"]))
+            created_at=r["created_at"], engagement=r["engagement"],
+            base_ref=(r.get("base") or {}).get("ref")))
     return CloneList(clones=out, problems=list(problems))
 
 
@@ -518,7 +620,7 @@ def provenance(vm: str) -> Provenance:
 
 def new(name: str, profile: str | None = None, image: str | None = None,
         rotate: bool = True, progress: ProgressFn | None = None,
-        engagement: str | None = None) -> NewResult:
+        engagement: str | None = None, from_registry: bool = False) -> NewResult:
     """Create a research clone named ``name`` from a verified image.
 
     Give exactly one of ``profile`` (clone the image its committed lock produces) or
@@ -535,6 +637,10 @@ def new(name: str, profile: str | None = None, image: str | None = None,
     stream live status. Omit it (the default ``None``) for pure, silent behavior — existing
     callers and tests are unaffected.
 
+    ``from_registry`` (#31, macOS only): stack the clone on the image's published registry copy
+    (``tart clone --stacked``) after verifying its signature and provenance by digest, instead
+    of an APFS copy of the local image. Needs ``scripts/publish.sh publish`` first.
+
     ``engagement`` (optional) tags the clone's record with the engagement id it belongs to;
     ``None`` (the default) is an ad-hoc clone. It only records lineage — no other behavior
     changes. Stage 1B's ``provision`` passes it; ``rhubarb new`` leaves it ``None``.
@@ -548,7 +654,8 @@ def new(name: str, profile: str | None = None, image: str | None = None,
     if name in hostops.local_vms():
         raise VerifyError(f"a VM named {name} already exists")
     img, prof = _source_image(profile, image)
-    rotated, note = _clone(name, img, prof, rotate, progress, engagement=engagement)
+    rotated, note = _clone(name, img, prof, rotate, progress, engagement=engagement,
+                           from_registry=from_registry)
     return NewResult(name=name, image=img, profile=prof["id"], rotated=rotated,
                      password_mode="unique" if rotated else "inherited", note=note)
 
@@ -658,11 +765,14 @@ def reset(name: str, same_image: bool = False, rotate: bool = True,
     img = rec["image"] if same_image else image_name(prof)
     if img not in hostops.local_vms():
         raise VerifyError(f"{img} is not built on this Mac")
+    stacked = rec.get("base") is not None   # a stacked clone stays stacked (#31)
+    if stacked:
+        _published_ref(img)   # fail before destroying anything if the target isn't published
     _destroy(rec)
     _clones.delete(rec["name"])
     _clones.log_event("reset", rec["name"], img)
     _emit(progress, f"{rec['name']}: destroyed (enrollment and identity are gone); re-cloning from {img}")
-    rotated, note = _clone(rec["name"], img, prof, rotate, progress)
+    rotated, note = _clone(rec["name"], img, prof, rotate, progress, from_registry=stacked)
     return NewResult(name=rec["name"], image=img, profile=prof["id"], rotated=rotated,
                      password_mode="unique" if rotated else "inherited", note=note)
 
@@ -682,7 +792,9 @@ def rm(name: str) -> RemoveResult:
     keychain_deleted = _destroy(rec)
     _clones.delete(rec["name"])
     _clones.log_event("rm", rec["name"])
-    return RemoveResult(name=rec["name"], image=rec["image"], keychain_deleted=keychain_deleted)
+    released = bool(rec.get("base")) and _release_base(rec["base"], rec["name"])
+    return RemoveResult(name=rec["name"], image=rec["image"], keychain_deleted=keychain_deleted,
+                        base_released=released)
 
 
 # ---- engagements ---------------------------------------------------------------------------

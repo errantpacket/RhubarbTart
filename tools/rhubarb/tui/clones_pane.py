@@ -25,7 +25,8 @@ _COLUMNS = ("CLONE", "PROFILE", "STATE", "FRESHNESS", "PASSWORD", "ENROLLED")
 
 # Colour cues for at-a-glance status. Anything not listed renders plain.
 _STATE_STYLE = {"running": "green", "MISSING": "red bold"}
-_FRESH_STYLE = {"current": "green", "outdated": "yellow", "image-deleted": "red bold"}
+_FRESH_STYLE = {"current": "green", "outdated": "yellow", "image-deleted": "red bold",
+                "base-missing": "red bold"}
 _PW_STYLE = {"unique": "green", "inherited": "yellow"}
 
 

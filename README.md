@@ -156,6 +156,8 @@ Direction and roadmap: [`docs/PLAN.md`](docs/PLAN.md).
       update policy ([#29](https://github.com/errantpacket/RhubarbTart/issues/29)).
 - [x] Publish signed images: a localhost `zot` registry and offline `cosign` (key in the keychain, no public
       transparency log) with provenance attestations and `publish.sh verify` ([#32](https://github.com/errantpacket/RhubarbTart/issues/32)).
+- [x] Stacked macOS clones from the registry: `rhubarb new --from-registry` verifies the published copy by digest,
+      stacks the clone on it, flags a missing base, and releases unused bases ([#31](https://github.com/errantpacket/RhubarbTart/issues/31)).
 - [x] `TART_TEAM_ID` (`9M2P8L4D89`) and the Packer signer (`D38WU7D763`) pinned after the first
       bootstrap. ZAP needs none (unsigned, hash-pinned); pin Perimeter 81's Team ID when its
       installer is first resolved.
@@ -167,7 +169,7 @@ Direction and roadmap: [`docs/PLAN.md`](docs/PLAN.md).
 Remaining work is tracked as issues (see the [issue tracker](https://github.com/errantpacket/RhubarbTart/issues)):
 
 - Non-admin daily-use account ([#28](https://github.com/errantpacket/RhubarbTart/issues/28)).
-- Per-clone isolation via `--net-softnet` ([#30](https://github.com/errantpacket/RhubarbTart/issues/30)) · stacked clones from a private registry ([#31](https://github.com/errantpacket/RhubarbTart/issues/31)).
+- Per-clone isolation via `--net-softnet` ([#30](https://github.com/errantpacket/RhubarbTart/issues/30)).
 - `herdr` service ([#33](https://github.com/errantpacket/RhubarbTart/issues/33)) · choose a license ([#34](https://github.com/errantpacket/RhubarbTart/issues/34)).
 
 ---

@@ -86,7 +86,7 @@ above. A `"signed": false` tool must always carry a real pinned hash, or resolve
 | **Password** | Random per build, host keychain only | same | same |
 | **How it gets there** | Typed over VNC (26); bootstrap → rotate → proven dead (27) | yescrypt hash from a 0600 upload, outside the Nix store | Bootstrap → `chpasswd` from stdin |
 | **Login** | No auto-login | No auto-login | No auto-login |
-| **sudo** | Password required; no `NOPASSWD` | Password required; `execWheelOnly` | Password required; `kali-grant-root` refused |
+| **sudo** | Password required; no `NOPASSWD` | Password required; `execWheelOnly` | Password required; `kali-grant-root` purged and pinned out. One scoped exception: OpenVAS's locked, nologin `_gvm` may run `/usr/sbin/openvas` (#59) |
 | **SSH** | Key-only, `from=` host, no forwarding; off without keys | same, declared in Nix | same |
 | **Identity** | Host keys wiped, regenerated per clone | Never generated in the image | Host keys + machine-id wiped, regenerated per clone |
 | **Firewall** | Application firewall + stealth | NixOS firewall | nftables inbound default-deny |

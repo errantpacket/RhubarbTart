@@ -43,6 +43,18 @@ if ((${#debs[@]} + ${#distro[@]})); then
 fi
 rm -f /etc/apt/sources.list.d/google-chrome.list   # belt and braces
 
+# kali-desktop-core hard-depends on kali-grant-root, which ships group-wide passwordless root
+# (%kali-trusted ALL=(ALL:ALL) NOPASSWD: ALL). Pin it out first so no later apt run (in a clone)
+# can bring it back, then purge it; the kali-desktop-* metapackages go, the desktop stays. (#59)
+say "removing kali-grant-root (group-wide passwordless root) and pinning it out"
+cat > /etc/apt/preferences.d/rhubarb-no-grant-root <<'EOF'
+# RhubarbTart: passwordless root is never allowed in an image (#59)
+Package: kali-grant-root
+Pin: version *
+Pin-Priority: -1
+EOF
+if dpkg -s kali-grant-root >/dev/null 2>&1; then apt-get purge -y -q kali-grant-root; fi
+
 if [[ "$(opt rosetta)" == true ]]; then
   say "enabling Rosetta for x86_64 binaries (needs: tart run --rosetta=rosetta)"
   install -d /media/rosetta

@@ -147,7 +147,8 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 | Packer times out after 120 min | Slow mirror or a stuck install | Retry; check the console |
 | `hash mismatch inside guest` | Stage/lock mismatch | Re-run build |
 | apt install fails on a vendor `.deb` | Dependency not in the current Kali rolling | Report it; re-resolve (newer vendor build) or drop the package from the profile |
-| `kali-grant-root … installed` / `NOPASSWD in sudoers` | A metapackage pulled passwordless root | Remove that metapackage from the profile's `kali_metapackages` |
+| `kali-grant-root … installed` / `NOPASSWD in sudoers: <file:line:rule>` | A package pulled passwordless sudo. `kali-grant-root` comes with the XFCE desktop and is purged and pinned out by `install.sh` (#59) | The message names the file and rule. If a `kali_metapackages` entry brought it, remove that entry. Never widen the seal's single OpenVAS allowance |
+| `_gvm (NOPASSWD for openvas) has a login shell / usable password` or `ospd-openvas is not root:root 0440` | The one allowed NOPASSWD rule's conditions don't hold (#59) | Investigate the package change; don't relax the condition |
 
 ## Enrollment
 

@@ -30,7 +30,10 @@ present it to the user as a trade-off, not an implementation detail.
    **bootstrap** password, rotate it, and prove it's dead. No `NOPASSWD` in any image: provisioning
    uses `sudo -S`. The one sanctioned exception is the NixOS *live ISO's* own passwordless sudo
    for the throwaway `nixos` user. It exists only in the installer session, and nothing from it
-   reaches the installed system.
+   reaches the installed system. The one *image* exception (owner decision, #59) is Kali's
+   `ospd-openvas` rule `_gvm ALL = NOPASSWD: /usr/sbin/openvas`, which the Kali seal allows only as that
+   exact line in a root-owned 0440 file, for a locked nologin `_gvm`. Anything broader fails.
+   `kali-grant-root` (group-wide NOPASSWD ALL) is purged and pinned out.
 5. **Sealed images have no auto-login, key-only SSH (or none), a firewall on, no shared
    identity** (host keys, machine-id, VPN state), and no build residue.
 6. **The seal asserts; the smoke test proves from outside.** Each posture change needs an

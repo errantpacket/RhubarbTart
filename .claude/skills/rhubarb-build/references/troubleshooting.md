@@ -125,7 +125,7 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Packer times out waiting for SSH | `boot_command` typed before the live console was ready | Raise the initial `<wait60s>` in `packer/linux/nixos.pkr.hcl` |
+| Packer times out waiting for SSH | `boot_command` typed before the live console was ready | Raise the initial `<wait75s>` in `packer/linux/nixos.pkr.hcl` |
 | `nixpkgs NAR hash … != locked …` | Staged tarball doesn't match the lock | Re-run build (verify restages). If it persists, re-resolve and compare. Never edit the hash |
 | `nixos-install` evaluation error | Profile/config mismatch (option or package name changed in this nixpkgs) | Reproduce off-Mac with the Docker eval recipe in the `rhubarb-dev` skill |
 | Download/signature errors during install | cache.nixos.org unreachable or a path not signed | Retry. Never set `require-sigs = false` or add substituters |

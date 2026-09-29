@@ -15,18 +15,19 @@ destructive ones).
 ./rhubarb enroll web-1 tailscale              # VPN identity for this clone only
 ./rhubarb list                                # clones: state, outdated image?, password, enrollment
 ./rhubarb reset web-1                         # destroy + fresh clone of the current image
-./rhubarb rm web-1                            # delete the clone and its keychain entry
+./rhubarb rm web-1                            # delete the clone (+ keychain entry if it had a unique password)
 ```
 
 | Command | What it does |
 |---|---|
 | `new NAME --profile P` / `--image IMG` | Clones a **verified** image (never `-unverified`), records its lineage, then boots it headless and rotates it to a **unique random password** (keychain account = clone name), proving through `sudo` that the old one is rejected. `--no-rotate` keeps the image's password |
 | `run NAME [--headless] [--detach]` | Starts the clone with the right flags for its profile (`--rosetta=rosetta` for Linux Rosetta profiles) |
+| `stop NAME` | Stops a running clone (the VM and its records stay) |
 | `ssh NAME [-- CMD]` | Connects as the profile's user, host key pinned per clone name |
 | `enroll NAME tailscale\|warp\|perimeter81 [--org TEAM]` | Runtime VPN/ZTNA enrollment (see below) |
 | `list` · `images` | Flags clones whose image is **outdated** (the profile's lock changed) or **deleted**, and shows each clone's password mode and enrollments |
 | `reset NAME [--same-image]` | Throws the clone away (identity, enrollment and all) and re-clones, from the current image by default |
-| `rm NAME [--yes]` | Stops and deletes the clone, its keychain entry and its pinned host key |
+| `rm NAME [--yes]` | Stops and deletes the clone, its keychain entry (only if it had a unique/rotated password) and its pinned host key |
 
 > [!NOTE]
 > `rhubarb` only touches clones it created. It never modifies built images (`rbt-…`) or VMs
@@ -34,6 +35,19 @@ destructive ones).
 > SSH (images built with `RHUBARB_SSH_PUBKEYS`, with the key in `ssh-agent` or `RHUBARB_SSH_IDENTITY`
 > pointing at it). Without it the clone keeps the image's password, and `rhubarb list` says
 > `inherited` — an image built with SSH disabled is refused up front with a rebuild hint.
+
+### Engagements
+
+An **engagement** is a committed scope manifest (`engagements/<id>.json`) naming a set of ranges
+(profile + count) that build and tear down as one unit; clones it provisions are tagged with the
+engagement id.
+
+| Command | What it does |
+|---|---|
+| `engagement define FILE\|ID` | Validate a manifest and acknowledge it (strict: unknown keys, bad ranges or a missing `authorization` are rejected) |
+| `engagement list` | Defined engagements and their live clone counts |
+| `engagement provision ID` | Clone each range from its **verified** image into engagement-tagged clones |
+| `engagement teardown ID [--yes]` | Remove exactly the clones tagged to that engagement (nothing else) |
 
 <details>
 <summary><b>Where clone records live, and why</b></summary>
@@ -85,6 +99,7 @@ sequenceDiagram
 
 Store a secret once with `security add-generic-password -s RhubarbTart-enroll -a tailscale-authkey -w`
 (it prompts, so the secret never lands in your shell history). `rhubarb enroll` wraps
-`scripts/enroll.sh` and records which services each clone is enrolled in.
+`scripts/enroll.sh` and records which services each clone is enrolled in — except `perimeter81`,
+which is manual (the script only prints the steps), so it isn't recorded.
 
 ← back to the [README](../README.md)

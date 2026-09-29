@@ -7,7 +7,8 @@ How to validate a change: `check.sh`, the off-Mac paths, and the project skills 
 ```
 
 `check.sh` runs shell, Packer and Python checks, the offline self-tests (Ed25519 RFC 8032 vectors,
-NAR hash vs real Nix, Debian version ordering) and profile validation. It also greps every family
+NAR hash vs real Nix, Debian version ordering, clone records, the `rhubarb` CLI lifecycle and
+password rotation), a headless Textual TUI render test, and profile validation. It also greps every family
 for regressions of the rules above: Homebrew or `packer init` creeping back, default credentials,
 `NOPASSWD`, auto-login, password SSH, unsigned repos, baked VPN secrets, and plugin-version drift.
 

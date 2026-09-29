@@ -30,7 +30,7 @@ A profile is a small JSON file in `profiles/`:
 | `id` | Equals the filename; lowercase letters, digits, dashes |
 | `base` | `macos-26`, `macos-27`, `nixos-26.05`, `kali-rolling` (files in `config/bases/`) |
 | `packages` | Tools from the catalog above; each must support the base's OS |
-| `username` | 3–16 lowercase letters/digits (default `admin`) |
+| `username` | 3–16 chars, lowercase letters/digits, **must start with a letter** (default `admin`) |
 | `vm` | `cpu` 2–64, `memory_gb` 4–256, `disk_gb` 40–2048 (defaults come from the base) |
 | `options.desktop` | NixOS/Kali: `"none"` or `"xfce"` |
 | `options.rosetta` | NixOS/Kali: run x86_64 binaries (start clones with `--rosetta=rosetta`) |

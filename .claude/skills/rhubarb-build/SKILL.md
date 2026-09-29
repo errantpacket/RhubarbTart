@@ -73,6 +73,8 @@ Built images are templates; all work happens in clones managed by `./rhubarb` (o
 ./rhubarb list                                # state, outdated/deleted image, password mode, enrollment
 ./rhubarb reset web-1 [--same-image]          # destroy + re-clone (drops identity and enrollment)
 ./rhubarb rm web-1 [--yes]
+./rhubarb stop web-1                           # stop a running clone (VM + records stay)
+./rhubarb engagement provision lab            # define|list|provision|teardown a scope manifest (engagements/<id>.json)
 ```
 
 - **Prefer `rhubarb` over raw `tart`/`scripts/*.sh`** for clones. It records lineage

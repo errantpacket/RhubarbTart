@@ -28,8 +28,10 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; needs gpg, any OS
 | `RHUBARB_SSH_IDENTITY` | unset | Private key `rhubarb` uses to reach clones (adds `-i … -o IdentitiesOnly=yes`). Unset: the `ssh-agent` and default `~/.ssh/id_*` are used. `rhubarb` never reads the operator's `~/.ssh/config` (`-F /dev/null`) |
 | `RHUBARB_USER` | `admin` | Username for the low-level `scripts/ssh.sh` / `enroll.sh` (`rhubarb` reads it from the clone's record) |
 | `REBUILD_VANILLA` | `0` | macOS: `1` reinstalls the vanilla VM from the IPSW and **rotates its password**. New macOS builds get a new vanilla VM automatically |
+| `RHUBARB_HEADLESS` | `true` | Build: `false` shows the VM window instead of running headless (watch a build) |
+| `RHUBARB_NO_COLOR` / `NO_COLOR` | unset | Build: set either to disable Packer's color (Nix writes progress to stderr, which the colored UI paints red) |
 | `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` | Where `rhubarb` keeps clone records and `events.log` |
-| `RHUBARB_SSH_WAIT` | `180` | Seconds `rhubarb new` waits for a clone's SSH before keeping the inherited password |
+| `RHUBARB_SSH_WAIT` | `180` | Seconds each rotation (`new`/`reset`/`engagement provision`) waits for a clone's SSH **per boot attempt** (the boot is retried twice) before keeping the inherited password |
 | `RHUBARB_CACHE` | `./cache` | Downloads (`artifacts/`) and per-profile guest stage dirs (`stage/`) |
 | `GITHUB_TOKEN` | unset | Optional; avoids GitHub API rate limits while resolving |
 

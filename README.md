@@ -3,8 +3,11 @@
 # 🍎 RhubarbTart
 
 **Security-research VMs for Apple silicon, built from verified vendor installers.**
-<br/>Describe a guest in a short profile, build a hardened [Tart](https://tart.run) image from
-pinned and checked inputs, then do your work in disposable copies of it.
+<br/>Describe a guest in a short JSON profile: an OS (macOS 26 or 27, NixOS or Kali) and the tools
+you need. RhubarbTart downloads the vendor installers, checks each one against a pinned hash and,
+where there is one, the vendor's signature, and builds a hardened [Tart](https://tart.run) VM image from them. Before
+the image is used, a temporary copy of it is tested from outside the VM. You then work in
+disposable clones of the image, each with its own password, and delete them when you're done.
 
 ![Apple silicon](https://img.shields.io/badge/host-Apple%20silicon-c9184a)
 ![Guests](https://img.shields.io/badge/guests-macOS%2026%20·%20macOS%2027%20·%20NixOS%20·%20Kali-c9184a)

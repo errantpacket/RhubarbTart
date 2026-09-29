@@ -1,11 +1,11 @@
 # Using your VMs
 
-You work in disposable clones of a built image, driven by the `rhubarb` CLI — or the `./rhubarb-tui` Textual dashboard, which drives the same actions over the same audited core.
-
-Built images are templates: you work in **clones**, managed by the `rhubarb` CLI — or the
-`./rhubarb-tui` Textual dashboard, which drives the same actions over the same audited core
-(browse images/clones/provenance; run, ssh, enroll, reset, rm, new and build, with confirms on
-destructive ones).
+Built images are templates: you work in disposable **clones** of them (see
+[Key concepts](concepts.md#what-you-work-in)). Clones are managed by the `rhubarb` CLI, or by the
+`./rhubarb-tui` Textual dashboard, which drives the same actions over the same audited core:
+browse images, clones and provenance; run, ssh, enroll, reset, rm, new and build, with a
+confirmation before anything destructive. For stacked macOS clones from a registry, see
+[Publishing and stacked clones](publishing.md).
 
 ```sh
 ./rhubarb images                              # built images; which one is current per profile

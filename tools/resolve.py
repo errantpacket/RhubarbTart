@@ -54,6 +54,20 @@ def fetch(entry: dict, dest: Path) -> None:
         download(entry["url"], dest)
 
 
+def cached(cache: Path, entry: dict) -> Path:
+    """Content-addressed cache path: artifacts/<sha256>/<file>. Different builds behind the same
+    file name (an unversioned URL such as Chrome's) never overwrite each other (#67). A legacy
+    flat artifacts/<file> is adopted (moved, no re-download) only if its hash matches."""
+    path = cache / entry["sha256"] / entry["file"]
+    legacy = cache / entry["file"]
+    if not path.exists() and legacy.is_file():
+        if sha256_file(legacy) == entry["sha256"]:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            legacy.rename(path)
+            log(f"cache: adopted {entry['file']} into {entry['sha256'][:12]}…/")
+    return path
+
+
 def plan(prof: dict) -> dict:
     return {
         "base": PLANNERS[prof["family"]](prof["base"]),
@@ -89,17 +103,27 @@ def cmd_resolve(args) -> None:
     ts_keys = None
 
     for label, e in artifacts(p):
-        path = cache / e["file"]
         if e.get("large") and args.skip_large:
             log(f"{label}: skipping download of {e['file']} (hash pinned: {e['sha256'][:16]}…)")
             continue
-        if path.exists() and e.get("sha256") is None:
-            path.unlink()  # TOFU / unversioned source: always re-fetch on resolve
-        fetch(e, path)
-        got = sha256_file(path)
-        if e.get("sha256") and got != e["sha256"]:
-            path.unlink()
-            raise VerifyError(f"{label}: sha256 mismatch {got} != {e['sha256']}")
+        if e.get("sha256"):
+            path = cached(cache, e)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fetch(e, path)
+            got = sha256_file(path)
+            if got != e["sha256"]:
+                path.unlink()
+                raise VerifyError(f"{label}: sha256 mismatch {got} != {e['sha256']}")
+        else:
+            # TOFU / unversioned source: always re-fetch, then file it under its own hash.
+            incoming = cache / "incoming" / e["file"]
+            incoming.parent.mkdir(parents=True, exist_ok=True)
+            incoming.unlink(missing_ok=True)
+            fetch(e, incoming)
+            got = sha256_file(incoming)
+            path = cache / got / e["file"]
+            path.parent.mkdir(parents=True, exist_ok=True)
+            incoming.replace(path)
         e["sha256"], e["size"] = got, path.stat().st_size
         if label == "base:nixpkgs":
             e["nar_sha256"] = nar.tarball_nar_sha256(path)
@@ -149,12 +173,14 @@ def cmd_verify(args) -> None:
 
     sums, manifest = [], []
     for label, e in artifacts(lock):
-        path = cache / e["file"]
+        path = cached(cache, e)
+        path.parent.mkdir(parents=True, exist_ok=True)
         if label == "base:image" and args.skip_image:
             log("base:image: skipped (--skip-image; dev/CI only, the build needs it)")
             continue
         fetch(e, path)
         if sha256_file(path) != e["sha256"]:
+            path.unlink()  # never leave a file under a hash it doesn't have (#67)
             raise VerifyError(f"{label}: cached {e['file']} differs from lock. If upstream moved "
                               "(an unversioned URL such as Chrome's), re-resolve.")
         variant = prof["packages"].get(label, {})
@@ -190,7 +216,7 @@ def cmd_verify(args) -> None:
     base = lock["base"]
     print(json.dumps({
         "profile": prof["id"], "family": prof["family"], "base_id": prof["base_id"],
-        "image_path": str(cache / base["image"]["file"]), "stage_dir": str(stage),
+        "image_path": str(cache / base["image"]["sha256"] / base["image"]["file"]), "stage_dir": str(stage),
         "os_build": base.get("build") or base.get("version") or base.get("release"),
         "inputs_sha256": inputs_sha256(lock), "username": prof["username"],
         "cpu": prof["vm"].get("cpu", 4), "memory_gb": prof["vm"].get("memory_gb", 8),

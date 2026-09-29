@@ -52,7 +52,13 @@ keychain_put() { # <account> <password>; `security -i` keeps the secret out of a
 
 WORK="$(mktemp -d)"
 SERVER_PID=""
-cleanup() { [[ -n "$SERVER_PID" ]] && kill "$SERVER_PID" 2>/dev/null; rm -rf "$WORK"; }
+# Must not fail before rm: under set -e a failing last command of an && list aborts even the
+# EXIT trap (the preseed server has usually exited), which left $WORK and its password file
+# behind and turned a successful build into exit 1. (#61)
+cleanup() {
+  if [[ -n "$SERVER_PID" ]]; then kill "$SERVER_PID" 2>/dev/null || true; fi
+  rm -rf "$WORK"
+}
 trap cleanup EXIT
 chmod 700 "$WORK"
 

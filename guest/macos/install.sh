@@ -80,14 +80,9 @@ while IFS=$'\t' read -r id kind file team app signed _more; do
 done < packages.tsv
 
 # Post-install: every installed bundle must still verify with its locked Team ID. The
-# bundle name comes from config/packages/<id>.json ("app"); Perimeter 81's has varied
-# across releases (Perimeter 81 / Harmony SASE), so it is found by pattern.
+# bundle name comes from config/packages/<id>.json ("app").
 while IFS=$'\t' read -r id kind file team app signed _more; do
   [[ -z "$id" ]] && continue
-  if [[ "$app" == "-" && "$id" == perimeter81 ]]; then
-    app="$(find /Applications -maxdepth 1 \( -iname '*perimeter*81*.app' -o -iname '*harmony*sase*.app' \) \
-             -exec basename {} \; | head -n1)"
-  fi
   [[ -n "$app" && "$app" != "-" ]] || die "$id: installed app bundle unknown (set \"app\" in config/packages/$id.json)"
   [[ -d "/Applications/$app" ]] || die "$id: /Applications/$app missing after install"
   if [[ "$signed" == 0 ]]; then

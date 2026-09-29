@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🍓 RhubarbTart
+# 🍎 RhubarbTart
 
 **Provenance-first, hardened security-research VMs for Apple silicon.**
 <br/>Pick a profile, get a sealed [Tart](https://tart.run) guest whose every input is pinned,
@@ -149,9 +149,7 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
 | `kali-research` | Kali rolling | Chrome, ZAP, WARP, Tailscale · `kali-linux-default` · XFCE · Rosetta | Batteries-included offensive tooling |
 
 Guests are arm64 (Tart runs native guests on Apple silicon). Linux profiles with Rosetta can
-still run x86_64 Linux binaries. Perimeter 81 / Harmony SASE is an **opt-in** package, because
-its installer comes from your tenant portal rather than a public download. Want something else?
-[Define your own guest](docs/profiles.md).
+still run x86_64 Linux binaries. Want something else? [Define your own guest](docs/profiles.md).
 
 <details>
 <summary><b>Which one should I pick?</b></summary>

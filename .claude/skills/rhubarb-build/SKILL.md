@@ -1,6 +1,6 @@
 ---
 name: rhubarb-build
-description: Build, run, enroll and troubleshoot RhubarbTart guest VMs (Tart + Packer) from their profiles — macOS 26/27, NixOS and Kali. Covers bootstrapping the pinned toolchain, preflight, scripts/build.sh PROFILE, the smoke test, managing clones with the rhubarb CLI (new, run, ssh, enroll, list, reset, rm, per-clone passwords, outdated clones), finding passwords in the keychain, Rosetta, VPN/ZTNA enrollment (Tailscale, Cloudflare WARP, Perimeter 81), and diagnosing failures (Setup Assistant or provisioning hangs, Kali preseed/GRUB, NixOS install, finalize or smoke-test errors, hash/signature/Team ID mismatches, -unverified images). Use this whenever someone wants to make, rebuild, run, clone, reset, remove, connect to or enroll a research VM, or says a build, bootstrap, enrollment or smoke test failed, even if they don't mention Tart or Packer. For designing a guest use rhubarb-profiles; for refreshing versions use rhubarb-update-inputs.
+description: Build, run, enroll and troubleshoot RhubarbTart guest VMs (Tart + Packer) from their profiles — macOS 26/27, NixOS and Kali. Covers bootstrapping the pinned toolchain, preflight, scripts/build.sh PROFILE, the smoke test, managing clones with the rhubarb CLI (new, run, ssh, enroll, list, reset, rm, per-clone passwords, outdated clones), finding passwords in the keychain, Rosetta, VPN/ZTNA enrollment (Tailscale, Cloudflare WARP), and diagnosing failures (Setup Assistant or provisioning hangs, Kali preseed/GRUB, NixOS install, finalize or smoke-test errors, hash/signature/Team ID mismatches, -unverified images). Use this whenever someone wants to make, rebuild, run, clone, reset, remove, connect to or enroll a research VM, or says a build, bootstrap, enrollment or smoke test failed, even if they don't mention Tart or Packer. For designing a guest use rhubarb-profiles; for refreshing versions use rhubarb-update-inputs.
 ---
 
 # Building and running RhubarbTart guests
@@ -70,7 +70,7 @@ Built images are templates; all work happens in clones managed by `./rhubarb` (o
 ./rhubarb new mac-1 --profile tahoe-research --from-registry  # macOS: stacked on the verified registry copy (#31)
 ./rhubarb run web-1 [--headless] [--detach]   # applies Rosetta etc. from the record
 ./rhubarb ssh web-1 [-- CMD]
-./rhubarb enroll web-1 tailscale              # or: warp --org TEAM | perimeter81
+./rhubarb enroll web-1 tailscale              # or: warp --org TEAM
 ./rhubarb list                                # state, outdated/deleted image, password mode, enrollment
 ./rhubarb reset web-1 [--same-image]          # destroy + re-clone (drops identity and enrollment)
 ./rhubarb rm web-1 [--yes]

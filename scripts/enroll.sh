@@ -4,7 +4,6 @@
 #
 #   ./scripts/enroll.sh <vm> tailscale [--image <name>]
 #   ./scripts/enroll.sh <vm> warp --org <team-name> [--image <name>]
-#   ./scripts/enroll.sh <vm> perimeter81        (prints the manual steps)
 #
 # <vm> is the running clone to enroll. Its sudo password is looked up in the keychain under
 # --image (the built image it was cloned from, e.g. rbt-kali-research-<sha>), or under <vm>.
@@ -23,8 +22,8 @@ set -euo pipefail
 # shellcheck source=scripts/env.sh
 source "$(dirname "$0")/env.sh"
 
-VM="${1:?usage: enroll.sh <vm> tailscale|warp|perimeter81 [--org TEAM] [--image NAME]}"
-SERVICE="${2:?service: tailscale|warp|perimeter81}"
+VM="${1:?usage: enroll.sh <vm> tailscale|warp [--org TEAM] [--image NAME]}"
+SERVICE="${2:?service: tailscale|warp}"
 shift 2
 ORG=""
 IMAGE="$VM"
@@ -39,16 +38,6 @@ die() { echo "[enroll] FAILED: $*" >&2; exit 1; }
 secret() { security find-generic-password -s RhubarbTart-enroll -a "$1" -w 2>/dev/null \
              || die "no keychain item RhubarbTart-enroll/$1 (see header of this script)"; }
 
-if [[ "$SERVICE" == perimeter81 ]]; then
-  cat <<'EOF'
-Perimeter 81 / Harmony SASE enrollment is tied to your tenant:
-  1. tart run <vm>, log in, open the Perimeter 81 app.
-  2. Approve its system/network extensions when macOS asks
-     (System Settings > General > Login Items & Extensions).
-  3. Sign in with your workspace; never do this in an image you will clone.
-EOF
-  exit 0
-fi
 
 VM_PW="$(security find-generic-password -s RhubarbTart -a "$IMAGE" -w 2>/dev/null)" \
   || die "no keychain password for $IMAGE (for a clone, pass --image <the image it was cloned from>)"

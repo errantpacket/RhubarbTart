@@ -6,7 +6,7 @@
   rhubarb run NAME [--headless] [--detach]
   rhubarb stop NAME
   rhubarb ssh NAME [-- CMD...]
-  rhubarb enroll NAME tailscale|warp|perimeter81 [--org TEAM]
+  rhubarb enroll NAME tailscale|warp [--org TEAM]
   rhubarb reset NAME [--same-image] [--no-rotate]   back to a clean clone (drops enrollment)
   rhubarb rm NAME [--yes]
   rhubarb engagement define FILE|ID                 validate + acknowledge a scope manifest

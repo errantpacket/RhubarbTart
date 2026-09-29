@@ -22,7 +22,6 @@ A profile is a small JSON file in `profiles/`:
 <tr><td><code>zap</code></td><td>✅</td><td>✅</td><td>✅ (Kali archive)</td></tr>
 <tr><td><code>warp</code></td><td>✅</td><td>✅</td><td>✅</td></tr>
 <tr><td><code>tailscale</code></td><td>✅</td><td>✅</td><td>✅</td></tr>
-<tr><td><code>perimeter81</code></td><td>✅ tenant pkg</td><td>—</td><td>—</td></tr>
 </table>
 
 | Key | Rule |
@@ -42,12 +41,11 @@ rejected, so a typo can never silently build a different image. Check with
 Adding a tool that *isn't* in the catalog requires a trustworthy source first; see
 [Keeping inputs fresh](reference.md#keeping-inputs-fresh).
 
-> [!IMPORTANT]
-> Perimeter 81 has no public, versioned download, so it isn't in the default profiles. To use it,
-> save your tenant installer from the Harmony SASE portal (Devices → Downloads → Agents) as exactly
-> `vendor/perimeter81/Perimeter81.pkg` (git-ignored; see [`vendor/README.md`](../vendor/README.md)),
-> add `"perimeter81"` to the profile, and re-resolve — the first resolve pins its hash and surfaces
-> its Team ID to pin. An image containing it is tenant-specific, so share it only through a private
-> registry. This is the pattern for **any** custom/tenant installer (`resolver: "local"`).
+> [!NOTE]
+> A tool with no public download (for example a licensed agent from a vendor's admin console) can
+> still be added as a **local** package (`resolver: "local"`): its installer is placed under the
+> git-ignored `vendor/` directory and pinned by hash on first resolve. See
+> [`vendor/README.md`](../vendor/README.md). An image containing one is tenant-specific, so share it
+> only through a private registry.
 
 ← back to the [README](../README.md)

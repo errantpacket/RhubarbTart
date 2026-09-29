@@ -6,8 +6,8 @@ Thin dispatcher over ``api.enroll(name, service, org=...)``. The service is chos
 the UI (one of :data:`SERVICES`) and handed in via ``ctx.params["service"]``; an optional
 team/organization comes in via ``ctx.params["org"]`` (``warp`` in particular wants one).
 The enrollment secret is handled entirely by the core (keychain / SSH stdin), never by the
-UI. ``perimeter81`` is manual — the core's script only prints instructions and records
-nothing — which the summary reflects (``EnrollResult.recorded`` is ``False``).
+UI. Should the core ever report an enrollment it didn't record (``EnrollResult.recorded`` is
+``False``, a manual-only service), the summary says so and asks for no refresh.
 
 Not destructive: it adds an enrollment, it never tears a clone down. It does mutate the
 clone record (for the recorded services), so ``needs_refresh`` stays ``True`` and the
@@ -24,7 +24,7 @@ REQUIRES_CLONE = True
 # The services the core accepts (mirrors ``clones.SERVICES``). Exposed so the shell can
 # build its service picker without reaching into the core; the core still validates
 # authoritatively and raises ``VerifyError`` on anything else.
-SERVICES = ("tailscale", "warp", "perimeter81")
+SERVICES = ("tailscale", "warp")
 
 
 def handle(ctx: ActionContext) -> ActionOutcome:
@@ -65,7 +65,7 @@ def handle(ctx: ActionContext) -> ActionOutcome:
         return ActionOutcome(
             ok=True,
             summary=f"enrolled {res.name} in {res.service} (recorded at {res.enrolled_at})")
-    # perimeter81 is manual: the core's script only printed the steps; nothing was recorded.
+    # Not recorded (a manual-only service): the core only printed the steps.
     ctx.progress(f"{res.name}: {res.service} is manual — follow the printed steps")
     return ActionOutcome(
         ok=True, needs_refresh=False,

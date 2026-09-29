@@ -164,7 +164,7 @@ Direction and roadmap: [`docs/PLAN.md`](docs/PLAN.md).
 
 Remaining work is tracked as issues (see the [issue tracker](https://github.com/errantpacket/RhubarbTart/issues)):
 
-- Perimeter 81 Linux variant ([#27](https://github.com/errantpacket/RhubarbTart/issues/27)) · non-admin daily-use account ([#28](https://github.com/errantpacket/RhubarbTart/issues/28)).
+- Non-admin daily-use account ([#28](https://github.com/errantpacket/RhubarbTart/issues/28)).
 - Per-clone isolation via `--net-softnet` ([#30](https://github.com/errantpacket/RhubarbTart/issues/30)) · stacked clones from a private registry ([#31](https://github.com/errantpacket/RhubarbTart/issues/31)) · finish `scripts/publish.sh` + pin `cosign`/`crane` ([#32](https://github.com/errantpacket/RhubarbTart/issues/32)).
 - `herdr` service ([#33](https://github.com/errantpacket/RhubarbTart/issues/33)) · choose a license ([#34](https://github.com/errantpacket/RhubarbTart/issues/34)).
 

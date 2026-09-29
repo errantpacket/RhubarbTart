@@ -11,7 +11,7 @@
   verify <profile>             re-check cached inputs vs the lock; build the guest stage dir
   provenance <profile> <vm>    write out/<vm>.provenance.json
   preflight                    repo-local toolchain matches config/toolchain.env
-  toolchain-pin [--latest] [--only gnupg]  re-derive config/toolchain.env (two sources must agree)
+  toolchain-pin [--latest] [--only gnupg|registry]  re-derive config/toolchain.env (two sources must agree)
 
 Where each step can run:
   macOS profiles    resolve + verify need macOS (codesign/pkgutil/spctl).
@@ -293,8 +293,8 @@ def main() -> None:
     sub.add_parser("preflight").set_defaults(fn=cmd_preflight)
     tp = sub.add_parser("toolchain-pin")
     tp.add_argument("--latest", action="store_true", help="bump to the newest upstream releases")
-    tp.add_argument("--only", choices=["gnupg"],
-                    help="re-derive only the GnuPG pins; keep the others as committed")
+    tp.add_argument("--only", choices=["gnupg", "registry"],
+                    help="re-derive only that block of pins; keep the others as committed")
     tp.set_defaults(fn=cmd_toolchain_pin)
     args = ap.parse_args()
     try:

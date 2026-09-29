@@ -47,6 +47,7 @@ PINS_HEADER = """\
 #   GnuPG + libs:  tarball signature by a pinned GnuPG release key (config/keys/
 #                  gnupg-release-signing.asc) == sha256 in gnupg.org's signed swdb.lst
 #                  (built from source by bootstrap; needs the Xcode Command Line Tools)
+#   zot + cosign:  GitHub asset digest == the release's checksums file (registry publishing, #32)
 # *_TEAM_ID: Apple Developer Team ID of the notarized signature; empty = record-and-warn.
 # Pin after confirming the value printed by bootstrap out-of-band.
 """
@@ -132,13 +133,47 @@ def gnupg_assets(old: dict, latest: bool) -> dict[str, dict]:
     return out
 
 
+# Registry tooling for publishing verified images (#32): a localhost OCI registry and cosign.
+# (prefix, GitHub repo, asset name for a given version, checksums file for a given version)
+REGISTRY_TOOLS = [
+    ("ZOT", "project-zot/zot", lambda v: "zot-darwin-arm64-minimal", lambda v: "checksums.sha256.txt"),
+    ("COSIGN", "sigstore/cosign", lambda v: "cosign-darwin-arm64", lambda v: "cosign_checksums.txt"),
+]
+
+
+def registry_assets(old: dict, latest: bool) -> dict[str, dict]:
+    """{prefix: {version, url, sha256}}; GitHub asset digest == the release's checksums file."""
+    out = {}
+    for prefix, repo, asset, sums in REGISTRY_TOOLS:
+        v = github_latest(repo).lstrip("v") if latest or f"{prefix}_VERSION" not in old \
+            else old[f"{prefix}_VERSION"]
+        a = github_asset(repo, f"v{v}", asset(v), sums(v))
+        out[prefix] = {"version": v, **a}
+    return out
+
+
+def _block(assets: dict[str, dict]) -> str:
+    return "".join(f"\n{p}_VERSION={a['version']}\n{p}_URL={a['url']}\n{p}_SHA256={a['sha256']}\n"
+                   for p, a in assets.items())
+
+
+def _kept(old: dict, prefixes: list[str]) -> dict[str, dict] | None:
+    """The committed pins for these prefixes, or None if any is missing."""
+    try:
+        return {p: {"version": old[f"{p}_VERSION"], "url": old[f"{p}_URL"], "sha256": old[f"{p}_SHA256"]}
+                for p in prefixes}
+    except KeyError:
+        return None
+
+
 def cmd_toolchain_pin(args) -> None:
     old = load_pins()
     latest = args.latest
-    if getattr(args, "only", None) == "gnupg":
-        # Re-derive only the GnuPG block (pure-Python signature checks, no gpg needed); keep the
-        # other, already-verified pins exactly as committed. This is how a Mac without a
-        # toolchain gpg yet gets its first GnuPG pins.
+    only = getattr(args, "only", None)
+    if only in ("gnupg", "registry"):
+        # Re-derive only the named block (neither needs gpg); keep the other, already-verified
+        # pins exactly as committed. This is how a Mac without a toolchain gpg gets its first
+        # GnuPG pins, and how the registry tools are pinned or bumped on their own.
         def kept(p: str) -> dict:
             return {"url": old[f"{p}_URL"], "sha256": old[f"{p}_SHA256"]}
         tart_v, plugin_v = old["TART_VERSION"], old["PACKER_PLUGIN_TART_VERSION"]
@@ -159,9 +194,11 @@ def cmd_toolchain_pin(args) -> None:
         uv = github_asset("astral-sh/uv", uv_v, "uv-aarch64-apple-darwin.tar.gz",
                           "uv-aarch64-apple-darwin.tar.gz.sha256")
         packer = packer_asset(packer_v)
-    gnupg = gnupg_assets(old, latest)
-    gnupg_body = "".join(f"\n{p}_VERSION={a['version']}\n{p}_URL={a['url']}\n{p}_SHA256={a['sha256']}\n"
-                         for p, a in gnupg.items())
+    gnupg_prefixes = [p for p, _, _ in GNUPG_COMPONENTS]
+    registry_prefixes = [p for p, *_ in REGISTRY_TOOLS]
+    gnupg = (_kept(old, gnupg_prefixes) if only == "registry" else None) or gnupg_assets(old, latest)
+    registry = (_kept(old, registry_prefixes) if only == "gnupg" else None) or registry_assets(old, latest)
+    gnupg_body = _block(gnupg) + _block(registry)
 
     # A version bump invalidates a Team ID pin only if the signer actually changes;
     # keep pins and let bootstrap enforce them.
@@ -186,7 +223,8 @@ UV_SHA256={uv["sha256"]}
 """
     PINS.write_text(PINS_HEADER + body + gnupg_body)
     log(f"wrote {PINS.relative_to(ROOT)}: tart {tart_v}, packer {packer_v}, "
-        f"plugin {plugin_v}, uv {uv_v}, gnupg {gnupg['GNUPG']['version']}. "
+        f"plugin {plugin_v}, uv {uv_v}, gnupg {gnupg['GNUPG']['version']}, "
+        f"zot {registry['ZOT']['version']}, cosign {registry['COSIGN']['version']}. "
         f"Review the diff, commit, then run tools/bootstrap.sh")
     if plugin_v != old["PACKER_PLUGIN_TART_VERSION"]:
         warn("plugin version changed: update required_plugins in packer/*/*.pkr.hcl to match")

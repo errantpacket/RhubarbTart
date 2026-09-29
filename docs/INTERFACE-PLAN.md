@@ -1,6 +1,6 @@
 # Management Interface — Implementation Charter
 
-_Status: **delivered** · 2026-09-26 · branch `dev-control-plane` (Stages A–C complete; all gates
+_Status: **delivered** · 2026-09-26 · merged to `main` (Stages A–C complete; all gates
 passed and hardware-validated; #16–#23 fixed along the way). Remaining input-modal actions (#20)
 done. The `herdr` service (Phase 5) gets its own charter._
 
@@ -16,7 +16,7 @@ The guiding rule from the plan: **one audited core, many thin frontends.** No UI
 ## Dev practices (every stage)
 
 - **Branch per stage** off `dev-control-plane` (`feat/core-api`, `feat/tui-readonly`,
-  `feat/tui-actions`); small, focused commits; author `errantpacket`; `Co-Authored-By` trailer.
+  `feat/tui-actions`); small, focused commits; author `errantpacket`; `Co-Authored-By` trailer. _(Historical: the branch has since been merged to `main` and deleted; current workflow is in CONTRIBUTING.md → "Workflow".)_
 - **Contract-first.** Each stage begins by agreeing the public signatures (types + docstrings)
   it exposes or consumes. Downstream work builds against the contract, not the implementation.
 - **Tests travel with logic.** Every non-trivial pure function (record parsing, status/outdated

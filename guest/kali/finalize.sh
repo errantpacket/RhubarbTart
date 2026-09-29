@@ -68,7 +68,9 @@ EOF
   chown "$RB_USER:$RB_USER" "$USER_HOME/.ssh/authorized_keys"
   chmod 600 "$USER_HOME/.ssh/authorized_keys"
   sshd -t || die "sshd config does not parse"
-  effective="$(sshd -T -C user="$RB_USER",host=rhubarb,addr=192.168.64.1)"
+  # OpenSSH >= 10.5 prints keywords in CamelCase ("PasswordAuthentication no"); parsing is
+  # case-insensitive, so lowercase only the keyword and keep the value compare exact. (#57)
+  effective="$(sshd -T -C user="$RB_USER",host=rhubarb,addr=192.168.64.1 | awk '{ $1 = tolower($1) } 1')"
   for want in "passwordauthentication no" "kbdinteractiveauthentication no" \
               "authenticationmethods publickey" "permitrootlogin no" \
               "allowusers $RB_USER" "allowagentforwarding no"; do

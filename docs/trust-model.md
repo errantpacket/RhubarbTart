@@ -79,6 +79,16 @@ ZAP, which ships no Apple signature: it's marked `"signed": false` and verified 
 pinned GitHub-release digest (host **and** in-guest) — a weaker tier, called out in the table
 above. A `"signed": false` tool must always carry a real pinned hash, or resolve refuses it.
 
+**Published images (optional, #32).** `scripts/publish.sh` pushes a smoke-passed image to an OCI
+registry (by default a localhost-only `zot` from the pinned toolchain), then signs it and attests its
+provenance record with the publisher's cosign key. Signing is deliberately **offline**: the key and
+passphrase stay in the keychain and reach cosign only via its environment. The committed signing
+config names no CA, OIDC, transparency-log or timestamp service, and cosign's network access is
+pinned to the registry host, so nothing about these images reaches public Sigstore services. The
+trade-off is that there's no public transparency log, so trust rests on the committed public key
+`config/keys/rhubarb-cosign.pub`. Consumers verify with `publish.sh verify <ref@digest>` and
+always use images by digest.
+
 ## Security posture
 
 | | macOS | NixOS | Kali |

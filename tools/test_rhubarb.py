@@ -519,6 +519,33 @@ def test_chrome_update_policy() -> None:
           not re.search(r"rm [^\n]*com\.google\.Keystone", fin))
 
 
+def test_publish_offline_signing() -> None:
+    """Publishing never involves public Sigstore services (#32): the signing config names none,
+    every sign/attest is key-based with that config, and cosign's egress is pinned to the
+    registry (it otherwise fetches Sigstore's public TUF root)."""
+    import re
+    root = Path(__file__).resolve().parent.parent
+    cfg = json.loads((root / "config/cosign/signing-config-offline.json").read_text())
+    check("offline signing config: no CA/OIDC/transparency-log/timestamp services",
+          all(cfg.get(k) == [] for k in ("caUrls", "oidcUrls", "rekorTlogUrls", "tsaUrls")))
+    pub = (root / "scripts/publish.sh").read_text()
+    code = "\n".join(ln for ln in pub.splitlines() if not ln.lstrip().startswith("#"))
+    signs = re.findall(r"cosign (?:sign|attest) [^\n]*", code)
+    check("publish.sh signs and attests", len(signs) == 2)
+    check("every sign/attest is key-based with the offline config",
+          all('"${common[@]}"' in s for s in signs)
+          and "--key env://COSIGN_PRIVATE_KEY" in code and '--signing-config "$SIGNING_CONFIG"' in code)
+    check("never keyless, never the deprecated --tlog-upload", "--tlog-upload" not in code
+          and "--identity-token" not in code and "--oidc" not in code)
+    wrapper = re.search(r"^cosign\(\) \{\n(.*?)\n\}\n", code, re.S | re.M)
+    body = wrapper.group(1) if wrapper else ""
+    check("cosign is wrapped: egress pinned to the registry host",
+          all(x in body for x in ("HTTPS_PROXY=http://127.0.0.1:9", 'NO_PROXY="$host"',
+                                  'no_proxy="$host"', "command cosign")))
+    check("private key reaches cosign via env only, never argv/file",
+          "COSIGN_PRIVATE_KEY=" in code and not re.search(r"--key [^ ]*\.key", code))
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -1125,7 +1152,7 @@ if __name__ == "__main__":
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
-              test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy):
+              test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing):
         print(t.__name__)
         t()
     if FAILS:

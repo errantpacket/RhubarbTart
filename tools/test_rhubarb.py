@@ -282,6 +282,66 @@ def test_confirm_prompt() -> None:
         builtins.input = orig
 
 
+def test_pgp_ed25519() -> None:
+    """Pure-Python OpenPGP Ed25519 verifier used to pin GnuPG's own tarballs (#54), against a
+    real signed file (gnupg.org swdb.lst, signed by Werner Koch's dist key) and tamperings."""
+    from rhubarb import pgp_ed25519 as p
+    from rhubarb.common import KEYS, VerifyError
+    werner, niibe = "6DAA6E64A76D2840571B4902528897B826403ADA", "AC8E115BF73E2D8D47FA9908E98E9B2D19C6C8BD"
+    td = Path(__file__).resolve().parent / "testdata"
+    data, sig = (td / "gnupg-swdb.lst").read_bytes(), (td / "gnupg-swdb.lst.sig").read_bytes()
+    keys = (KEYS / "gnupg-release-signing.asc").read_text()
+
+    def rejects(label, fn, needle):
+        try:
+            fn()
+            check(label, False)
+        except VerifyError as e:
+            check(label, needle in str(e))
+
+    check("key file: Ed25519 primaries parsed, fingerprints computed",
+          {werner, niibe} <= set(p.ed25519_primary_keys(keys)))
+    check("real swdb.lst signature verifies by the pinned key",
+          p.verify_detached(data, sig, keys, {werner, niibe}) == {werner})
+    tampered = bytearray(data)
+    tampered[100] ^= 1
+    rejects("tampered data rejected", lambda: p.verify_detached(bytes(tampered), sig, keys, {werner}), "NOT valid")
+    bad_s = bytearray(sig)
+    bad_s[-3] ^= 1  # inside the s MPI: digest/prefix still match, only the curve check can catch it
+    rejects("corrupted signature value rejected by the Ed25519 check",
+            lambda: p.verify_detached(data, bytes(bad_s), keys, {werner}), "NOT valid")
+    rejects("signer not pinned -> no valid signature",
+            lambda: p.verify_detached(data, sig, keys, {niibe}), "no valid signature")
+    sha1 = bytearray(sig)
+    sha1[sig.index(b"\x04\x00\x16") + 3] = 2  # hash algorithm byte -> SHA-1
+    rejects("SHA-1 signature refused", lambda: p.verify_detached(data, bytes(sha1), keys, {werner}), "unsupported")
+    rejects("partial-length packet refused",
+            lambda: p.verify_detached(data, b"\xc2\xe0" + sig[2:], keys, {werner}), "partial")
+    rejects("non-signature packet refused",
+            lambda: p.verify_detached(data, b"\xcb\x01\x00", keys, {werner}), "unexpected packet")
+
+
+def test_toolchain_gpg() -> None:
+    """On macOS resolve uses only the bootstrap-built gpg, never one from PATH (#54)."""
+    from rhubarb import gpg
+    from rhubarb.common import VerifyError
+    orig = (gpg.platform.system, gpg.TOOLCHAIN_GPG)
+    try:
+        gpg.platform.system = lambda: "Darwin"
+        with tempfile.TemporaryDirectory() as d:
+            fake = Path(d) / "gpg"
+            gpg.TOOLCHAIN_GPG = fake
+            try:
+                gpg.gpg_binary()
+                check("darwin without toolchain gpg -> refuses (no PATH fallback)", False)
+            except VerifyError as e:
+                check("darwin without toolchain gpg -> refuses (no PATH fallback)", "bootstrap" in str(e))
+            fake.write_text("")
+            check("darwin uses the toolchain gpg", gpg.gpg_binary() == str(fake))
+    finally:
+        gpg.platform.system, gpg.TOOLCHAIN_GPG = orig
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -874,7 +934,8 @@ if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops,
               test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
-              test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt):
+              test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
+              test_pgp_ed25519, test_toolchain_gpg):
         print(t.__name__)
         t()
     if FAILS:

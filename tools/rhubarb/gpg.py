@@ -2,31 +2,53 @@
 
 The key file comes from config/keys/ (committed); the fingerprint comes from the
 package/base config. Both must agree with the signature, so swapping either the
-key file or the upstream signature fails closed. Uses a throwaway GNUPGHOME.
+key file or the upstream signature fails closed. Uses a throwaway GNUPGHOME and never starts
+gpg-agent/keyboxd (verification needs neither; an autostarted agent outlives the temp home).
+
+On macOS the gpg is the one tools/bootstrap.sh built from pinned source into .toolchain (#54),
+never whatever is on PATH. Elsewhere (a Linux resolve host) the system gpg is used.
 """
 
+import platform
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
-from .common import KEYS, VerifyError
+from .common import KEYS, ROOT, VerifyError
+
+TOOLCHAIN_GPG = ROOT / ".toolchain" / "bin" / "gpg"
 
 
-def _require_gpg() -> None:
-    if not shutil.which("gpg"):
-        raise VerifyError("gpg is required for this resolver (resolve Linux profiles on any "
-                          "machine with gnupg; the build host only needs the lock file)")
+def gpg_binary() -> str:
+    if platform.system() == "Darwin":
+        if not TOOLCHAIN_GPG.exists():
+            raise VerifyError("the pinned gpg is missing from .toolchain; run ./tools/bootstrap.sh")
+        return str(TOOLCHAIN_GPG)
+    found = shutil.which("gpg")
+    if not found:
+        raise VerifyError("gpg is required for this resolver (install gnupg on this host)")
+    return found
+
+
+def gpg_version() -> str | None:
+    """First line of `gpg --version` for the gpg resolve would use, or None if there is none."""
+    try:
+        res = subprocess.run([gpg_binary(), "--version"], capture_output=True, text=True)
+    except (VerifyError, OSError):
+        return None
+    return res.stdout.split("\n", 1)[0].strip() or None
 
 
 def _verify(keyfile: str, fpr: str, args: list[str]) -> str:
-    _require_gpg()
+    binary = gpg_binary()
     key = KEYS / keyfile
     if not key.exists():
         raise VerifyError(f"missing pinned key config/keys/{keyfile}")
     fpr = fpr.replace(" ", "").upper()
     with tempfile.TemporaryDirectory() as home:
-        gpg = ["gpg", "--homedir", home, "--batch", "--no-tty", "--no-auto-key-retrieve"]
+        gpg = [binary, "--homedir", home, "--batch", "--no-tty", "--no-autostart",
+               "--no-auto-key-retrieve"]
         subprocess.run([*gpg, "--import", str(key)], check=True, capture_output=True)
         res = subprocess.run([*gpg, "--status-fd", "1", *args], capture_output=True)
     # Status lines may carry raw non-UTF-8 user IDs; only the hex fingerprint fields matter.

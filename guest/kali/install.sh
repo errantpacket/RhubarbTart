@@ -64,7 +64,13 @@ if dpkg -s kali-grant-root >/dev/null 2>&1; then
       | awk '/^ +(PreDepends|Depends|Recommends): [^<]/ {print $2}' \
       | grep -vxF -e kali-grant-root -e kali-desktop-core -e kali-desktop-xfce | sort -u)
   if ((${#keep[@]})); then apt-mark manual "${keep[@]}" >/dev/null; fi
-  apt-get purge -y -q kali-grant-root "${metas[@]}"
+  # Kali marks its desktop metapackages Protected, so apt wants --allow-remove-essential. Grant
+  # it only for this exact, simulated plan: if the removal set ever grows (a real essential
+  # package), refuse instead.
+  plan="$( { apt-get -s -q purge kali-grant-root "${metas[@]}" || true; } | awk '/^Purg /{print $2}' | sort | tr '\n' ' ')"
+  [[ "$plan" == "kali-desktop-core kali-desktop-xfce kali-grant-root " ]] \
+    || die "unexpected removal plan for kali-grant-root: '$plan'"
+  apt-get purge -y -q --allow-remove-essential kali-grant-root "${metas[@]}"
 fi
 
 if [[ "$(opt rosetta)" == true ]]; then

@@ -41,8 +41,7 @@ the families that have a trustworthy source. Existing resolvers:
 
 For a signed apt repo, add its key to `config/keys/` (verify the fingerprint from a second source)
 and reuse `apt`. macOS variants need `app` (the bundle name in `/Applications`) so the guest can
-re-verify the installed bundle. The one exception is Perimeter 81, whose bundle name varies: it
-has no `app`, and a pattern hardcoded in `guest/macos/install.sh` finds it.
+re-verify the installed bundle.
 
 **`signed: false` (macOS)** — for a macOS `dmg`/`pkg` that ships *no* Apple signature (e.g. ZAP).
 The host skips `codesign`/notarization and the guest skips its re-verify; integrity comes solely
@@ -53,11 +52,11 @@ is `true` (full signature verification).
 
 ### Local / tenant installer (no public URL)
 
-For a tool distributed only through a portal login (Perimeter 81 is the worked example in
-`config/packages/perimeter81.json`):
+For a tool distributed only through a portal login (for example a licensed agent from a vendor's
+admin console):
 
 1. `config/packages/<id>.json`: `resolver: "local"`, `kind: "pkg"`/`"dmg"`, `path:
-   "vendor/<id>/<file>"`, `team_id: null` (pin later), `app` for a dmg (or omit + add a pattern),
+   "vendor/<id>/<file>"`, `team_id: null` (pin later), `app` (the installed bundle name),
    `signed: false` only if the installer is unsigned.
 2. Place the downloaded installer at `vendor/<id>/<file>` on the build host. Everything under
    `vendor/` is git-ignored (`vendor/**/*.pkg`, `*.cer`) — tenant installers are never committed.

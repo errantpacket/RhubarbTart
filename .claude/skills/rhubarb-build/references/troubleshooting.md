@@ -50,7 +50,6 @@ is wrong for a new macOS build, fix it with the same strictness (see the `rhubar
 | `IPSW hash disagreement: apple=… ipsw.me=…` | Mirror metadata stale or wrong | Apple's header is authoritative; wait and retry. Never drop the cross-check |
 | `IPSW URL is not on updates.cdn-apple.com` | Discovery source returned a non-Apple URL | Treat as suspicious; don't allow-list it |
 | `…: cached <file> differs from lock. If upstream moved (…), re-resolve.` | The cache is content-addressed (`cache/artifacts/<sha256>/<file>`, #67), so this means the cached copy is corrupt, or an unversioned upstream (Chrome) now serves a different build than the lock pins, so it can't be re-fetched | Re-resolve the profile and review the lock diff. Never hand-edit the hash |
-| `missing local file vendor/perimeter81/Perimeter81.pkg …` | Tenant installer not placed, or named differently | The user downloads it from the Harmony SASE portal (Devices → Downloads → Agents) and saves it as exactly `vendor/perimeter81/Perimeter81.pkg` |
 | `…: not notarized` / `not signed with a Developer ID Installer cert` | Vendor shipped an unsigned build or a wrong file | Get a proper build from the vendor; don't relax the check |
 | `…: Team ID X != pinned Y` | Vendor changed signing identity, or it's not the vendor's file | Verify out-of-band with the vendor before re-pinning in `config/packages/<id>.json` |
 | HTTP 403 from api.github.com | Rate limit | `export GITHUB_TOKEN=…` |
@@ -87,7 +86,7 @@ Stage 1 runs with a visible VNC window (not headless), so ask the user what scre
 | Message | Cause | Fix |
 |---|---|---|
 | `hash mismatch inside guest` | Upload corrupted or stage dir stale | Re-run build (verify rebuilds the stage dir) |
-| `perimeter81: installed app bundle unknown …` / `…: /Applications/… missing after install` | Vendor renamed the bundle, or `app` is wrong in the package config | `ls /Applications` in the `-unverified` image; set `"app"` in `config/packages/<id>.json` (or extend the Perimeter 81 pattern in `guest/macos/install.sh`) |
+| `<id>: installed app bundle unknown …` / `…: /Applications/… missing after install` | Vendor renamed the bundle, or `app` is wrong in the package config | `ls /Applications` in the `-unverified` image; set `"app"` in `config/packages/<id>.json` |
 | `sshd_config has no Include for sshd_config.d` | Apple changed the default sshd_config | Code change needed; keep key-only enforcement |
 | `sshd -T missing '<setting>'` | Drop-in not taking precedence, or the setting was renamed | Inspect `/etc/ssh/sshd_config.d/`; adjust the file ordering or name |
 | `stealth mode is off` / `firewall is not enabled` | New macOS changed `socketfilterfw` output wording | Check the real output; update the grep to match the new wording exactly |

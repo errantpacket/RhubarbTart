@@ -40,11 +40,12 @@ Review against this checklist and summarize it for the user:
 - **Each package:**
   - The version bump is plausible (release notes exist).
   - macOS: `notarized` is true, and `signature.team_id` matches the pinned value in
-    `config/packages/<id>.json`. Where that pin is still `null` (ZAP, Perimeter 81 until pinned),
+    `config/packages/<id>.json`. Where that pin is still `null` (ZAP),
     compare with the previous lock instead: a change there is a signer change.
   - apt `.deb`: `hash_sources` names the expected key fingerprint.
   - TOFU entries (`tofu:` in `hash_sources`) deserve a closer look, because nothing upstream
-    vouched for their hash: Chrome and WARP on macOS, Perimeter 81, and the nixpkgs tarball.
+    vouched for their hash: Chrome and WARP on macOS, any portal-supplied (`resolver: "local"`) installer, and the nixpkgs
+    tarball.
     The nixpkgs tarball is still pinned by git commit, and its NAR hash is re-checked by Nix in
     the guest.
 - **Stop and ask** about unexpected churn: a new signer, a URL host change, wild size jumps, or

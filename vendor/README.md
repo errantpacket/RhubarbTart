@@ -1,11 +1,11 @@
 # vendor/ — locally supplied installers
 
 Some tools aren't on a public URL — they're downloaded from a vendor/tenant portal behind a
-login (Perimeter 81 / Check Point Harmony SASE is the worked example). Their installers go here,
+login, such as a licensed agent from a vendor's admin console. Their installers go here,
 one subdirectory per tool, at the exact `path` named in `config/packages/<id>.json`:
 
 ```
-vendor/<id>/<file>          e.g. vendor/perimeter81/Perimeter81.pkg
+vendor/<id>/<file>          e.g. vendor/acme-agent/AcmeAgent.pkg
 ```
 
 **These files are never committed.** `.gitignore` excludes `vendor/**/*.pkg` and `vendor/**/*.cer`

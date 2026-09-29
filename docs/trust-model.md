@@ -62,7 +62,6 @@ flowchart LR
 | ZAP (macOS) | GitHub release | GitHub asset digest | **Unsigned** (no Apple signature exists); integrity is the pinned digest, enforced on the host and again in-guest (`SHA256SUMS`) |
 | WARP (macOS) | Versioned pkg from Cloudflare's feed | First use (no vendor hash exists) | Developer ID + notarized, Team `68WVV388M8` |
 | Tailscale (macOS) | `pkgs.tailscale.com` | Vendor `.sha256` | **distsign** Ed25519 chain from a pinned root, plus Team `W5364U7YZB` |
-| Perimeter 81 (macOS) | Your tenant portal | First use | Developer ID + notarized; pin the Team ID after the first resolve |
 | Textual (TUI dep) | PyPI (`files.pythonhosted.org`) | `tools/rhubarb_tui.py.lock` (uv script lockfile; per-file sha256) | — (pinned + hash-verified by uv; the repo's only *directly-declared* third-party Python dep — uv hash-verifies its transitive deps too) |
 
 </details>

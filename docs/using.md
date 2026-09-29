@@ -25,7 +25,7 @@ confirmation before anything destructive. For stacked macOS clones from a regist
 | `run NAME [--headless] [--detach]` | Starts the clone with the right flags for its profile (`--rosetta=rosetta` for Linux Rosetta profiles) |
 | `stop NAME` | Stops a running clone (the VM and its records stay) |
 | `ssh NAME [-- CMD]` | Connects as the profile's user, host key pinned per clone name |
-| `enroll NAME tailscale\|warp\|perimeter81 [--org TEAM]` | Runtime VPN/ZTNA enrollment (see below) |
+| `enroll NAME tailscale\|warp [--org TEAM]` | Runtime VPN/ZTNA enrollment (see below) |
 | `list` · `images` | Flags clones whose image is **outdated** (the profile's lock changed) or **deleted**, and shows each clone's password mode and enrollments |
 | `reset NAME [--same-image]` | Throws the clone away (identity, enrollment and all) and re-clones, from the current image by default |
 | `rm NAME [--yes]` | Stops and deletes the clone, its keychain entry (only if it had a unique/rotated password) and its pinned host key |
@@ -96,11 +96,9 @@ sequenceDiagram
 |---|---|---|---|
 | Tailscale | `rhubarb enroll web-1 tailscale` | account `tailscale-authkey` | Use a one-off, pre-approved, *tagged* key (ephemeral for throwaway clones). macOS: approve the system extension once per clone |
 | Cloudflare WARP | `rhubarb enroll web-1 warp --org TEAM` | `warp-client-id`, `warp-client-secret` | A service token allowed to enroll devices; dashboard version pushes are disabled |
-| Perimeter 81 | `rhubarb enroll web-1 perimeter81` | — | Prints the manual sign-in and extension-approval steps |
 
 Store a secret once with `security add-generic-password -s RhubarbTart-enroll -a tailscale-authkey -w`
 (it prompts, so the secret never lands in your shell history). `rhubarb enroll` wraps
-`scripts/enroll.sh` and records which services each clone is enrolled in — except `perimeter81`,
-which is manual (the script only prints the steps), so it isn't recorded.
+`scripts/enroll.sh` and records which services each clone is enrolled in.
 
 ← back to the [README](../README.md)

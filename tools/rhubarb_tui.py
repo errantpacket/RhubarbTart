@@ -47,8 +47,8 @@ class RhubarbTUI(App):
     are dispatched by the shell — never by the panes — through the action modules in
     ``rhubarb.tui.actions``: each runs in a Textual worker off the UI thread, streams
     its progress into the action log, and destructive actions confirm first via
-    ``ConfirmScreen``. ``rm`` is wired end to end; the rest are stubs for the
-    per-action agents.
+    ``ConfirmScreen``. All actions (``run``/``ssh``/``enroll``/``new``/``reset``/``rm``/``build``)
+    are wired to the typed core.
     """
 
     TITLE = "RhubarbTart"

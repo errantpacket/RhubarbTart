@@ -45,8 +45,8 @@ Each module (``run`` / ``ssh`` / ``enroll`` / ``new`` / ``reset`` / ``rm`` /
        ``ctx.progress`` into the action log; on return, apply the ``ActionOutcome``
        (log summary, surface ``exec_argv``, refresh panes).
 
-``rm`` is fully wired as the exemplar; the other modules are stubs with the same
-signature for the per-action agents to fill in.
+Every action module (``run``/``ssh``/``enroll``/``new``/``reset``/``rm``/``build``) is wired to the
+typed core through the same ``handle(ctx)`` signature; ``rm`` was the original exemplar.
 """
 
 from collections.abc import Callable

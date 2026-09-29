@@ -1,6 +1,6 @@
 # Engagement Object — Implementation Charter (Phase 1)
 
-_Status: draft · 2026-09-26 · branch `dev-engagement`_
+_Status: delivered — Phase 1 complete, Gate 1B validated on hardware · branch `dev-engagement`_
 
 Implements **Phase 1** of [`PLAN.md`](PLAN.md) — the **engagement**: the scoped unit that owns a
 named set of ranges (VMs), built and torn down as one. See the design in

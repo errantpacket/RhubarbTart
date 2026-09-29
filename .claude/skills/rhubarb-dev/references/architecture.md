@@ -54,7 +54,9 @@ rbt-<id>-<inputs12>-unverified ─▶ smoke-test.sh (throwaway clone) ─▶ tar
 | External proof | `scripts/smoke-test.sh` |
 | Runtime enrollment | `scripts/enroll.sh` |
 | Regression guard | `tools/check.sh` |
-| Clone management CLI | `./rhubarb` → `tools/rhubarb_cli.py` → `tools/rhubarb/cli.py` |
+| Clone management CLI (thin adapter — no tart/keychain logic) | `./rhubarb` → `tools/rhubarb_cli.py` → `tools/rhubarb/cli.py` → `tools/rhubarb/api.py` |
+| Typed core: all clone/engagement orchestration (`new`/`run`/`ssh`/`enroll`/`reset`/`rm`, `provision`/`teardown`) — the single import surface over clones/hostops | `tools/rhubarb/api.py` |
+| Engagement manifests (load + strict validation) | `tools/rhubarb/engagements.py` |
 | Clone records (StrictModes-style store, audit log) | `tools/rhubarb/clones.py` |
 | tart / keychain / SSH ops, per-clone password rotation | `tools/rhubarb/hostops.py` (`ROTATE_SCRIPT`) |
 
@@ -104,7 +106,8 @@ existed as a hash.
 
 `rhubarb new` clones a verified image (from the profile's committed lock, or `--image`), then
 writes `~/Library/Application Support/RhubarbTart/clones/NAME.json` with the clone's profile,
-family, source image, username, Rosetta flag, `password_account` and enrollments. It then boots
+family, source image, username, Rosetta flag, `password_account`, `created_at`, its `engagement`
+tag (`None` for ad-hoc clones) and enrollments. It then boots
 the clone headless and runs `ROTATE_SCRIPT` over SSH. stdin carries the current and new
 passwords; macOS uses `dscl -passwd`, NixOS writes a new yescrypt hash to
 `/var/lib/rhubarbtart/password.hash` and applies it with `chpasswd -e`, and Kali uses `chpasswd`.

@@ -1,6 +1,6 @@
 # Engagement Object — Implementation Charter (Phase 1)
 
-_Status: delivered — Phase 1 complete, Gate 1B validated on hardware · branch `dev-engagement`_
+_Status: delivered — Phase 1 complete, Gate 1B validated on hardware (#44) · merged to `main` (#48)_
 
 Implements **Phase 1** of [`PLAN.md`](PLAN.md) — the **engagement**: the scoped unit that owns a
 named set of ranges (VMs), built and torn down as one. See the design in
@@ -16,7 +16,7 @@ agent-budget and evidence-policy are validated syntactically and stored for the 
 
 ## Dev practices (every stage)
 
-- Branch per stage off `dev-engagement`; author `errantpacket`; `Co-Authored-By` trailer.
+- Branch per stage off `dev-engagement`; author `errantpacket`; `Co-Authored-By` trailer. _(Historical: the branch has since been merged to `main` and deleted; current workflow is in CONTRIBUTING.md → "Workflow".)_
 - **Build on the core.** Engagement logic goes in `tools/rhubarb/` and reuses `api.py` / `clones.py`
   (clone, rm, records) — never re-implementing keychain/StrictModes/tart handling. CLI/TUI call the core.
 - **Manifests are committed + reviewable** (like `profiles/` and `locks/`); validation is **strict**

@@ -68,6 +68,22 @@ untested in your change.
   [`docs/reference.md`](docs/reference.md) — and any affected skill. The README is the landing
   page; the `docs/` reference pages are the spec.
 
+## Workflow: issues, branches, pull requests
+
+`main` is the only long-lived branch. It must always pass `./tools/check.sh`.
+
+1. **Start from an issue.** Every change, including docs and validation runs, has an issue on the
+   board. Use the existing labels (`bug`, `enhancement`, `task`, `validation`, `kind:*`, `stage:*`).
+2. **Branch off current `main`** as `<type>/<issue>-<slug>`, for example `fix/47-confirm-eof`,
+   `feat/30-softnet`, `docs/49-branch-workflow` or `validate/25-kali`. The types are `fix`, `feat`,
+   `docs`, `chore` and `validate`. Don't create long-lived `dev-*` branches.
+3. **Open a PR into `main`** whose body says `Closes #N` and gives the verification (below). Keep
+   history linear: squash or rebase, no merge commits. The branch is deleted on merge.
+4. **Post evidence on the issue.** Results from a real Mac (builds, smoke tests, gates) go there
+   as a comment, because only the Mac can show them.
+5. **Temporary coordination notes** (handoffs, agent-to-agent files, patches) are never
+   committed. Delete them once the issue closes; the issue and the commits are the record.
+
 ## Commits & pull requests
 
 - Keep secrets and build artifacts out of git. `cache/`, `out/`, `.toolchain/`, and vendor

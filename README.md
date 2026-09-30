@@ -105,11 +105,11 @@ explicit link between two of them, and a lab target like Juice Shop has no route
 </details>
 
 <details>
-<summary><b>Where the project is going: agent-driven engagements</b></summary>
+<summary><b>Agent-driven engagements with herdr</b></summary>
 
-The goal is to run AI agents under a management interface ([herdr](https://herdr.dev)) for scoped
-research, penetration tests and CTFs inside these VMs, with evidence saved to a store on the host,
-outside the VMs. A verified, disposable guest is the building block for that. Today you can:
+RhubarbTart can run AI agents under [herdr](https://herdr.dev), a terminal multiplexer for agents,
+for scoped research, penetration tests and CTFs inside these VMs. Evidence is kept on the host,
+outside the VMs. You can:
 
 - create and remove a whole set of clones for one scope as an
   [engagement](docs/using.md#engagements);
@@ -119,8 +119,10 @@ outside the VMs. A verified, disposable guest is the building block for that. To
   assigned clone, through the `rbt-range` client, and commands that match a configured pattern
   wait for your approval.
 
-The [herdr charter](docs/HERDR-CHARTER.md) sets the boundary for this work. See
-[`docs/PLAN.md`](docs/PLAN.md) for the plan.
+Not built yet: enforcing an engagement's agent budget, recording the agents' prompts and replies,
+and running each engagement's agents in their own VM instead of on your Mac. The
+[herdr charter](docs/HERDR-CHARTER.md) sets the boundary for this work, and
+[`docs/PLAN.md`](docs/PLAN.md) has the design and roadmap.
 
 </details>
 
@@ -237,7 +239,7 @@ Open work is tracked in the [issue tracker](https://github.com/errantpacket/Rhub
 | Enhancement | [#100](https://github.com/errantpacket/RhubarbTart/issues/100) Encrypting sealed evidence vaults at rest |
 | Enhancement | [#94](https://github.com/errantpacket/RhubarbTart/issues/94) Moving lab targets onto Tart's native host-only network once it ships |
 | On hold | [#28](https://github.com/errantpacket/RhubarbTart/issues/28) A standard (non-admin) account for daily use; the design options are in the issue |
-| Roadmap | [#33](https://github.com/errantpacket/RhubarbTart/issues/33) The `herdr` agent management service (the first parts have shipped) |
+| Roadmap | [#33](https://github.com/errantpacket/RhubarbTart/issues/33) herdr agent platform: the service and integration shipped (#104, #108); budget enforcement, prompt capture and a per-engagement agent VM remain |
 | Roadmap | [#37](https://github.com/errantpacket/RhubarbTart/issues/37) A published documentation site |
 
 ## License

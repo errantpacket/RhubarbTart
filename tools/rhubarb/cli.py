@@ -10,6 +10,7 @@
   rhubarb enroll NAME tailscale|warp [--org TEAM]
   rhubarb reset NAME [--same-image] [--no-rotate]   back to a clean clone (drops enrollment)
   rhubarb rm NAME [--yes]
+  rhubarb serve [--socket PATH]                     control-plane service (read-only) on a 0600 Unix socket
   rhubarb engagement define FILE|ID                 validate + acknowledge a scope manifest
   rhubarb engagement list                           defined engagements and their clone counts
   rhubarb engagement provision ID                   stand up its ranges from verified images
@@ -306,6 +307,23 @@ def cmd_vault_verify(a) -> None:
         f"signature verified; head {rep.chain_head[:16]}")
 
 
+def cmd_serve(a) -> None:
+    from . import service
+
+    def stop(_sig, _frame):
+        raise KeyboardInterrupt
+
+    # Clean up the socket on Ctrl-C *and* `kill` (SIGTERM), so a supervised service leaves no
+    # stale socket behind; serve()'s finally then unlinks it.
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, stop)
+    say("control-plane service (read-only); Ctrl-C to stop")
+    try:
+        service.serve(socket_path=a.socket, on_ready=lambda p: say(f"listening on {p} (0600)"))
+    except KeyboardInterrupt:
+        say("stopped")
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="rhubarb", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -367,6 +385,9 @@ def main(argv: list[str] | None = None) -> None:
     et.add_argument("--yes", action="store_true")
     et.add_argument("--no-collect", action="store_true", help="don't pull evidence first")
     et.set_defaults(fn=cmd_engagement_teardown)
+    srv = sub.add_parser("serve", help="run the read-only control-plane service on a Unix socket")
+    srv.add_argument("--socket", metavar="PATH", help="socket path (default: <state>/service.sock)")
+    srv.set_defaults(fn=cmd_serve)
     vt = sub.add_parser("vault", help="seal / verify a signed evidence bundle")
     vtsub = vt.add_subparsers(dest="vault_cmd", required=True)
     vs = vtsub.add_parser("seal", help="write a signed, sealed, portable evidence bundle")

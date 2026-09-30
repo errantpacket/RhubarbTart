@@ -74,6 +74,15 @@ Every entry is one line of `journal.jsonl` and includes the hash of the entry be
 outputs and files are stored by their sha256. `evidence verify` recomputes all of it and reports
 an edited, reordered or deleted entry or an altered file.
 
+**Control-plane service (read-only).** `rhubarb serve` runs a small HTTP service over a **Unix
+domain socket** (0600, under the state dir by default, or `--socket PATH`) that exposes the same
+read-only views the TUI uses — `/images`, `/clones`, `/engagements`, `/engagements/<id>/evidence`,
+`/provenance/<vm>`. It is the surface the herdr interface will sit on
+([charter](HERDR-CHARTER.md)). There is no TCP port and no token: filesystem permissions on the
+socket are the boundary, like the clone records. Every endpoint is a call into the same audited
+core; the service never touches `tart` or the keychain itself. This slice is read-only (mutating
+methods return 405); guarded actions and an event stream come later.
+
 **Sealing a vault.** `rhubarb vault seal ID` turns the evidence store into a signed, sealed,
 portable bundle you can hand off:
 

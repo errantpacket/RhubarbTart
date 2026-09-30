@@ -13,6 +13,8 @@ directly. The API is imported lazily inside ``refresh_data`` so that importing
 this package never requires ``tart`` to be installed (headless test / Linux dev).
 """
 
+from contextlib import nullcontext
+
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
@@ -32,6 +34,8 @@ _PW_STYLE = {"unique": "green", "inherited": "yellow"}
 
 class ClonesPane(VerticalScroll):
     """Every research clone: live state, staleness, password mode, enrollments."""
+
+    _sig = None   # last rendered rows, to skip no-op rebuilds
 
     BORDER_TITLE = "Clones"
 
@@ -103,14 +107,25 @@ class ClonesPane(VerticalScroll):
         except Exception:
             prev_key = None
 
-        table.clear()  # keeps columns
         if not clones:
+            table.clear()  # keeps columns
+            self._sig = None
             table.display = False
             status.update(Text("no clones yet (rhubarb new NAME --profile P).", style="dim"))
             return
 
         table.display = True
         status.update(Text(f"{len(clones)} clone(s).", style="dim"))
+        sig = [(c.name, c.profile, c.state, c.freshness, c.password_mode, tuple(c.enrollments))
+               for c in clones]
+        if sig == self._sig:
+            return   # nothing changed: leave the table (and the cursor) alone
+        self._sig = sig
+        with table.prevent(DataTable.RowHighlighted) if prev_key else nullcontext():
+            self._fill(table, clones, prev_key)
+
+    def _fill(self, table: DataTable, clones: list, prev_key) -> None:
+        table.clear()  # keeps columns
         for c in clones:
             enrolled = ", ".join(c.enrollments) if c.enrollments else "-"
             table.add_row(
@@ -125,7 +140,7 @@ class ClonesPane(VerticalScroll):
 
         if prev_key is not None:
             try:
-                table.move_cursor(row=table.get_row_index(prev_key))
+                table.move_cursor(row=table.get_row_index(prev_key), animate=False)
             except Exception:
                 pass
 

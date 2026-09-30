@@ -262,6 +262,107 @@ def _test_mouse() -> None:
     check("mouse: RHUBARB_TUI_MOUSE=0 turns it off", not mouse_enabled([], {"RHUBARB_TUI_MOUSE": "0"}))
 
 
+async def _selection_survives() -> None:
+    """The highlighted row stays put across refreshes — when nothing changed, when a row's
+    values changed, and (Logs) when the list reorders."""
+    import dataclasses
+
+    from textual.widgets import DataTable
+
+    images = list(MOCK_IMAGES)
+    clones = MOCK_CLONES
+    logs = {
+        "logs/build-a.log": (api.LogRef(id="logs/build-a.log", label="build a", kind="build",
+                                        size=10, mtime="2026-09-30T12:00:00+00:00"), "build a out"),
+        "logs/work-1.log": (api.LogRef(id="logs/work-1.log", label="work-1", kind="clone",
+                                       size=10, mtime="2026-09-30T11:00:00+00:00"), "work-1 out"),
+    }
+    api.images = lambda: images
+    api.clones = lambda: clones
+    api.provenance = _mock_provenance
+    api.list_logs = lambda: [r for r, _ in sorted(logs.values(), key=lambda v: v[0].mtime,
+                                                  reverse=True)]
+    api.read_log = lambda log_id, max_lines=2000: logs[log_id][1]
+
+    def key(app, table_id):
+        t = app.query_one(table_id, DataTable)
+        return t.coordinate_to_cell_key(t.cursor_coordinate).row_key.value
+
+    def at_cursor(app, table_id):
+        """The first cell of the row under the cursor (works whether or not rows have keys)."""
+        t = app.query_one(table_id, DataTable)
+        return _text(t.get_row_at(t.cursor_row)[0])
+
+    from rhubarb_tui import RhubarbTUI
+
+    app = RhubarbTUI()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        # Images: pick the third row, refresh, change a row, refresh.
+        app.query_one("#images-table", DataTable).focus()
+        await pilot.press("down", "down")
+        await pilot.pause()
+        picked = at_cursor(app, "#images-table")
+        check("images: third row picked", picked == MOCK_IMAGES[2].name)
+        await pilot.press("r")
+        await pilot.pause()
+        check("images: selection kept across a refresh", at_cursor(app, "#images-table") == picked)
+        images[0] = dataclasses.replace(images[0], clones=7)
+        await pilot.press("r")
+        await pilot.pause()
+        check("images: selection kept when rows change", at_cursor(app, "#images-table") == picked)
+
+        # Clones: pick the second row, then its state changes.
+        await pilot.press("2")
+        await pilot.pause()
+        app.query_one("#clones-table", DataTable).focus()
+        await pilot.press("down")
+        await pilot.pause()
+        check("clones: second row picked", key(app, "#clones-table") == "work-2")
+        clones = api.CloneList(clones=[clones.clones[0],
+                                       dataclasses.replace(clones.clones[1], state="running")],
+                               problems=clones.problems)
+        await pilot.press("r")
+        await pilot.pause()
+        check("clones: selection kept when rows change", key(app, "#clones-table") == "work-2")
+
+        # Logs: pick work-1, then it becomes the newest (the list reorders), then grows in place.
+        await pilot.press("4")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        app.query_one("#logs-table", DataTable).focus()
+        await pilot.press("down")
+        await pilot.pause()
+        check("logs: work-1 picked", key(app, "#logs-table") == "logs/work-1.log")
+        # The newest log (the top row) keeps growing while an older one is being read: the
+        # reader must not be pulled back to the top.
+        ref, _ = logs["logs/build-a.log"]
+        logs["logs/build-a.log"] = (dataclasses.replace(ref, size=20,
+                                                        mtime="2026-09-30T12:30:00+00:00"),
+                                    "build a out\nstep 2")
+        await pilot.press("r")
+        await pilot.pause()
+        check("logs: reading an older log while the newest grows keeps the selection",
+              key(app, "#logs-table") == "logs/work-1.log" and "work-1 out" in _view_text(app))
+        ref, _ = logs["logs/work-1.log"]
+        logs["logs/work-1.log"] = (dataclasses.replace(ref, size=20,
+                                                       mtime="2026-09-30T13:00:00+00:00"),
+                                   "work-1 out\nmore")
+        await pilot.press("r")
+        await pilot.pause()
+        check("logs: selection follows the log when the list reorders",
+              key(app, "#logs-table") == "logs/work-1.log" and "more" in _view_text(app))
+        ref, _ = logs["logs/work-1.log"]
+        logs["logs/work-1.log"] = (dataclasses.replace(ref, size=30,
+                                                       mtime="2026-09-30T13:30:00+00:00"),
+                                   "work-1 out\nmore\nand more")
+        await pilot.press("r")
+        await pilot.pause()
+        check("logs: selection kept when a log grows in place",
+              key(app, "#logs-table") == "logs/work-1.log" and "and more" in _view_text(app))
+
+
 async def _render() -> None:
     # Mock the core API before the app mounts (each pane calls api.* in refresh_data).
     api.images = _mock_images
@@ -873,6 +974,7 @@ def main() -> None:
     asyncio.run(_action_prompts())
     asyncio.run(_logs_tab())
     asyncio.run(_polling())
+    asyncio.run(_selection_survives())
     if FAILS:
         sys.exit(f"{len(FAILS)} TUI render test(s) failed")
     print("all rhubarb TUI render tests passed")

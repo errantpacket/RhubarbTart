@@ -56,6 +56,7 @@ class LogsPane(Horizontal):
         self._selected: str | None = None      # log id the viewer should show
         self._shown: tuple | None = None       # (id, size, mtime) currently in the viewer
         self._rows: list | None = None         # last rendered list, to avoid needless rebuilds
+        self._cols: list | None = None         # column keys, for in-place cell updates
 
     def compose(self) -> ComposeResult:
         with Vertical(id="logs-side"):
@@ -67,7 +68,7 @@ class LogsPane(Horizontal):
     def on_mount(self) -> None:
         table = self.query_one("#logs-table", DataTable)
         if not table.columns:
-            table.add_columns("Log", "Kind", "Size", "Updated")
+            self._cols = table.add_columns("Log", "Kind", "Size", "Updated")
 
     # -- data -----------------------------------------------------------------
 
@@ -115,19 +116,34 @@ class LogsPane(Horizontal):
         # Rebuild the list only when its contents changed, so the cursor doesn't jump.
         rows = [(r.id, r.label, r.kind, _size(r.size), _when(r.mtime)) for r in logs]
         if self._rows != rows:
+            same_order = self._rows is not None and [r[0] for r in self._rows] == [r[0] for r in rows]
+            if same_order and self._cols:
+                # Same logs, same order: only size/time moved. Update those cells in place so
+                # the table (and the cursor) stay put.
+                for (rid, label, _kind, size, when), old in zip(rows, self._rows):
+                    if (size, when) != (old[3], old[4]):
+                        dim = "dim" if label.endswith("(removed)") else ""
+                        table.update_cell(rid, self._cols[2], Text(size, style=dim))
+                        table.update_cell(rid, self._cols[3], Text(when, style=dim))
+            else:
+                # A log appeared, went, or moved up the list: rebuild, then put the cursor back
+                # on the selected log. Its highlight events are suppressed, or the rebuild's
+                # "row 0 highlighted" would pull the selection back to the top.
+                with table.prevent(DataTable.RowHighlighted):
+                    table.clear()
+                    for rid, label, kind, size, when in rows:
+                        # Logs of clones that no longer exist stay readable, but step back.
+                        dim = "dim" if label.endswith("(removed)") else ""
+                        table.add_row(Text(label, style=dim),
+                                      Text(kind, style=dim or _KIND_STYLE.get(kind, "")),
+                                      Text(size, style=dim), Text(when, style=dim), key=rid)
+                    if data["selected"] is not None:
+                        try:
+                            table.move_cursor(row=table.get_row_index(data["selected"]),
+                                              animate=False)
+                        except Exception:
+                            pass
             self._rows = rows
-            table.clear()
-            for rid, label, kind, size, when in rows:
-                # Logs of clones that no longer exist stay readable, but step back visually.
-                dim = "dim" if label.endswith("(removed)") else ""
-                table.add_row(Text(label, style=dim),
-                              Text(kind, style=dim or _KIND_STYLE.get(kind, "")),
-                              Text(size, style=dim), Text(when, style=dim), key=rid)
-            if data["selected"] is not None:
-                try:
-                    table.move_cursor(row=table.get_row_index(data["selected"]))
-                except Exception:
-                    pass
 
         self._selected = data["selected"]
         ref = data["ref"]

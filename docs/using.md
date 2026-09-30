@@ -87,7 +87,9 @@ audited core; the service never touches `tart` or the keychain itself.
   its output round-trips losslessly as base64). Bad input is 400; the wrong method on a known
   route is 405.
 
-An event-subscribe stream (for herdr's sidebar and approvals) is the remaining slice.
+- **Event stream:** `GET /engagements/<id>/events` tails that engagement's evidence journal as
+  NDJSON — `?from=<seq>` to resume after an entry, `?follow=false` to replay and stop. This is
+  the control plane's live record of what happened, and the feed for herdr's sidebar.
 
 **Sealing a vault.** `rhubarb vault seal ID` turns the evidence store into a signed, sealed,
 portable bundle you can hand off:

@@ -45,6 +45,14 @@ fi
 [[ -s /var/lib/rhubarbtart/password.hash ]] || die "no password hash"
 [[ "$(stat -c %a /var/lib/rhubarbtart/password.hash)" == 600 ]] || die "password hash not 0600"
 [[ -e "$SYS/sw/bin/nft" || -e "$SYS/sw/bin/iptables" ]] || die "no firewall tooling in system"
+# A lab target (Juice Shop, #30) must have no egress: the unit's cgroup IP filter, and the
+# firewall rule rejecting new outbound connections by its user.
+unit="$SYS/etc/systemd/system/juice-shop.service"
+if [[ -e "$unit" ]]; then
+  grep -qx 'IPAddressDeny=any' "$unit" || die "juice-shop.service lacks IPAddressDeny=any"
+  fw="$(grep -oE '/nix/store/[^ "]+' "$SYS/etc/systemd/system/firewall.service" | sort -u)"
+  [[ -n "$fw" ]] && grep -qs 'rbt-juiceshop-out' $fw || die "firewall lacks the juiceshop egress rule"
+fi
 CHECK
 chmod 700 /mnt/root/.rbt-check.sh
 nixos-enter --root /mnt -c 'bash /root/.rbt-check.sh' || die "posture assertion failed"

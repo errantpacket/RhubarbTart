@@ -1447,6 +1447,132 @@ def test_ssh_provenance() -> None:
         api.provenance, api.hostops.start_vm = orig
 
 
+def test_evidence_store() -> None:
+    """#85: the host evidence journal is hash-chained over content-addressed items, and
+    verify() reports an altered entry, a removed entry and an altered item."""
+    from rhubarb import evidence
+
+    e1 = evidence.append("lab-x", "lifecycle", {"event": "provision"})
+    e2 = evidence.append("lab-x", "exec", {"command": "id", "exit_code": 0}, clone="c1",
+                         blobs={"stdout": b"uid=1000\n", "stderr": b""})
+    check("journal chains: seq 1, 2 and prev links", (e1["seq"], e2["seq"]) == (1, 2)
+          and e1["prev"] == evidence.GENESIS and e2["prev"] == e1["hash"])
+    check("output stored content-addressed",
+          evidence.item_path("lab-x", e2["items"]["stdout"]).read_bytes() == b"uid=1000\n")
+    rep = evidence.verify("lab-x")
+    check("clean journal verifies", rep.problems == [] and rep.entries == 2 and rep.head == e2["hash"])
+    d = evidence.store_dir("lab-x")
+    check("store is 0700, journal 0600", (d.stat().st_mode & 0o777) == 0o700
+          and ((d / "journal.jsonl").stat().st_mode & 0o777) == 0o600)
+
+    journal = d / "journal.jsonl"
+    original = journal.read_bytes()
+    journal.write_bytes(original.replace(b'"command":"id"', b'"command":"ls"'))
+    check("verify catches an altered entry",
+          any("altered" in p for p in evidence.verify("lab-x").problems))
+    journal.write_bytes(original.split(b"\n", 1)[1])
+    check("verify catches a removed entry",
+          any("seq" in p or "chain" in p for p in evidence.verify("lab-x").problems))
+    journal.write_bytes(original)
+    item = evidence.item_path("lab-x", e2["items"]["stdout"])
+    item.write_bytes(b"uid=0\n")
+    check("verify catches an altered item",
+          any("content altered" in p for p in evidence.verify("lab-x").problems))
+    try:
+        evidence.store_dir("../escape")
+        check("rejects an engagement id that is a path", False)
+    except Exception:
+        check("rejects an engagement id that is a path", True)
+
+
+def test_evidence_exec_collect() -> None:
+    """#85: api.exec journals engagement commands (not ad-hoc ones); api.collect parses the
+    guest's tar stream without extracting, refuses unsafe members, and dedupes on re-collect."""
+    import io
+    import tarfile
+
+    from rhubarb import api, evidence
+
+    recs = {"jsl-attacker": {"name": "jsl-attacker", "family": "kali", "username": "kr",
+                             "profile": "kali-research", "engagement": "juiceshop-lab"},
+            "adhoc": {"name": "adhoc", "family": "kali", "username": "kr",
+                      "profile": "kali-research", "engagement": None}}
+
+    def tar_bytes():
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w") as tf:
+            def add(name, data=b"", kind=tarfile.REGTYPE, link=""):
+                ti = tarfile.TarInfo(name)
+                ti.type, ti.linkname, ti.size = kind, link, len(data)
+                tf.addfile(ti, io.BytesIO(data) if data else None)
+            add(".", kind=tarfile.DIRTYPE)
+            add("./scans", kind=tarfile.DIRTYPE)
+            add("./scans/nmap.txt", b"3000/tcp open")
+            add("./findings.md", b"# SQLi in login")
+            add("./link", kind=tarfile.SYMTYPE, link="/etc/passwd")
+            add("../../etc/evil", b"x")
+            add("/abs", b"x")
+        return buf.getvalue()
+
+    stream = tar_bytes()
+
+    class FakeProc:
+        def __init__(self, argv, **_k):
+            self.stdout = io.BufferedReader(io.BytesIO(stream))
+            self.stderr = io.BytesIO(b"")
+        def wait(self):
+            return 0
+
+    ran = []
+    orig = (api._clones.load, api.hostops.vm_ip, api.subprocess.run, api.subprocess.Popen,
+            api.clones, api._ground_truth)
+    try:
+        api._clones.load = lambda n: recs[n]
+        api.hostops.vm_ip = lambda n, f, wait=180: "192.168.64.5"
+        api.subprocess.run = lambda argv, **k: (ran.append(argv) or
+                                                types.SimpleNamespace(stdout=b"uid=1000(kr)\n", stderr=b"",
+                                                                      returncode=0))
+        res = api.exec("jsl-attacker", "id")
+        journal = evidence.entries("juiceshop-lab")
+        check("exec runs the command over the pinned ssh", ran and ran[-1][-1] == "id"
+              and "HostKeyAlias=jsl-attacker" in ran[-1])
+        check("exec in an engagement is journaled with its output",
+              res.evidence_seq == 1 and journal[-1]["kind"] == "exec"
+              and journal[-1]["data"]["command"] == "id"
+              and evidence.item_path("juiceshop-lab", journal[-1]["items"]["stdout"]).read_bytes()
+              == b"uid=1000(kr)\n")
+        check("exec on an ad-hoc clone is not journaled", api.exec("adhoc", "id").evidence_seq is None)
+
+        api.subprocess.Popen = FakeProc
+        api._ground_truth = lambda e, rec, ip: []
+        running = api.Clone(name="jsl-attacker", profile="kali-research", family="kali", image="rbt-x",
+                            state="running", freshness="current", password_mode="unique",
+                            password_account="jsl-attacker", enrollments=[],
+                            created_at="2026-01-02T00:00:00Z", engagement="juiceshop-lab")
+        stopped = api.Clone(**{**running.__dict__, "name": "jsl-target", "state": "stopped"})
+        api.clones = lambda: api.CloneList(clones=[running, stopped], problems=[])
+        first = {r.name: r for r in api.collect("juiceshop-lab")}
+        a = first["jsl-attacker"]
+        check("collect records regular files by relative path",
+              sorted(a.new) == ["findings.md", "scans/nmap.txt"])
+        check("collect refuses symlinks, .. and absolute paths",
+              len(a.skipped) == 3 and any("not a regular file" in s for s in a.skipped)
+              and sum("unsafe path" in s for s in a.skipped) == 2)
+        check("collect reports a stopped clone instead of starting it",
+              first["jsl-target"].note and "stopped" in first["jsl-target"].note)
+        arts = [e for e in evidence.entries("juiceshop-lab") if e["kind"] == "artifact"]
+        check("artifact content is stored and hashed on the host",
+              any(evidence.item_path("juiceshop-lab", e["items"]["content"]).read_bytes()
+                  == b"# SQLi in login" for e in arts))
+        again = {r.name: r for r in api.collect("juiceshop-lab")}["jsl-attacker"]
+        check("re-collect journals nothing new for unchanged files",
+              again.new == [] and sorted(again.unchanged) == ["findings.md", "scans/nmap.txt"])
+        check("the whole run verifies", evidence.verify("juiceshop-lab").problems == [])
+    finally:
+        (api._clones.load, api.hostops.vm_ip, api.subprocess.run, api.subprocess.Popen,
+         api.clones, api._ground_truth) = orig
+
+
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops, test_engagement_links,
@@ -1455,9 +1581,17 @@ if __name__ == "__main__":
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
               test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
-              test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement, test_guest_sync):
+              test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement, test_guest_sync,
+              test_evidence_store, test_evidence_exec_collect):
         print(t.__name__)
-        t()
+        # Each test gets a throwaway state dir, so nothing (records, evidence) can reach the
+        # operator's real one; tests that manage RHUBARB_STATE_DIR themselves still may.
+        with tempfile.TemporaryDirectory() as state:
+            os.environ["RHUBARB_STATE_DIR"] = state
+            try:
+                t()
+            finally:
+                os.environ.pop("RHUBARB_STATE_DIR", None)
     if FAILS:
         sys.exit(f"{len(FAILS)} test(s) failed")
     print("all rhubarb self-tests passed")

@@ -49,7 +49,31 @@ engagement id.
 | `engagement list` | Defined engagements and their live clone counts |
 | `engagement provision ID` | Clone each range from its **verified** image into engagement-tagged clones |
 | `engagement connect ID` | Open the manifest's `links` and hold them until Ctrl-C (both clones must be running) |
-| `engagement teardown ID [--yes]` | Remove exactly the clones tagged to that engagement (nothing else) |
+| `engagement teardown ID [--yes] [--no-collect]` | Collect evidence from running clones, then remove exactly the clones tagged to that engagement (nothing else) |
+| `exec NAME -- CMD` | Run a command in a clone; for an engagement clone, the command and its output are recorded as evidence |
+| `evidence collect\|list\|verify ID` | Pull each clone's `~/evidence` folder; show the journal; recompute the hash chain |
+
+**Evidence.** Each engagement keeps a record on your Mac, under
+`~/Library/Application Support/RhubarbTart/evidence/<id>/`, never in the clones:
+
+- **Commands.** `rhubarb exec` (and agents, through the same API) records the command, user,
+  exit code, times and full output of each command run in an engagement clone. Interactive
+  `rhubarb ssh` sessions are not recorded.
+- **Files.** Anything a clone puts in its user's `~/evidence/` folder (scan output, notes,
+  findings) is pulled by `evidence collect` and hashed as it arrives. The folder comes over as a
+  tar stream that is read, never unpacked, so symlinks and paths outside the folder are refused.
+  Unchanged files aren't recorded twice. `teardown` collects first, because a clone's files die
+  with it; a clone that is stopped at that point can't be collected.
+- **Ground truth.** A package can declare an endpoint that says what really happened. For Juice
+  Shop, `collect` saves `/api/Challenges/`, which lists the challenges actually solved, to check
+  claimed findings against.
+- **Lifecycle.** Provision (with the image each clone came from), connect and disconnect,
+  collect and teardown are recorded too.
+
+Every entry is one line of `journal.jsonl` and includes the hash of the entry before it, and
+outputs and files are stored by their sha256. `evidence verify` recomputes all of it and reports
+an edited, reordered or deleted entry or an altered file. The journal is not signed or encrypted
+yet; that is the vault ([#86](https://github.com/errantpacket/RhubarbTart/issues/86)).
 
 **Networking between clones.** Clones can't reach each other: Tart's default network drops
 traffic between VMs. A manifest's `links` are the only path, and they go through your Mac:

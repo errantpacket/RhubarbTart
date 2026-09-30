@@ -82,6 +82,9 @@ the next engagement.
 The macOS guest is a workstation for Apple work, such as simulators, intercepting proxies and
 analysis tools. It isn't an iOS VM: Tart runs macOS and Linux guests.
 
+Why Apple app testing is hard, and what each part of the tool does about it:
+[Testing macOS and iOS apps](docs/testing-apple-apps.md).
+
 </details>
 
 <details>
@@ -202,6 +205,7 @@ flowchart TD
 | **[Trust model and security posture](docs/trust-model.md)** | How each input is verified, and which security settings each OS applies and tests |
 | **[Publishing and stacked clones](docs/publishing.md)** | Signing and publishing images to a registry, and making stacked macOS clones from them |
 | **[macOS guests and containers](docs/macos-and-containers.md)** | Why macOS runs as a VM (not a container), what OCI packaging and clones give you, and running containers or devcontainers inside guests |
+| **[Testing macOS and iOS apps](docs/testing-apple-apps.md)** | The challenges of testing Apple software and how each part of the tool addresses them |
 | **[Reference](docs/reference.md)** | Updating inputs, configuration variables, host requirements and the toolchain |
 | **[Development](docs/development.md)** | Changing the code safely: `check.sh`, testing without a Mac, the Claude Code skills |
 

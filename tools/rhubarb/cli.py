@@ -6,6 +6,7 @@
   rhubarb run NAME [--headless] [--detach]
   rhubarb stop NAME
   rhubarb ssh NAME [-- CMD...]
+  rhubarb exec NAME -- CMD...                       run a command; journaled if the clone is in an engagement
   rhubarb enroll NAME tailscale|warp [--org TEAM]
   rhubarb reset NAME [--same-image] [--no-rotate]   back to a clean clone (drops enrollment)
   rhubarb rm NAME [--yes]
@@ -13,7 +14,8 @@
   rhubarb engagement list                           defined engagements and their clone counts
   rhubarb engagement provision ID                   stand up its ranges from verified images
   rhubarb engagement connect ID                     open its links until Ctrl-C (#30)
-  rhubarb engagement teardown ID [--yes]            remove every clone tagged to it
+  rhubarb engagement teardown ID [--yes] [--no-collect]   collect evidence, then remove its clones
+  rhubarb evidence collect|list|verify ID           pull ~/evidence from its clones; show; check the chain
 
 Only clones created by `rhubarb new` can be run, reset or removed through this tool; built
 images (rbt-*) and other VMs are never modified. Records: see tools/rhubarb/clones.py.
@@ -105,6 +107,20 @@ def cmd_stop(a) -> None:
 def cmd_ssh(a) -> None:
     res = api.ssh_args(a.name)
     os.execvp(res.argv[0], [*res.argv, *a.remote])
+
+
+def cmd_exec(a) -> None:
+    if not a.remote:
+        sys.exit("[rhubarb] usage: rhubarb exec NAME -- CMD...")
+    res = api.exec(a.name, " ".join(a.remote))
+    sys.stdout.buffer.write(res.stdout)
+    sys.stdout.flush()
+    sys.stderr.buffer.write(res.stderr)
+    if res.evidence_seq is not None:
+        say(f"recorded as evidence entry {res.evidence_seq}")
+    if res.timed_out:
+        say("timed out")
+    sys.exit(res.exit_code if 0 <= res.exit_code < 256 else 1)
 
 
 def cmd_enroll(a) -> None:
@@ -220,11 +236,56 @@ def cmd_engagement_teardown(a) -> None:
                         f"({', '.join(victims)}) and their keychain entries? [y/N] "):
             say("aborted")
             return
-    removed = api.teardown(eid)
+    removed = api.teardown(eid, collect_first=not a.no_collect, progress=say)
     if removed:
         say(f"engagement {eid}: removed {len(removed)} clone(s): {', '.join(removed)}")
     else:
         say(f"engagement {eid}: nothing to remove")
+
+
+def cmd_evidence_collect(a) -> None:
+    eid = _engagement_id(a.engagement)
+    results = api.collect(eid, progress=say)
+    for r in results:
+        if r.note:
+            say(f"{r.name}: {r.note}")
+        for s in r.skipped:
+            say(f"{r.name}: skipped {s}")
+    if not results:
+        say(f"engagement {eid}: no clones to collect from")
+
+
+def _evidence_what(kind: str | None, d: dict) -> str:
+    if kind == "exec":
+        return f"$ {d.get('command')}  (exit {d.get('exit_code')})"
+    if kind == "artifact":
+        return f"{d.get('path')}  ({d.get('size')} bytes)"
+    if kind == "ground_truth":
+        return f"{d.get('package')} {d.get('status', d.get('error'))}"
+    return str(d.get("event", ""))
+
+
+def cmd_evidence_list(a) -> None:
+    eid = _engagement_id(a.engagement)
+    rows = []
+    for e in api.evidence_entries(eid):
+        rows.append([str(e.get("seq")), e.get("ts", ""), e.get("kind", ""), e.get("clone") or "-",
+                     _evidence_what(e.get("kind"), e.get("data", {}))])
+    if rows:
+        table(rows, ["SEQ", "TIME", "KIND", "CLONE", "WHAT"])
+    else:
+        say(f"engagement {eid}: no evidence yet")
+
+
+def cmd_evidence_verify(a) -> None:
+    eid = _engagement_id(a.engagement)
+    rep = api.verify_evidence(eid)
+    for p in rep.problems:
+        say(f"PROBLEM: {p}")
+    if rep.problems:
+        sys.exit(f"[rhubarb] FAILED: engagement {eid}: evidence does not verify "
+                 f"({len(rep.problems)} problem(s))")
+    say(f"engagement {eid}: {rep.entries} entries, {rep.items} items verified; head {rep.head[:16]}")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -253,6 +314,10 @@ def main(argv: list[str] | None = None) -> None:
     sh.add_argument("name")
     sh.add_argument("remote", nargs=argparse.REMAINDER, help="command to run (after --)")
     sh.set_defaults(fn=cmd_ssh)
+    ex = sub.add_parser("exec", help="run a command in a clone (journaled as evidence in an engagement)")
+    ex.add_argument("name")
+    ex.add_argument("remote", nargs=argparse.REMAINDER, help="command to run (after --)")
+    ex.set_defaults(fn=cmd_exec)
     e = sub.add_parser("enroll")
     e.add_argument("name")
     e.add_argument("service", choices=sorted(clones.SERVICES))
@@ -282,9 +347,18 @@ def main(argv: list[str] | None = None) -> None:
     et = esub.add_parser("teardown", help="remove every clone tagged to the engagement")
     et.add_argument("engagement", metavar="ID")
     et.add_argument("--yes", action="store_true")
+    et.add_argument("--no-collect", action="store_true", help="don't pull evidence first")
     et.set_defaults(fn=cmd_engagement_teardown)
+    ev = sub.add_parser("evidence", help="collect / list / verify an engagement's evidence")
+    evsub = ev.add_subparsers(dest="evidence_cmd", required=True)
+    for cmd, fn, hlp in (("collect", cmd_evidence_collect, "pull each clone's ~/evidence (and ground truth)"),
+                         ("list", cmd_evidence_list, "the evidence journal"),
+                         ("verify", cmd_evidence_verify, "recompute the hash chain and every item")):
+        p = evsub.add_parser(cmd, help=hlp)
+        p.add_argument("engagement", metavar="ID")
+        p.set_defaults(fn=fn)
     a = ap.parse_args(argv)
-    if a.cmd == "ssh" and a.remote[:1] == ["--"]:
+    if a.cmd in ("ssh", "exec") and a.remote[:1] == ["--"]:
         a.remote = a.remote[1:]
     try:
         a.fn(a)

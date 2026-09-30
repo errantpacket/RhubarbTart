@@ -114,6 +114,10 @@ else bad "downloads use curl with --proto =https (no plain http fetches; loopbac
   while IFS= read -r line; do echo "          $line"; done <<<"$hits"; fi
 check "the host-only toolchain is not bypassed with 'source' of the pin file" \
   '(^|[;&|[:space:]])(source|\.)[[:space:]]+[^[:space:]]*toolchain\.env' scripts tools
+# Evidence pulled from a guest is parsed, never unpacked onto the host (#85): the guest is under
+# test, and its archive could plant symlinks or ../ paths.
+check "guest evidence is never extracted onto the host (no tarfile extract/extractall)" \
+  '\.extractall\(|\.extract\(' tools/rhubarb/api.py tools/rhubarb/evidence.py
 # gpg.py alone picks the binary (on macOS: the pinned one bootstrap built, never PATH's).
 NOT_GPG_PY=()
 for f in tools/resolve.py tools/rhubarb/*.py; do [[ "$f" == tools/rhubarb/gpg.py ]] || NOT_GPG_PY+=("$f"); done

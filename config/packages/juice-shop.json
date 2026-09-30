@@ -7,7 +7,8 @@
       "asset": "juice-shop-{version}_node22_linux_arm64.tgz",
       "kind": "tarball",
       "service": "juice-shop",
-      "ports": [3000]
+      "ports": [3000],
+      "ground_truth": { "port": 3000, "path": "/api/Challenges/" }
     }
   }
 }

@@ -33,6 +33,35 @@ This follows the plan's settled principle — **one audited core, many thin fron
 in `tools/rhubarb/` (today's typed core: `api.py` over `clones.py` / `hostops.py` / `engagements.py`
 / `evidence.py` / `vault.py`). herdr is a client of that core and nothing more.
 
+## Using herdr.dev as the runtime (decided)
+
+We adopt [**herdr.dev**](https://herdr.dev) as the agent runtime rather than building our own
+supervisor. It is a Rust, tmux-like, agent-aware terminal multiplexer: a background server owns
+each agent's real PTY, sessions survive sleep / Wi-Fi / SSH drops, it tracks each agent as
+working / blocked / idle / done, runs the agent CLIs (Claude Code, Codex, …) unmodified, and
+exposes a **socket API + CLI wrappers** to drive panes and subscribe to events. It is a runtime,
+not a scope or evidence layer — which is exactly the gap RhubarbTart fills, so the two compose
+cleanly as long as the boundary below holds.
+
+**Integration model: A now, C as a later manifest option, B never as the action path.**
+
+- **A — herdr supervises; `rhubarb` is the only way into a range (default).** herdr runs each agent
+  CLI in a host PTY, unmodified. The agent's *sole* tool for acting in a range is a thin
+  `rhubarb exec` wrapper — a control-plane session — so every command is journaled as evidence
+  (#85) and scope is enforced below the guest (#30). We deliberately **do not** use herdr's own
+  "SSH a pane into a machine" feature to reach ranges: that would hand the agent the clone
+  credential and a raw route and bypass host-side journaling (**option B**, rejected as an action
+  path; allowed at most as a read-only convenience view).
+- **C — per-engagement driver VM (manifest-selectable, later).** For sensitive engagements, herdr
+  and the agent run inside a dedicated per-engagement driver VM that then reaches the range through
+  the control plane, putting another VM boundary between the agent and the host. Enabled in the
+  manifest; deferred until after A ships.
+
+**The socket API is the guardrail seam.** herdr's socket API is used to (1) read agent state for
+the interface (working / blocked / idle), (2) **pause a pane for a tiered-action approval**, inject
+the operator-approved command, and (3) subscribe to events so the run folds into evidence. Every
+approval is itself an evidence entry.
+
 ## Architecture and the trust boundary
 
 ```
@@ -144,9 +173,11 @@ acceptance and the **[DECISION]** points below.
 
 Each of these changes the implementation; none should be guessed.
 
-- **[DECISION] Agent runtime.** herdr as described (PTY-based multi-agent supervisor) — do we
-  adopt an existing herdr, wrap the Claude Agent SDK, or build a thin supervisor of our own? This
-  sets how agents are launched, supervised, and attached to a range session.
+- **Agent runtime — DECIDED: herdr.dev, integration model A now + C later.** See
+  "Using herdr.dev as the runtime" above. We adopt herdr.dev unmodified; the agent reaches a range
+  only through a `rhubarb exec` control-plane session (A), with the per-engagement driver VM (C) as
+  a later manifest-selectable option and herdr's direct-SSH-into-clone path (B) excluded as an
+  action path.
 - **[DECISION] Service shape.** Confirm herdr is a localhost-bound, authenticated FastAPI service
   over the typed core (per PLAN Phase 5), never binding a network interface by default. Auth
   mechanism for the local operator to settle (token file in the keychain vs OS-user trust).
@@ -154,12 +185,14 @@ Each of these changes the implementation; none should be guessed.
   Bedrock AgentCore) for one place to hold provider keys, cap spend, and log every prompt/response
   into evidence — or start with direct provider access (the plan's default) and add a gateway
   later. Pluggable per engagement in the manifest either way.
-- **[DECISION] Approval UX.** How tiered-action approvals are surfaced and recorded — inline in the
-  herdr PTY view, a separate approvals queue — and whether an approval is itself an evidence entry
-  (recommended).
-- **[DECISION] Per-engagement driver VM.** Ship with the agent on the host (simpler, the plan's
-  default), or offer the stronger per-engagement driver-VM isolation from the start, enabled in the
-  manifest. Recommend host-first, driver VM as a later manifest option.
+- **Approval UX — DECIDED: through herdr's socket API.** Read agent state for the sidebar, pause a
+  pane for a tiered-action approval, inject the approved command, and subscribe to events into
+  evidence; each approval is itself an evidence entry. (What remains is the wording of the approval
+  prompt, settled during the build.)
+- **Per-engagement driver VM — DECIDED: host-first, driver VM later (model C).** Ship with the
+  agent on the host (model A), and add the per-engagement driver VM as a manifest-selectable option
+  afterwards. The remaining detail is the driver VM's own profile and how it reaches the range,
+  settled when C is built.
 - **[DECISION] Manifest additions.** The manifest already carries `agent_budget` and (validated)
   scope. Confirm the per-agent **capability grant** and **tiered-action** markings live in the
   manifest (reviewable, committed) rather than in herdr configuration.

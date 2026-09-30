@@ -113,9 +113,9 @@ Then, for the change itself:
    spec users and these skills rely on.
 4. Validate:
    - `./tools/check.sh`. It works on Linux; Packer checks need `packer` on PATH. It also runs
-     the offline self-tests (`tools/test_rhubarb.py`) and the headless TUI render test
-     (`uv run --script tools/test_rhubarb_tui.py`). A new core, service, evidence or TUI
-     behavior gets a test case there.
+     the offline self-tests (`tools/test_rhubarb.py`, which runs the area modules in
+     `tools/tests/`) and the headless TUI render test (`uv run --script tools/test_rhubarb_tui.py`).
+     A new core, service, evidence or TUI behavior gets a test case in the matching module.
    - Resolver changes: `uv run tools/resolve.py plan <profile>` against live upstream, and add
      self-test cases for any crypto or parsing.
    - NixOS changes: the Docker evaluation recipe in `references/architecture.md`.

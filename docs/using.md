@@ -107,6 +107,15 @@ agent CLI there. Which agents run, of what kind, against which clone is committe
 config at `engagements/<id>.herdr.json`; `arm` records that config's hash and the agents it started
 as an `arm` evidence entry, so a sealed vault shows what each agent was permitted to do.
 
+**Tiered actions (approvals).** The herdr config may mark commands **tiered** with a list of
+regexes (`"tiered": ["curl\\s.*://…", "rm\\s+-rf"]`). When an agent runs a matching command through
+`rbt-range`, it is **held**: the command does not run, a request lands in the engagement's
+evidence, and `rbt-range` waits. The operator sees it with `rhubarb herdr pending <id>` and
+releases one run with `rhubarb herdr approve <id> <request>`; the agent's command then proceeds.
+Each grant is single-use, and the whole exchange (request, grant, consume, run) is evidence, so a
+sealed vault shows exactly which sensitive actions were permitted. This is a workflow guardrail on
+the sanctioned `rbt-range` path, not a kernel boundary (charter model A).
+
 **Sealing a vault.** `rhubarb vault seal ID` turns the evidence store into a signed, sealed,
 portable bundle you can hand off:
 

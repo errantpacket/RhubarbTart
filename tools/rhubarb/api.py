@@ -40,6 +40,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import clones as _clones
+from . import approvals as _approvals
 from . import engagements as _engagements
 from . import evidence as _evidence
 from . import vault as _vault
@@ -300,9 +301,12 @@ class Tunnel:
 class ExecResult:
     """The result of ``exec()``: one command run in a clone over its pinned SSH (#85).
 
-    exit_code:    the remote exit status (255: ssh itself failed; -1: timed out).
+    exit_code:    the remote exit status (255: ssh itself failed; -1: timed out; 126: held for
+                  approval, not run).
     stdout/stderr: the full output, as bytes.
-    evidence_seq: the journal entry that recorded it, or ``None`` for an ad-hoc clone.
+    evidence_seq: the journal entry that recorded it, or ``None`` (ad-hoc clone, or held).
+    approval_required: True when a tiered command was held for operator approval (#108); it did
+                  not run. request_id is the approval to grant.
     """
 
     name: str
@@ -312,6 +316,8 @@ class ExecResult:
     stderr: bytes
     timed_out: bool
     evidence_seq: int | None
+    approval_required: bool = False
+    request_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1049,8 +1055,20 @@ def exec(name: str, command: str, timeout: float | None = None) -> ExecResult:  
     When the clone belongs to an engagement, the command, exit code, timing and full output
     are journaled to that engagement's evidence *before* this returns. stdin is closed.
     Raises ``VerifyError`` for an unknown/untrusted clone or one that isn't running.
+
+    Tiered actions (#108): if the clone's engagement marks the command tiered and no single-use
+    approval is waiting, the command is **held** (not run) — an ``approval_required`` result with
+    a ``request_id`` is returned and a request is journaled. An operator grants it with
+    ``approve``; the next identical call consumes the grant and runs.
     """
     rec = _clones.load(name)
+    eng = rec.get("engagement")
+    if eng and _approvals.needs_approval(eng, command) \
+            and not _approvals.is_approved_and_consume(eng, rec["name"], command):
+        rid = _approvals.record_request(eng, rec["name"], command)
+        return ExecResult(name=rec["name"], command=command, exit_code=126, stdout=b"",
+                          stderr=b"approval required\n", timed_out=False, evidence_seq=None,
+                          approval_required=True, request_id=rid)
     ip = hostops.vm_ip(rec["name"], rec["family"], wait=30)
     argv = [*hostops.ssh_args(rec["name"], rec["username"], ip), command]
     started = _clones.now()
@@ -1200,6 +1218,22 @@ def evidence_entries(engagement: str) -> list[dict]:
 def verify_evidence(engagement: str) -> _evidence.VerifyReport:
     """Recompute the engagement's evidence chain and item hashes. Read-only."""
     return _evidence.verify(engagement)
+
+
+def pending_approvals(engagement: str) -> list[dict]:
+    """Tiered commands awaiting approval in this engagement: {request_id, clone, command}."""
+    _engagements.load_engagement(engagement)   # a defined engagement
+    return _approvals.pending(engagement)
+
+
+def approve(engagement: str, request_id: str) -> None:
+    """Grant one single-use approval for a pending request (records it as evidence). Raises
+    ``VerifyError`` if that request isn't pending."""
+    _engagements.load_engagement(engagement)
+    if request_id not in {p["request_id"] for p in _approvals.pending(engagement)}:
+        raise VerifyError(f"no pending approval {request_id!r} in engagement {engagement} "
+                          f"(see: rhubarb herdr pending {engagement})")
+    _approvals.grant(engagement, request_id)
 
 
 # ---- vault (#86) ---------------------------------------------------------------------------

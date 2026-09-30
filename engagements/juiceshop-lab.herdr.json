@@ -1,5 +1,9 @@
 {
   "agents": [
     { "name": "recon", "kind": "claude", "clone": "jsl-attacker" }
+  ],
+  "tiered": [
+    "(^|[^a-zA-Z])curl\\s.*://(?!127\\.0\\.0\\.1|localhost)",
+    "(^|[^a-zA-Z])(rm\\s+-rf|shutdown|mkfs)([^a-zA-Z]|$)"
   ]
 }

@@ -50,7 +50,7 @@ else, so the same lock always means the same inputs, even months later.
 - **Resolve** (`resolve.py resolve <profile>`) looks upstream for the newest suitable versions,
   downloads them, checks them against at least two independent sources (for example a signed
   checksum file *and* a published digest), and **writes a new lock**. You review its diff before
-  committing, just like code.
+  committing, like code.
 - **Verify** (run automatically by every build) re-checks the downloaded files against the
   **existing** lock. It never picks new versions.
 - **The cache** (`cache/artifacts/<sha256>/<file>`) holds the downloads, filed by their hash. Two
@@ -107,7 +107,16 @@ no longer works, so no two clones share a credential. VPN/ZTNA enrollment also h
 clone and is never baked into an image.
 
 **Engagement.** A named scope (`engagements/<id>.json`) that stands up a whole **set** of tagged
-clones at once, and tears exactly that set down again. See [Engagements](using.md#engagements).
+clones at once, and tears exactly that set down again. Its clones can't reach each other unless
+the manifest declares a **link** between them. See [Engagements](using.md#engagements).
+
+**Evidence.** The record of what happened in an engagement, kept on your Mac and never in the
+clones: the commands run through `rhubarb exec`, files pulled from each clone's `~/evidence`
+folder, approvals and lifecycle events. Each entry is chained to the one before it by its hash, so
+an edit or deletion shows up when you verify it.
+
+**Vault.** A signed, read-only copy of an engagement's evidence (`rhubarb vault seal`) that you can
+hand to someone else and check offline with `rhubarb vault verify`.
 
 ## Sharing images (optional)
 
@@ -117,7 +126,7 @@ container images), then **signing** it and attaching its provenance record as a 
 stays in your keychain and nothing is sent to public signing services.
 
 **Digest.** A registry identifies an image by the SHA-256 of its contents
-(`…@sha256:07cb38…`). A **tag** such as `:edbb1008a6c0` is just a movable label, so RhubarbTart
+(`…@sha256:07cb38…`). A **tag** such as `:edbb1008a6c0` is a movable label, so RhubarbTart
 always uses digests.
 
 **Stacked clone** (macOS only). A clone made with `rhubarb new --from-registry`. Instead of an

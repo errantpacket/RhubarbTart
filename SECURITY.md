@@ -8,10 +8,10 @@ chain, or how secrets and clone state are handled is a serious bug. Reports are 
 
 **Please do not open a public issue for a security problem.**
 
-- Preferred: GitHub's **private vulnerability reporting** — the **Security** tab → **Report a
+- Preferred: GitHub's **private vulnerability reporting**: the **Security** tab → **Report a
   vulnerability** (GitHub → Security Advisories). This keeps the report private to the maintainers.
 - If that isn't available to you, contact the maintainer privately. _(Maintainer: set a security
-  contact here — e.g. an email or a Signal handle — before making this repository public.)_
+  contact here, for example an email address or a Signal handle, before making this repository public.)_
 
 Please include:
 
@@ -27,21 +27,27 @@ an early-stage project maintained on a best-effort basis; there is no paid bount
 
 The things this project promises, and therefore wants to hear about if they break:
 
-- **Provenance bypass** — a way to get an unpinned, unverified, or tampered input (OS image,
+- **Provenance bypass:** a way to get an unpinned, unverified, or tampered input (OS image,
   package, or host tool) into a build without the hash/signature checks catching it, on the host
   or inside the guest.
-- **Verification weaknesses** — flaws in the GPG, apt-repo, Tailscale `distsign`/Ed25519, NAR-hash,
+- **Verification weaknesses:** flaws in the GPG, apt-repo, Tailscale `distsign`/Ed25519, NAR-hash,
   or macOS codesign/notarization checks (`tools/rhubarb/`).
-- **Hardening escapes** — a built image that ships with a default/weak password, auto-login,
+- **Hardening escapes:** a built image that ships with a default/weak password, auto-login,
   passwordless sudo, password SSH, a disabled firewall, or shared identity, without the seal step
   or `scripts/smoke-test.sh` catching it.
-- **Secret leaks** — a path where a VM password, VPN token, or enrollment secret reaches an image,
+- **Secret leaks:** a path where a VM password, VPN token, or enrollment secret reaches an image,
   a log, a committed file, `argv`, or another clone. Secrets should only move keychain →
   subprocess stdin → shred.
-- **Clone-record integrity** — a way to make the `rhubarb` CLI act on the wrong VM or keychain
+- **Clone-record integrity:** a way to make the `rhubarb` CLI act on the wrong VM or keychain
   entry via a crafted record (see the record model in `tools/rhubarb/clones.py`).
-- **Isolation gaps** — the network/isolation model described in [`docs/PLAN.md`](docs/PLAN.md) once
-  it's implemented.
+- **Isolation gaps:** a clone reaching another clone without a declared engagement link, or a lab
+  target reaching the internet or the host (see
+  [Host-side boundaries](docs/trust-model.md#host-side-boundaries)).
+- **Evidence and vault integrity:** a way to change, drop or reorder evidence journal entries, or
+  alter a sealed vault, without `rhubarb evidence verify` or `rhubarb vault verify` noticing.
+- **Control-plane and agent boundaries:** a way to reach the control-plane socket without file
+  permission to it, to make `rbt-range` act on a clone other than its assigned one, or to run a
+  tiered command without a single-use approval.
 
 The [Trust model](docs/trust-model.md#trust-model) and [Security posture](docs/trust-model.md#security-posture)
 pages, and the threat model in [`docs/PLAN.md`](docs/PLAN.md), describe the intended guarantees.
@@ -52,7 +58,7 @@ pages, and the threat model in [`docs/PLAN.md`](docs/PLAN.md), describe the inte
   pointing it at systems they're allowed to test is by design. Using it against systems you are
   **not** authorized to test is misuse, not a vulnerability in this project.
 - **Vulnerabilities in the target systems** an operator tests with these VMs.
-- **Vulnerabilities in upstream software** (Tart, Packer, the guest OSes, the bundled tools) —
+- **Vulnerabilities in upstream software** (Tart, Packer, the guest OSes, the bundled tools):
   report those to their maintainers. We will, however, update pins and re-verify in response.
 - **A fully root-compromised host.** The host is the trust anchor; keep it hardened.
 

@@ -1,20 +1,21 @@
 <div align="center">
 
-# 🍎 RhubarbTart
+# RhubarbTart
 
 **Security-research VMs for Apple silicon, built from verified vendor installers.**
 <br/>Describe a guest in a short JSON profile: an OS (macOS 26 or 27, NixOS or Kali) and the tools
 you need. RhubarbTart downloads the vendor installers, checks each one against a pinned hash and,
-where there is one, the vendor's signature, and builds a hardened [Tart](https://tart.run) VM image from them. Before
-the image is used, a temporary copy of it is tested from outside the VM. You then work in
-disposable clones of the image, each with its own password, and delete them when you're done.
+where there is one, the vendor's signature, and builds a hardened [Tart](https://tart.run) VM image
+from them. Before the image is used, a temporary copy of it is tested from outside the VM. You
+then work in disposable clones of the image, each with its own password, and delete them when
+you're done.
 <br/><br/>It's meant for security work where you need to know what was on the machine. When testing
 macOS or iOS apps and their backends, you can state what the test machine contained and repeat a
 test from the same starting point. When analysing malware, you run the sample in a clone and delete
 it afterwards, so the next analysis starts clean and anything that wasn't in the image points to the sample. For
 client work, each engagement gets its own clones, so one client's data doesn't carry over to the
-next. The same setup is intended as the base for running AI agents on scoped research, penetration
-tests and CTFs (planned).
+next. The same setup is the base for running AI agents on scoped research, penetration tests and
+CTFs, with each command they run recorded as evidence on the host (early stage).
 
 ![Apple silicon](https://img.shields.io/badge/host-Apple%20silicon-c9184a)
 ![Guests](https://img.shields.io/badge/guests-macOS%2026%20·%20macOS%2027%20·%20NixOS%20·%20Kali-c9184a)
@@ -37,7 +38,7 @@ RhubarbTart is built to answer those questions:
 |---|---|
 | **Verified inputs** | Each guest starts from the OS vendor's own installer. Every download is pinned by its hash, checked against the vendor's signature where one exists, and checked again inside the guest before it's installed |
 | **Tested before use** | A new image only gets its final name after a temporary copy of it passes a set of security checks run from outside the VM |
-| **Hardened defaults** | No default passwords, no automatic login, no password-free `sudo` for users ([one narrow Kali exception](docs/trust-model.md)), SSH by key only or not at all, firewall on, and no machine or VPN identity shared between copies |
+| **Hardened defaults** | No default passwords, no automatic login, no password-free `sudo` for users ([one narrow Kali exception](docs/trust-model.md#security-posture)), SSH by key only or not at all, firewall on, and no machine or VPN identity shared between copies |
 | **Secrets on the host** | Passwords are stored in your macOS keychain. Every copy gets its own password, and VPN sign-in happens per copy, never inside the image |
 | **Configured in JSON** | A guest is defined by a short profile: an OS, a list of tools and a few options |
 
@@ -106,13 +107,20 @@ explicit link between two of them, and a lab target like Juice Shop has no route
 <details>
 <summary><b>Where the project is going: agent-driven engagements</b></summary>
 
-The longer-term goal is to run AI agents through a management interface (herdr) for scoped
-research, penetration tests and CTFs inside these VMs, with evidence saved to a separate store
-outside them. A verified, disposable guest is the building block for that. You can already
-create and remove a whole set of clones for one scope as an
-[engagement](docs/using.md#engagements), capture what happens inside as signed, sealed evidence,
-and drive it toward the herdr interface whose boundary is set in the
-[herdr charter](docs/HERDR-CHARTER.md). See [`docs/PLAN.md`](docs/PLAN.md) for the plan.
+The goal is to run AI agents under a management interface ([herdr](https://herdr.dev)) for scoped
+research, penetration tests and CTFs inside these VMs, with evidence saved to a store on the host,
+outside the VMs. A verified, disposable guest is the building block for that. Today you can:
+
+- create and remove a whole set of clones for one scope as an
+  [engagement](docs/using.md#engagements);
+- record the commands run in its clones and the files they produce as hash-chained evidence, and
+  seal that evidence into a signed, portable vault;
+- start the engagement's agents under herdr with `rhubarb herdr arm`. Each agent reaches only its
+  assigned clone, through the `rbt-range` client, and commands that match a configured pattern
+  wait for your approval.
+
+The [herdr charter](docs/HERDR-CHARTER.md) sets the boundary for this work. See
+[`docs/PLAN.md`](docs/PLAN.md) for the plan.
 
 </details>
 
@@ -143,16 +151,16 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
    `.toolchain/` folder. `preflight` then confirms that these are the versions on your `PATH`.
    Building GnuPG needs the Xcode Command Line Tools.
 2. **Resolve** looks up the newest versions of the profile's inputs, verifies them, and writes
-   `locks/kali-research.lock.json`. The four included profiles already have committed locks, so
-   you only need this step when you want newer versions.
+   `locks/kali-research.lock.json`. The included profiles already have committed locks, so you
+   only need this step when you want newer versions.
 3. **Build** installs the OS from the vendor's installer, adds the tools, and **seals** the guest:
    it applies the hardening and checks that each setting took effect. It then starts a temporary
    copy and tests it from the outside. Only if those tests pass does the image get its final name.
    A build is a full OS install and can take 15 to 45 minutes, so run it in a separate terminal.
    `./scripts/build.sh --list` lists the available profiles.
 4. **`rhubarb new`** creates a clone and sets its own password, which is stored in your keychain.
-   `rhubarb run` starts it. [Using your VMs](docs/using.md) covers `ssh`, `enroll`, `reset`, `rm`
-   and the `./rhubarb-tui` dashboard.
+   `rhubarb run` starts it. [Using your VMs](docs/using.md) covers `ssh`, `enroll`, `reset`, `rm`,
+   engagements and the `./rhubarb-tui` dashboard.
 
 </details>
 
@@ -168,6 +176,10 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
 All guests are arm64, because Tart runs native guests on Apple silicon. Linux profiles with
 Rosetta enabled can still run x86_64 Linux programs. If none of these fit, you can
 [define your own guest](docs/profiles.md).
+
+A fifth profile, `juiceshop-target`, is a lab target rather than a workstation: a NixOS guest that
+runs OWASP Juice Shop on port 3000 with no route out. The `juiceshop-lab` engagement pairs it with
+a Kali attacker ([Engagements](docs/using.md#engagements)).
 
 <details>
 <summary><b>Which one should I pick?</b></summary>
@@ -198,14 +210,15 @@ flowchart TD
 
 | Page | Covers |
 |---|---|
-| **[Key concepts](docs/concepts.md)** | The terms used throughout: profile, input, lock, image, clone, seal, provenance, stacked clone |
+| **[Key concepts](docs/concepts.md)** | The terms used throughout: profile, input, lock, image, clone, seal, provenance, engagement, evidence, vault, stacked clone |
 | **[How it works](docs/how-it-works.md)** | The four build stages (Define, Resolve, Build, Prove) from start to finish |
-| **[Using your VMs](docs/using.md)** | Working with clones: the `rhubarb` CLI and dashboard, SSH, VPN sign-in, engagements |
+| **[Using your VMs](docs/using.md)** | Working with clones: the `rhubarb` CLI and dashboard, SSH, VPN sign-in, engagements, evidence and vaults, the control-plane service and herdr agents |
 | **[Define your own guest](docs/profiles.md)** | Writing a profile: the format, which tools each OS supports, validation rules |
 | **[Trust model and security posture](docs/trust-model.md)** | How each input is verified, and which security settings each OS applies and tests |
 | **[Publishing and stacked clones](docs/publishing.md)** | Signing and publishing images to a registry, and making stacked macOS clones from them |
 | **[macOS guests and containers](docs/macos-and-containers.md)** | Why macOS runs as a VM (not a container), what OCI packaging and clones give you, and running containers or devcontainers inside guests |
 | **[Testing macOS and iOS apps](docs/testing-apple-apps.md)** | The challenges of testing Apple software and how each part of the tool addresses them |
+| **[herdr charter](docs/HERDR-CHARTER.md)** | What the agent interface may and may not do, and where its trust boundary lies |
 | **[Reference](docs/reference.md)** | Updating inputs, configuration variables, host requirements and the toolchain |
 | **[Development](docs/development.md)** | Changing the code safely: `check.sh`, testing without a Mac, the Claude Code skills |
 
@@ -219,9 +232,12 @@ Open work is tracked in the [issue tracker](https://github.com/errantpacket/Rhub
 | Type | Issue |
 |---|---|
 | Bug | [#63](https://github.com/errantpacket/RhubarbTart/issues/63) macOS 26 builds: the automated Setup Assistant step sometimes fails and the build times out; running it again usually works |
+| Bug | [#98](https://github.com/errantpacket/RhubarbTart/issues/98) Kali clones can boot with a read-only root file system |
 | Enhancement | [#74](https://github.com/errantpacket/RhubarbTart/issues/74) Publishing to remote registries that require a login |
+| Enhancement | [#100](https://github.com/errantpacket/RhubarbTart/issues/100) Encrypting sealed evidence vaults at rest |
+| Enhancement | [#94](https://github.com/errantpacket/RhubarbTart/issues/94) Moving lab targets onto Tart's native host-only network once it ships |
 | On hold | [#28](https://github.com/errantpacket/RhubarbTart/issues/28) A standard (non-admin) account for daily use; the design options are in the issue |
-| Roadmap | [#33](https://github.com/errantpacket/RhubarbTart/issues/33) The `herdr` agent management service |
+| Roadmap | [#33](https://github.com/errantpacket/RhubarbTart/issues/33) The `herdr` agent management service (the first parts have shipped) |
 | Roadmap | [#37](https://github.com/errantpacket/RhubarbTart/issues/37) A published documentation site |
 
 ## License

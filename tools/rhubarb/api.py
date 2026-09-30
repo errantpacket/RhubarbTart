@@ -1441,7 +1441,7 @@ def _verify_root(root: Path, bundle: Path, pub: Path | None) -> None:
 def seal_vault(engagement: str, out_dir: str | None = None,
                progress: ProgressFn | None = None) -> Path:
     """Write and sign a sealed vault for the engagement, returning its path. The evidence chain
-    must verify first. ``out_dir`` defaults to ./vaults. Records a seal entry in the live
+    must verify first. ``out_dir`` defaults to the repository's vaults/. Records a seal entry in the live
     journal. Raises ``VerifyError`` (no/broken evidence, existing vault, signing failure)."""
     _engagements.load_engagement(engagement)   # defined engagement
     dest = Path(out_dir) if out_dir else ROOT / "vaults"

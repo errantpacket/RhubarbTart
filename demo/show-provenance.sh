@@ -19,12 +19,17 @@ from pathlib import Path
 from rhubarb import api
 
 name = sys.argv[1]
-# A clone name resolves to the image it was cloned from.
+# Accept an image name, a clone name (-> its image), or a profile name (-> its current image).
 try:
     for c in api.clones().clones:
         if c.name == name:
             name = c.image
             break
+    else:
+        for img in api.images():
+            if img.profile == name and img.status == "current":
+                name = img.name
+                break
 except Exception:
     pass
 

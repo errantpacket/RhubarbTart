@@ -1,9 +1,10 @@
 # RhubarbTart capability demo — run of show
 
-A ~7–9 minute recorded walkthrough of **RhubarbTart**: provenance-verified guest images, disposable
-clones with per-clone identity, engagements as a bounded scope, host-enforced network isolation, a
-control-plane over one audited core, tamper-evident evidence, and a signed portable vault — plus,
-as one capability among them, handing a range to an autonomous agent on a leash.
+A recorded walkthrough of **RhubarbTart**: provenance-verified guest images, disposable clones with
+per-clone identity, engagements as a bounded scope, host-enforced network isolation, a control-plane
+over one audited core, tamper-evident evidence, a signed portable vault, and reset-to-pristine —
+plus, as one capability among them, handing a range to an autonomous agent on a leash. Ten scenes;
+speed up the boot/reset waits in post.
 
 **Layout.** Your **operator terminal** (the `rhubarb` CLI) is the star and stays on screen the
 whole time. Open a **herdr** window too — you only switch to it for Scene 6 (the agent). herdr is
@@ -145,9 +146,30 @@ bundle — the same offline key that signs our images."
 ./rhubarb vault verify /private/tmp/rbt-demo/vaults/juiceshop-lab-*.vault
 ```
 
-**Close:** "Verified, hardened images. Disposable clones. A bounded engagement. Isolation enforced
-below the guest. A recorded, gated path for anything that runs — human or agent. And signed
-evidence at the end. That's RhubarbTart."
+## Scene 10 — Disposable: reset to pristine, evidence survives (60s)
+
+**Say:** "The clone itself is throwaway. Reset snaps it back to a clean copy of the verified image
+— new identity, no leftover state — while the evidence we captured lives on the host and the
+sealed vault still verifies. The box is disposable; the record isn't."
+
+```sh
+./rbt-range -- 'cat ~/evidence/note.md'         # the note left in the clone
+./rhubarb reset jsl-attacker                     # destroy + re-clone from the verified image, new password
+./rhubarb list                                   # jsl-attacker: a fresh copy, new password, stopped
+./rhubarb evidence verify juiceshop-lab          # the host-side record is intact
+./rhubarb vault verify /private/tmp/rbt-demo/vaults/juiceshop-lab-*.vault
+```
+
+**Say:** "That clone is gone and a brand-new one took its place from the verified image — its
+identity and everything it held, wiped. The signed evidence on the host is untouched. Boot it and
+you'll find no trace of the note."
+
+> `reset` re-clones (the address changes and the old link drops), and leaves the fresh clone
+> stopped — fine, the demo ends here. To keep going, re-run `./demo/preflight.sh`.
+
+**Close:** "Verified, hardened images. Disposable clones you can reset at will. A bounded
+engagement. Isolation enforced below the guest. A recorded, gated path for anything that runs —
+human or agent. And signed evidence that outlives the box. That's RhubarbTart."
 
 ---
 

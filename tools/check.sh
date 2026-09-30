@@ -119,6 +119,11 @@ check "the host-only toolchain is not bypassed with 'source' of the pin file" \
 check "control-plane service touches only the typed core (no direct tart/keychain/ssh)" \
   '(^|[^a-zA-Z_.])(subprocess|hostops|os\.system|security |/usr/bin/security)' tools/rhubarb/service.py tools/rhubarb/agent.py
 
+# The herdr driver reaches tart/keychain only through the typed core, never directly (it drives
+# herdr via subprocess, which is fine; calling tart/security itself is not).
+check "herdr driver reaches tart/keychain only through the core (no direct hostops/tart/security)" \
+  '(^|[^a-zA-Z_.])(hostops|find-generic-password|/usr/bin/security|[\"\x27]tart[\"\x27 ])' tools/rhubarb/herdr.py
+
 # Evidence pulled from a guest is parsed, never unpacked onto the host (#85): the guest is under
 # test, and its archive could plant symlinks or ../ paths.
 check "guest evidence is never extracted onto the host (no tarfile extract/extractall)" \

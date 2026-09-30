@@ -1,21 +1,27 @@
-"""Logs pane — read-only view of ``api.list_logs()`` / ``api.read_log()`` (#120).
+"""Logs pane — read-only view of ``api.list_logs()`` / ``api.tail_log()`` (#120, #122).
 
 Left: every readable log (each clone's run log, build output written by the Build action, and
-the lifecycle trail), newest first. Right: the highlighted log, tailing as it grows. The pane
-re-reads a log only when its size or timestamp changed, so an idle log costs one ``stat``.
+the lifecycle trail), newest first. Right: the highlighted log, following it as it grows. An
+idle log costs one ``stat``; a growing one costs only the bytes it wrote (``tail_log`` returns
+what was appended since the last read), and new lines are appended to the viewer. The viewer
+follows the end while you are at the bottom and stays put while you scroll back through it.
 
-Strictly read-only: it calls ``rhubarb.api.list_logs()`` and ``rhubarb.api.read_log()`` and
+Strictly read-only: it calls ``rhubarb.api.list_logs()`` and ``rhubarb.api.tail_log()`` and
 nothing else; the core confines reads to regular files inside the state dir. The core API is
 imported lazily so the package imports without ``tart``.
 
 Like the other panes it offers ``refresh_data()`` (fetch + render, on the calling thread), and
-also the split ``fetch()`` / ``render()`` so the shell can do the file work off the UI thread.
+also the split ``fetch()`` / ``render_data()`` so the shell can do the file work off the UI thread.
 """
+
+from collections import deque
 
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Log, Static
+
+from .tables import rebuilding
 
 _KIND_STYLE = {"build": "cyan", "clone": "green", "events": "magenta"}
 MAX_LINES = 2000
@@ -48,22 +54,28 @@ class LogsPane(Horizontal):
     LogsPane #logs-side { width: 58; }
     LogsPane #logs-status { padding: 0 1; color: $text-muted; }
     LogsPane #logs-status.-error { color: $error; }
-    LogsPane #logs-view { width: 1fr; border-left: solid $panel; }
+    LogsPane #logs-main { width: 1fr; border-left: solid $panel; }
+    LogsPane #logs-title { padding: 0 1; color: $text-muted; }
     """
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._selected: str | None = None      # log id the viewer should show
         self._shown: tuple | None = None       # (id, size, mtime) currently in the viewer
+        self._cursor: tuple | None = None      # tail_log cursor for the shown log
+        self._partial = False                  # the viewer's last line is unfinished
+        self._lines: deque = deque(maxlen=MAX_LINES)   # what the viewer holds
         self._rows: list | None = None         # last rendered list, to avoid needless rebuilds
         self._cols: list | None = None         # column keys, for in-place cell updates
 
     def compose(self) -> ComposeResult:
         with Vertical(id="logs-side"):
-            yield Static("", id="logs-status")
+            yield Static("Loading logs…", id="logs-status")
             table: DataTable = DataTable(id="logs-table", zebra_stripes=True, cursor_type="row")
             yield table
-        yield Log(id="logs-view", highlight=False, auto_scroll=True, max_lines=MAX_LINES)
+        with Vertical(id="logs-main"):
+            yield Static("", id="logs-title")
+            yield Log(id="logs-view", highlight=False, auto_scroll=True, max_lines=MAX_LINES)
 
     def on_mount(self) -> None:
         table = self.query_one("#logs-table", DataTable)
@@ -81,16 +93,19 @@ class LogsPane(Horizontal):
             logs = api.list_logs()
         except Exception as e:  # never let a refresh take down the app
             return {"error": f"cannot list logs: {e}"}
+        asked, shown, cursor = self._selected, self._shown, self._cursor
         ids = [r.id for r in logs]
-        sel = self._selected if self._selected in ids else (ids[0] if ids else None)
-        text = None
+        sel = asked if asked in ids else (ids[0] if ids else None)
+        tail = None
         ref = next((r for r in logs if r.id == sel), None)
-        if ref is not None and self._shown != (ref.id, ref.size, ref.mtime):
+        if ref is not None and shown != (ref.id, ref.size, ref.mtime):
+            same = shown is not None and shown[0] == ref.id
             try:
-                text = api.read_log(ref.id, max_lines=MAX_LINES)
+                tail = api.tail_log(ref.id, cursor if same else None, max_lines=MAX_LINES)
             except Exception as e:
-                text = f"(cannot read {ref.label}: {e})"
-        return {"logs": logs, "selected": sel, "text": text, "ref": ref}
+                tail = api.LogTail(text=f"(cannot read {ref.label}: {e})", cursor=(),
+                                   reset=True, partial=False)
+        return {"logs": logs, "asked": asked, "selected": sel, "tail": tail, "ref": ref}
 
     def render_data(self, data: dict) -> None:
         """Apply a ``fetch()`` result (UI thread)."""
@@ -106,12 +121,20 @@ class LogsPane(Horizontal):
         status.remove_class("-error")
         logs = data["logs"]
         if not logs:
-            status.update("No logs yet. Clone runs and TUI builds write here.")
+            status.update("No logs yet. Running a clone or building from the TUI (B) writes here.")
             table.clear()
+            self._rows = None
             view.clear()
-            self._shown = None
+            self._lines.clear()
+            self._shown = self._cursor = None
+            self.query_one("#logs-title", Static).update("")
             return
-        status.update(f"{len(logs)} log(s) — newest first")
+        # The highlight moved while this was being read: keep the operator's choice and let
+        # the next read (already requested by the highlight) fill the viewer.
+        stale = data["asked"] != self._selected
+        selected = self._selected if stale else data["selected"]
+        n = len(logs)
+        status.update(f"{n} log{'s' if n != 1 else ''} · newest first")
 
         # Rebuild the list only when its contents changed, so the cursor doesn't jump.
         rows = [(r.id, r.label, r.kind, _size(r.size), _when(r.mtime)) for r in logs]
@@ -129,7 +152,7 @@ class LogsPane(Horizontal):
                 # A log appeared, went, or moved up the list: rebuild, then put the cursor back
                 # on the selected log. Its highlight events are suppressed, or the rebuild's
                 # "row 0 highlighted" would pull the selection back to the top.
-                with table.prevent(DataTable.RowHighlighted):
+                with rebuilding(table, keep=selected):
                     table.clear()
                     for rid, label, kind, size, when in rows:
                         # Logs of clones that no longer exist stay readable, but step back.
@@ -137,20 +160,43 @@ class LogsPane(Horizontal):
                         table.add_row(Text(label, style=dim),
                                       Text(kind, style=dim or _KIND_STYLE.get(kind, "")),
                                       Text(size, style=dim), Text(when, style=dim), key=rid)
-                    if data["selected"] is not None:
-                        try:
-                            table.move_cursor(row=table.get_row_index(data["selected"]),
-                                              animate=False)
-                        except Exception:
-                            pass
             self._rows = rows
 
-        self._selected = data["selected"]
-        ref = data["ref"]
-        if data["text"] is not None and ref is not None:
-            view.clear()
-            view.write(data["text"])
+        if stale:
+            return
+        self._selected = selected
+        ref, tail = data["ref"], data["tail"]
+        if ref is not None:
+            self.query_one("#logs-title", Static).update(
+                f"{ref.label} · {ref.kind} log · {_size(ref.size)} · updated {_when(ref.mtime)}")
+        if tail is not None and ref is not None:
+            self._show(view, tail, new_log=self._shown is None or self._shown[0] != ref.id)
             self._shown = (ref.id, ref.size, ref.mtime)
+
+    def _show(self, view: Log, tail, *, new_log: bool) -> None:
+        """Put a ``tail_log`` result in the viewer: append when it continues what is shown,
+        redraw otherwise. Follow the end only if the operator was already there: an append
+        does that by itself (``Log.write_lines`` scrolls only from the end), but a redraw
+        starts from an empty view, so it puts the operator's position back explicitly."""
+        follow = new_log or view.is_vertical_scroll_end
+        lines = tail.text.split("\n") if tail.text else []
+        if tail.reset or self._partial:
+            # Replace everything, or re-send an unfinished last line now that it has more.
+            if tail.reset:
+                self._lines.clear()
+            elif self._lines:
+                self._lines.pop()
+            self._lines.extend(lines)
+            y = view.scroll_y
+            view.clear()
+            view.write_lines(list(self._lines), scroll_end=follow)
+            if not follow:
+                view.scroll_to(y=y, animate=False, immediate=True)
+        elif lines:
+            self._lines.extend(lines)
+            view.write_lines(lines, scroll_end=follow)
+        self._partial = tail.partial
+        self._cursor = tail.cursor or None
 
     def refresh_data(self) -> None:
         """(Re)load and re-render on the calling thread. Read-only."""
@@ -168,5 +214,5 @@ class LogsPane(Horizontal):
         key = event.row_key.value
         if key and key != self._selected:
             self._selected = key
-            self._shown = None     # force a re-read of the new selection
+            self._shown = self._cursor = None   # read the new selection from its tail
             self.refresh_data()

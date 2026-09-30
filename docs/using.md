@@ -7,9 +7,17 @@ browse images, clones, provenance and logs; run, ssh, enroll, reset, rm, new and
 confirmation before anything destructive. For stacked macOS clones from a registry, see
 [Publishing and stacked clones](publishing.md).
 
-The dashboard is keyboard-driven (`1`–`4` switch tabs, `r` refreshes, `q` quits). Inside herdr it
-leaves the mouse to herdr; use `./rhubarb-tui --mouse` (or `RHUBARB_TUI_MOUSE=1`) to capture it
-anyway, or `--no-mouse` to turn it off elsewhere.
+The dashboard is keyboard-driven. `1`–`4` open the tabs (Images, Clones, Provenance, Logs) and
+put the cursor in them; Enter on an image or clone shows its provenance (a clone shows the image it
+was cloned from); `r` refreshes, `?` lists every key and `q` quits. The footer shows only the keys
+that apply: clone actions (`b` run, `s` ssh, `e` enroll, `x` reset, `d` remove) are on the Clones
+tab, while `n` (new clone) and `B` (build) work anywhere. Actions run one at a time; the header
+shows the one in progress. Data refreshes in the background, so a slow `tart list` never freezes
+the screen. The Logs tab follows a growing log while you're at its end, and holds still while you
+scroll back.
+
+Inside herdr it leaves the mouse to herdr; use `./rhubarb-tui --mouse` (or `RHUBARB_TUI_MOUSE=1`)
+to capture it anyway, or `--no-mouse` to turn it off elsewhere.
 
 ```sh
 ./rhubarb images                              # built images; which one is current per profile

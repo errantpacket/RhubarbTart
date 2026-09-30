@@ -32,6 +32,7 @@ class ProvenancePane(VerticalScroll):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._vm: str | None = None
+        self._via: str | None = None   # the clone the VM was reached from, if any
         # Set before the body widget is mounted (the shell may refresh_data on
         # mount before compose has run); applied in on_mount.
         self._pending: RenderableType | None = None
@@ -44,53 +45,65 @@ class ProvenancePane(VerticalScroll):
             self._write(self._pending)
             self._pending = None
 
-    def show(self, vm: str) -> None:
+    def select(self, vm: str, via: str | None = None) -> None:
+        """Make ``vm`` the VM to show, without reading it (the next refresh reads it). ``via``
+        names the clone it was reached from, so the view can say whose image this is."""
+        self._vm, self._via = vm, via
+
+    def show(self, vm: str, via: str | None = None) -> None:
         """Point the pane at ``vm`` (e.g. from a clones-pane selection) and reload."""
-        self._vm = vm
+        self.select(vm, via)
         self.refresh_data()
 
     def refresh_data(self) -> None:
-        """(Re)render the current VM's provenance via ``rhubarb.api``. Read-only.
+        """(Re)render the current VM's provenance via ``rhubarb.api``. Read-only."""
+        self.render_data(self.fetch())
 
-        Reads ``out/<vm>.provenance.json`` through ``api.provenance``. A missing
-        record (``FileNotFoundError``) or a malformed one (``api.VerifyError``)
-        is shown as a message instead of crashing the app.
-        """
-        if self._vm is None:
-            self._write(self._empty_message())
-            return
+    def fetch(self) -> dict:
+        """Read ``out/<vm>.provenance.json`` through ``api.provenance``; safe off the UI thread
+        (#122). Never raises: a missing or malformed record comes back as a flag."""
+        vm = self._vm
+        if vm is None:
+            return {"vm": None}
         from rhubarb import api  # lazy: importing this package must not require tart
 
         try:
-            rec = api.provenance(self._vm)  # api.Provenance
+            return {"vm": vm, "rec": api.provenance(vm)}
         except FileNotFoundError:
-            self._write(Text.assemble(
-                ("No provenance record ", "bold"),
-                (f"for {self._vm}\n", "bold"),
-                (f"(out/{self._vm}.provenance.json not found — was it built on this host?)",
-                 "dim"),
-            ))
-            return
+            return {"vm": vm, "missing": True}
         except api.VerifyError as e:
-            self._write(Text.assemble(
-                (f"Cannot read provenance for {self._vm}\n", "bold red"),
-                (str(e), "red"),
-            ))
-            return
+            return {"vm": vm, "invalid": str(e)}
         except Exception as e:  # never let a pane refresh take the whole TUI down
-            self._write(Text.assemble(
-                (f"Unexpected error reading provenance for {self._vm}\n", "bold red"),
-                (f"{type(e).__name__}: {e}", "red"),
-            ))
+            return {"vm": vm, "error": f"{type(e).__name__}: {e}"}
+
+    def render_data(self, data: dict) -> None:
+        """Apply a ``fetch()`` result (UI thread). A result for a VM that is no longer the one
+        selected (the selection moved while it was being read) is dropped."""
+        vm = data.get("vm")
+        if vm is None:
+            self._write(self._empty_message())
             return
-        self._write(self._build_view(rec))
+        if vm != self._vm:
+            return
+        if data.get("missing"):
+            self._write(Text.assemble(
+                ("No provenance record ", "bold"), (f"for {vm}\n", "bold"),
+                (f"(out/{vm}.provenance.json not found — was it built on this host?)", "dim")))
+        elif "invalid" in data:
+            self._write(Text.assemble((f"Cannot read provenance for {vm}\n", "bold red"),
+                                      (data["invalid"], "red")))
+        elif "error" in data:
+            self._write(Text.assemble((f"Unexpected error reading provenance for {vm}\n", "bold red"),
+                                      (data["error"], "red")))
+        else:
+            self._write(self._build_view(data["rec"]))
 
     # -- rendering -------------------------------------------------------------
 
     def _empty_message(self) -> RenderableType:
         return Text.assemble(
             ("No VM selected\n", "bold"),
-            ("Select a clone in the Clones tab to see its build provenance.", "dim"),
+            ("Highlight an image (tab 1) or a clone (tab 2) to see where it came from.", "dim"),
         )
 
     def _build_view(self, rec) -> RenderableType:
@@ -99,7 +112,10 @@ class ProvenancePane(VerticalScroll):
 
         title = Table.grid(padding=(0, 1))
         title.add_column()
-        title.add_row(Text(rec.vm, style="bold"))
+        heading = Text(rec.vm, style="bold")
+        if self._via:
+            heading.append(f"  (image of clone {self._via})", style="dim")
+        title.add_row(heading)
         parts.append(title)
 
         # Identity / build summary.

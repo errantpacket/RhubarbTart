@@ -63,7 +63,7 @@ your change: Setup Assistant timing, the macOS 27 provisioning path, real instal
 - **Host and macOS guest scripts run under macOS `/bin/bash` 3.2.** No associative arrays,
   `mapfile`, `${x,,}`, `|&`, or `&>>`. Under `set -e`, `! cmd` never fails the script, so write
   `if cmd; then die …; fi`.
-- New cryptographic or parsing code gets a case in `tools/test_rhubarb.py` using
+- New cryptographic or parsing code gets a case in `tools/tests/test_verification.py` using
   reference-implementation values, not values this code produced.
 - Update the reference pages under `docs/` when behavior changes, and any affected skill. The
   posture and provenance tables are in [`docs/trust-model.md`](docs/trust-model.md). The config,

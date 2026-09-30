@@ -111,6 +111,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `tools/rhubarb/{apt,gpg,pgp_ed25519,distsign,nar,macos,common}.py` | Verification: signed apt repos, pinned-key OpenPGP (via the toolchain gpg), a minimal Ed25519 OpenPGP verifier for GnuPG's own tarballs, Tailscale distsign, Nix NAR hashes, macOS signature checks, shared helpers |
 | `rhubarb` · `tools/rhubarb_cli.py` · `tools/rhubarb/cli.py` | Clone management CLI (launcher shim, entry point, commands) |
 | `tools/rhubarb/api.py` | Typed core API: the one import surface for the CLI, TUI and service |
+| `tools/rhubarb/{results,logs}.py` | The dataclasses the core returns · the logs API behind the TUI Logs tab (both re-exported by `api`) |
 | `tools/rhubarb/{clones,hostops}.py` | Clone record store (StrictModes rules) · tart, keychain, SSH and password rotation |
 | `tools/rhubarb/engagements.py` | Engagement manifest loading and strict validation |
 | `tools/rhubarb/evidence.py` · `tools/rhubarb/vault.py` | Hash-chained evidence journal with content-addressed items · signed, sealed evidence vaults |
@@ -120,7 +121,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb_tui.py.lock` | TUI launcher shim, launcher (carries the pinned Textual) and its hashed lockfile |
 | `tools/rhubarb/tui/` | Textual TUI over `api.py`: app shell (`app.py`), action dispatch (`dispatch.py`), read-only panes (`images_pane`, `clones_pane`, `provenance_pane`, `logs_pane`), table helpers (`tables.py`), modals (`confirm.py`, `prompt.py`), and one module per action in `actions/` (`build`, `enroll`, `new`, `reset`, `rm`, `run`, `ssh`) |
 | `tools/bootstrap.sh` · `tools/check.sh` | Toolchain install · static checks and tests |
-| `tools/test_rhubarb.py` · `tools/testdata/` | Offline self-tests and their fixtures |
+| `tools/test_rhubarb.py` · `tools/tests/` · `tools/testdata/` | Offline self-tests: the runner, the tests grouped by area, and their fixtures |
 | `tools/test_rhubarb_tui.py` (+ `.lock`) | Headless TUI render test (mocked core API) |
 | `tools/serve_preseed.py` | One-shot preseed server bound only to Tart's host address |
 | `packer/macos/` · `packer/linux/` | Build templates per family |

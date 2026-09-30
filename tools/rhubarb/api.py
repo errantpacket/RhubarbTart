@@ -10,7 +10,9 @@ imports. It sits over the existing modules and mirrors their semantics exactly:
 
 The contract, not the implementation, is the interface: functions return dataclasses
 (structured values), never ``print`` output or ``argv``, and raise typed errors instead
-of calling ``sys.exit``. Callers format the returns for their own frontend.
+of calling ``sys.exit``. Callers format the returns for their own frontend. The dataclasses
+live in ``results.py`` and the logs API in ``logs.py``; both are re-exported here, so frontends
+import only ``api``.
 
 Frontends MUST NOT touch ``tart`` or the keychain directly, and MUST NOT re-implement the
 StrictModes record rules, keychain-only secret handling, or ``launchctl asuser``

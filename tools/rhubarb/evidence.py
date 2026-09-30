@@ -25,7 +25,7 @@ from .clones import ENGAGEMENT_RE, _secure_dir, now, state_dir
 from .common import VerifyError
 
 GENESIS = "0" * 64
-KINDS = {"exec", "artifact", "ground_truth", "lifecycle"}
+KINDS = {"exec", "artifact", "ground_truth", "lifecycle", "approval"}
 
 
 def _canonical(obj: dict) -> bytes:

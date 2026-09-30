@@ -106,8 +106,16 @@ def load_config(engagement: str) -> list[dict]:
         raw = json.loads(path.read_text())
     except ValueError as e:
         raise VerifyError(f"{disp}: invalid JSON ({e})") from None
-    if not isinstance(raw, dict) or set(raw) - {"agents"}:
-        raise VerifyError(f"{disp}: must be an object with only an 'agents' key")
+    if not isinstance(raw, dict) or set(raw) - {"agents", "tiered"}:
+        raise VerifyError(f"{disp}: allowed keys are 'agents' and 'tiered'")
+    tiered = raw.get("tiered", [])
+    if not isinstance(tiered, list) or not all(isinstance(t, str) for t in tiered):
+        raise VerifyError(f"{disp}: 'tiered' must be a list of regex strings")
+    for t in tiered:
+        try:
+            re.compile(t)
+        except re.error as e:
+            raise VerifyError(f"{disp}: tiered pattern {t!r} is not a valid regex ({e})") from None
     agents = raw.get("agents")
     if not isinstance(agents, list) or not agents:
         raise VerifyError(f"{disp}: 'agents' must be a non-empty list")

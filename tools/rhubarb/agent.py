@@ -21,6 +21,7 @@ Thin client of ``service.py``; no tart, no keychain. Run via ``./rbt-range`` (to
 
 import os
 import sys
+import time
 
 from . import service
 from .common import VerifyError
@@ -35,15 +36,19 @@ def _decode(b64: str | None) -> bytes:
 
 
 def range_exec(socket_path: str, clone: str, command: str,
-               timeout: float | None = None) -> tuple[int, bytes, bytes]:
-    """Run ``command`` in ``clone`` via the control-plane service. Returns (exit, stdout, stderr).
+               timeout: float | None = None) -> dict:
+    """Run ``command`` in ``clone`` via the control-plane service. Returns the ExecResult dict
+    (exit_code, decoded stdout/stderr, approval_required, request_id).
 
     Raises ``VerifyError`` if the service rejects it (unknown/stopped clone, bad input) — the
     scope (which clone) is decided by the caller/environment, never by ``command``.
     """
     out = service.post_json(socket_path, f"/clones/{clone}/exec",
                             {"command": command, **({"timeout": timeout} if timeout else {})})
-    return out.get("exit_code", 1), _decode(out.get("stdout")), _decode(out.get("stderr"))
+    return {"exit_code": out.get("exit_code", 1),
+            "stdout": _decode(out.get("stdout")), "stderr": _decode(out.get("stderr")),
+            "approval_required": bool(out.get("approval_required")),
+            "request_id": out.get("request_id")}
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -75,11 +80,30 @@ def main(argv: list[str] | None = None) -> None:
                  "engagement)")
 
     command = " ".join(args)
-    try:
-        code, out, err = range_exec(socket_path, clone, command, timeout=timeout)
-    except VerifyError as e:
-        sys.exit(f"rbt-range: {e}")
-    sys.stdout.buffer.write(out)
+    # Tiered commands (#108) are held for operator approval: notify once, then poll until a
+    # single-use approval lands or we time out. RBT_APPROVAL_WAIT=0 disables waiting.
+    wait_total = float(os.environ.get("RBT_APPROVAL_WAIT", "600"))
+    poll = float(os.environ.get("RBT_APPROVAL_POLL", "5"))
+    deadline = time.time() + wait_total
+    notified = False
+    while True:
+        try:
+            res = range_exec(socket_path, clone, command, timeout=timeout)
+        except VerifyError as e:
+            sys.exit(f"rbt-range: {e}")
+        if not res["approval_required"]:
+            break
+        if not notified:
+            sys.stderr.write(f"rbt-range: APPROVAL REQUIRED for this command on clone {clone!r} "
+                             f"(request {res['request_id']}). A reviewer must run: "
+                             f"rhubarb herdr approve <engagement> {res['request_id']}\n")
+            sys.stderr.flush()
+            notified = True
+        if wait_total <= 0 or time.time() >= deadline:
+            sys.exit(f"rbt-range: not approved within {wait_total:.0f}s (request {res['request_id']})")
+        time.sleep(poll)
+    sys.stdout.buffer.write(res["stdout"])
     sys.stdout.buffer.flush()
-    sys.stderr.buffer.write(err)
+    sys.stderr.buffer.write(res["stderr"])
+    code = res["exit_code"]
     sys.exit(code if 0 <= code < 256 else 1)

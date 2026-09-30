@@ -166,6 +166,11 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
 
 </details>
 
+The same actions are available in `./rhubarb-tui`, a keyboard-driven dashboard with tabs for
+images, clones, provenance and logs. Here it runs inside herdr:
+
+![The rhubarb-tui dashboard showing built images, their profiles, status and clone counts](docs/images/tui-images.webp)
+
 ## Choose a guest
 
 | Profile | OS | Tools | Suited to |

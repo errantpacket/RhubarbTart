@@ -942,6 +942,9 @@ def test_engagements() -> None:
     check("Engagement is frozen (immutable)", isinstance(eng, engagements.Engagement)
           and _is_frozen(eng, "label", "tampered"))
     check("demo id is in list_engagements()", "demo" in engagements.list_engagements())
+    # A sibling <id>.herdr.json (herdr config, #108) is NOT an engagement.
+    check("list_engagements ignores .herdr.json configs and non-id stems",
+          not any(e.endswith(".herdr") or "." in e for e in engagements.list_engagements()))
 
     # Rejection cases: write a manifest into a temp engagements/ dir and load it by stem.
     base = json.loads((engagements.ENGAGEMENTS / "demo.json").read_text())

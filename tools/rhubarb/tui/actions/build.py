@@ -27,9 +27,19 @@ acknowledgement modal before dispatch — see this module's note to the app.
 """
 
 import os
+import re
 import subprocess
 
 from . import ActionContext, ActionOutcome
+
+# Packer prints the build VM's ephemeral VNC password. Don't persist it (nor show it: attaching
+# a viewer to a running build has crashed Tart before, #51).
+_VNC_PASSWORD = re.compile(r'(password\s+")[^"]*(")', re.IGNORECASE)
+
+
+def redact(line: str) -> str:
+    """Hide quoted password values in a build output line."""
+    return _VNC_PASSWORD.sub(r"\1***\2", line)
 
 ID = "build"
 LABEL = "Build image"
@@ -99,19 +109,37 @@ def handle(ctx: ActionContext) -> ActionOutcome:
 
     script = api.ROOT / "scripts" / "build.sh"
     ctx.progress(f"building {profile}: {script} {profile}")
+    # Keep the output too, so the Logs tab can show this build during and after the run.
+    log = None
+    try:
+        log_path = api.new_build_log(profile)
+        log = open(log_path, "a")  # noqa: SIM115 (closed below, after the stream ends)
+        ctx.progress(f"build log: {log_path} (also in the Logs tab)")
+    except Exception as e:
+        ctx.progress(f"(no build log: {e})")
     try:
         proc = subprocess.Popen(
             [str(script), profile], cwd=str(api.ROOT),
             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
     except FileNotFoundError as e:
+        if log:
+            log.close()
         tool = getattr(e, "filename", None) or str(e)
         return ActionOutcome(ok=False, needs_refresh=False,
                              summary=f"build {profile} failed: {tool} not found")
 
     assert proc.stdout is not None
-    for raw in proc.stdout:
-        ctx.progress(raw.rstrip("\n"))
-    rc = proc.wait()
+    try:
+        for raw in proc.stdout:
+            line = redact(raw.rstrip("\n"))
+            ctx.progress(line)
+            if log:
+                log.write(line + "\n")
+                log.flush()
+        rc = proc.wait()
+    finally:
+        if log:
+            log.close()
 
     if rc != 0:
         return ActionOutcome(ok=False, summary=f"build {profile} FAILED (exit {rc}) — see the log above")

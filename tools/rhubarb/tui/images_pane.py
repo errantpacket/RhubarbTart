@@ -12,13 +12,37 @@ imported lazily inside ``refresh_data`` so the package imports (and the headless
 render test runs) without ``tart`` present.
 """
 
+from contextlib import nullcontext as _nullcontext
+
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import DataTable, Static
 
 
+def _cursor_key(table: DataTable):
+    """The row key under the cursor, or None."""
+    try:
+        if table.row_count and table.is_valid_coordinate(table.cursor_coordinate):
+            return table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
+    except Exception:
+        pass
+    return None
+
+
+def _restore_cursor(table: DataTable, key) -> None:
+    """Put the cursor back on ``key`` if that row still exists."""
+    if key is None:
+        return
+    try:
+        table.move_cursor(row=table.get_row_index(key), animate=False)
+    except Exception:
+        pass
+
+
 class ImagesPane(VerticalScroll):
     """Current verified image per profile, plus vanilla/unverified precursors."""
+
+    _sig = None   # last rendered rows, to skip no-op rebuilds
 
     BORDER_TITLE = "Images"
 
@@ -60,23 +84,47 @@ class ImagesPane(VerticalScroll):
         """
         if not self.is_mounted:
             return  # compose() has not run yet; the shell will call us again.
+        self.render_data(self.fetch())
 
+    def fetch(self) -> dict:
+        """The blocking read (it runs ``tart list``), safe off the UI thread (#120).
+
+        Returns ``{"rows": [...]}`` or ``{"error": message}``; never raises.
+        """
         from rhubarb import api
 
         try:
-            rows = api.images()
+            return {"rows": api.images()}
         except api.VerifyError as exc:
-            self._show_error(str(exc) or "could not read images")
-            return
+            return {"error": str(exc) or "could not read images"}
         except FileNotFoundError as exc:
             tool = getattr(exc, "filename", None) or "a required host tool"
-            self._show_error(f"{tool} is not installed — cannot list images")
+            return {"error": f"{tool} is not installed — cannot list images"}
+        except Exception as exc:  # never let a refresh take down the app
+            return {"error": f"unexpected error reading images: {exc}"}
+
+    def render_data(self, data: dict) -> None:
+        """Apply a ``fetch()`` result (UI thread)."""
+        if not self.is_mounted:
             return
+        if "error" in data:
+            self._show_error(data["error"])
+            return
+        rows = data["rows"]
 
         table = self.query_one("#images-table", DataTable)
-        table.clear()
-        for img in rows:
-            table.add_row(img.name, img.profile, img.status, str(img.clones))
+        # Rebuild only when something changed, and keep the highlighted image across it: a
+        # rebuild resets the cursor to the top, and its highlight events would move the
+        # selection there too.
+        sig = [(i.name, i.profile, i.status, i.clones) for i in rows]
+        if sig != self._sig:
+            self._sig = sig
+            prev = _cursor_key(table)
+            with table.prevent(DataTable.RowHighlighted) if prev else _nullcontext():
+                table.clear()
+                for img in rows:
+                    table.add_row(img.name, img.profile, img.status, str(img.clones), key=img.name)
+                _restore_cursor(table, prev)
 
         status = self.query_one("#images-status", Static)
         status.remove_class("-error")

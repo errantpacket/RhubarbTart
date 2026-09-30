@@ -709,6 +709,34 @@ def test_reset_keeps_engagement() -> None:
                 os.environ["RHUBARB_STATE_DIR"] = prev
 
 
+def test_guest_sync() -> None:
+    """#91: `tart stop` cuts a Linux guest's shutdown short, so rhubarb flushes the guest first:
+    the rotation script syncs before reporting success, and sync_guest runs `sync` over SSH,
+    best-effort (never raises, never blocks a stop)."""
+    from rhubarb import hostops
+    body = hostops.ROTATE_SCRIPT
+    check("rotation script syncs before reporting ROTATED",
+          "\nsync\n" in body and body.index("\nsync\n") < body.index("echo ROTATED"))
+    CP = subprocess.CompletedProcess
+    calls = []
+    orig = (hostops.tart, hostops.subprocess.run)
+    try:
+        hostops.tart = lambda *a, **k: CP(a, 1, "", "no IP")
+        check("sync_guest: no IP -> False, no ssh attempted", hostops.sync_guest("c1", "admin") is False)
+        hostops.tart = lambda *a, **k: CP(a, 0, "192.168.64.9\n", "")
+        hostops.subprocess.run = lambda argv, **k: calls.append(argv) or CP(argv, 0, "", "")
+        ok = hostops.sync_guest("c1", "admin")
+        check("sync_guest: runs `sync` over the pinned SSH", ok is True and calls[-1][-1] == "sync"
+              and "HostKeyAlias=c1" in calls[-1] and "admin@192.168.64.9" in calls[-1])
+
+        def slow(argv, **k):
+            raise subprocess.TimeoutExpired(argv, 20)
+        hostops.subprocess.run = slow
+        check("sync_guest: a hung guest -> False, doesn't raise", hostops.sync_guest("c1", "admin") is False)
+    finally:
+        hostops.tart, hostops.subprocess.run = orig
+
+
 def test_rotation_script() -> None:
     """ROTATE_SCRIPT against a simulated guest (macOS, NixOS, Linux paths)."""
     from rhubarb.hostops import ROTATE_SCRIPT
@@ -1319,7 +1347,7 @@ if __name__ == "__main__":
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
               test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
-              test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement):
+              test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement, test_guest_sync):
         print(t.__name__)
         t()
     if FAILS:

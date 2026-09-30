@@ -82,23 +82,47 @@ sidebar/agent state.
 
 ## Scene 5 — The agent works, on the sanctioned path (90s)
 
-Paste the prompt from **`demo/agent-task.md`** into the `recon` pane. Narrate as it:
+Paste the prompt from **`demo/agent-task.md`** into the `recon` pane. The agent does its read-only
+recon live:
 
 1. confirms access (`rbt-range -- id`),
-2. reads the Juice Shop challenge API (ground truth),
-3. writes a finding to `~/evidence`.
+2. reads the local Juice Shop challenge API.
 
 **Say:** "Everything it does goes through the control plane and is recorded as evidence on the
-host — where the guest under test can't tamper with it."
+host — where the guest under test can't tamper with it. It has no other way to touch the box, and
+no way off it."
+
+> **Who runs steps 3–4.** Claude Code's own auto-mode classifier gates in-guest filesystem writes,
+> so a fully-autonomous agent may stop before the write/cleanup steps. Two reliable options:
+> - **Operator-driven (recommended for a recording):** you run steps 3–4 in your operator terminal
+>   with the same `rbt-range` (env already exported by `arm` in the agent pane; in your terminal
+>   set `RBT_SERVICE_SOCKET` and `RBT_RANGE_CLONE=jsl-attacker`). Deterministic, always completes.
+> - **Agent-driven:** allow `./rbt-range` in the agent's Claude Code permissions first, then the
+>   agent completes 3–4 itself (step 4 pauses for your approval).
+>
+> Either way the evidence and the approval exchange are identical. The rest of this script uses the
+> operator terminal for steps 3–4.
+
+Operator terminal (steps 3–4 continue in Scene 6):
+
+```sh
+export RBT_SERVICE_SOCKET="$HOME/Library/Application Support/RhubarbTart/service.sock"
+export RBT_RANGE_CLONE=jsl-attacker
+# step 3 — write a note into the clone (not tiered, runs immediately):
+./rbt-range -- "mkdir -p ~/evidence && printf '# Note\nJuice Shop reachable on the lab link.\n' > ~/evidence/note.md && echo saved"
+```
 
 ## Scene 6 — A sensitive action pauses for approval (90s)
 
-The agent's last step tries to **exfiltrate** to an external host. That command is **tiered**, so
-it's held.
+Now run the **destructive** step (a scratch cleanup). Destructive operations are marked **tiered**
+in the herdr config, so it's held for approval. Run it in the background so you can approve it:
 
-**In the agent pane:** it prints `APPROVAL REQUIRED … request <id>` and waits.
+```sh
+# step 4 — a destructive cleanup; this is held for approval:
+./rbt-range -- "mkdir -p ~/scratch && date > ~/scratch/tmp && rm -rf ~/scratch && echo cleaned" &
+```
 
-**Switch to the operator terminal:**
+`rbt-range` prints `APPROVAL REQUIRED … request <id>` and waits. Show the held request:
 
 ```sh
 ./rhubarb herdr pending juiceshop-lab      # the held command + its request id
@@ -110,8 +134,8 @@ it's held.
 ./rhubarb herdr approve juiceshop-lab <REQUEST_ID>
 ```
 
-**Switch back to herdr:** the agent resumes and completes. (Exfil to `evil.example` fails to
-resolve — fine; the point is the *gate*, and that it's on the record.)
+The backgrounded `rbt-range` resumes and prints `cleaned`. The point is the *gate*, and that the
+whole request → grant → consume → run exchange lands in the evidence journal.
 
 ## Scene 7 — The evidence (60s)
 

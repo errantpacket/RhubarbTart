@@ -1,12 +1,13 @@
 """Engagements: the scoped unit of isolation — a committed, reviewable scope manifest.
 
-engagements/<id>.json   identity + ranges + in-bounds targets + agent budget + evidence policy
+engagements/<id>.json   identity + ranges + links + in-bounds targets + agent budget + evidence policy
 
 One CTF / scoped pentest / research spike is one engagement; nothing crosses that line.
 Phase 1 Stage 1A (this module): load + STRICTLY validate a manifest into a stable frozen
 dataclass, mirroring profiles.py. No `tart`, no keychain, no network — stdlib only.
 
-Only *identity* and *ranges* are acted on later (Stage 1B: provision/teardown a range set).
+Only *identity*, *ranges* and *links* are acted on (Stage 1B: provision/teardown a range set;
+#30: `rhubarb engagement connect` opens each link's ports).
 *targets*, *agent_budget* and *evidence* are validated syntactically and stored now; they are
 enforced in later phases (targets → Phase 2 network isolation, evidence → Phase 4 vault,
 agent_budget → Phase 5 agents). Validating the whole schema now keeps it stable ("no manifest,
@@ -27,9 +28,11 @@ ENGAGEMENTS = ROOT / "engagements"
 # dashes, never the reserved 'rbt-'); mirrors clones.CLONE_RE without importing that module.
 PREFIX_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 
-TOP_KEYS = {"id", "label", "operator", "authorization", "ranges", "targets", "agent_budget", "evidence"}
+TOP_KEYS = {"id", "label", "operator", "authorization", "ranges", "links", "targets", "agent_budget",
+            "evidence"}
 REQUIRED_KEYS = {"id", "label", "operator", "authorization", "ranges"}
 RANGE_KEYS = {"profile", "count", "prefix"}
+LINK_KEYS = {"from", "to", "ports"}
 TARGET_KEYS = {"hosts", "cidrs", "domains", "urls"}
 BUDGET_KEYS = {"agents", "wall_clock_minutes", "max_spend_usd", "kill_time"}
 EVIDENCE_KEYS = {"vault", "retention_days"}
@@ -41,6 +44,17 @@ class Range:
     profile: str            # an existing profile id (profiles/<profile>.json, must load/build)
     count: int              # how many clones; int >= 1
     prefix: str | None = None   # optional clone-name prefix (PREFIX_RE); default derives from id
+
+
+@dataclass(frozen=True)
+class Link:
+    """The one network path between clones (#30): VMs are otherwise isolated from each other
+    (Tart's vmnet bridge isolation). Each clone of range ``src`` gets ``ports`` of the single
+    clone of range ``dst`` on its own loopback (127.0.0.1:<port>). Ranges are named by their
+    clone-name stem: ``prefix``, or ``<engagement>-<profile>``."""
+    src: str                  # range stem of the clones that reach out (e.g. the attacker)
+    dst: str                  # range stem of the clone they reach (count must be 1)
+    ports: tuple[int, ...]    # TCP ports, each declared by dst's profile (a package's "ports")
 
 
 @dataclass(frozen=True)
@@ -76,6 +90,7 @@ class Engagement:
     operator: str
     authorization: str
     ranges: tuple[Range, ...]
+    links: tuple[Link, ...] = ()
     targets: Targets = field(default_factory=Targets)
     agent_budget: AgentBudget = field(default_factory=AgentBudget)
     evidence: Evidence = field(default_factory=Evidence)
@@ -149,6 +164,53 @@ def _range(where: str, i: int, raw: object, known_profiles: set) -> Range:
     return Range(profile=profile, count=count, prefix=prefix)
 
 
+def range_stem(eid: str, rng: Range) -> str:
+    """A range's clone-name stem: its prefix, or ``<engagement>-<profile>``."""
+    return rng.prefix or f"{eid}-{rng.profile}"
+
+
+def _declared_ports(profile: str) -> set[int]:
+    """TCP ports the profile's packages declare a service on (config/packages/*.json "ports")."""
+    return {int(p) for v in load_profile(profile)["packages"].values() for p in v.get("ports", [])}
+
+
+def _links(where: str, eid: str, raw: object, ranges: tuple[Range, ...]) -> tuple[Link, ...]:
+    if not isinstance(raw, list):
+        raise VerifyError(f"{where}: links must be a list")
+    by_stem = {range_stem(eid, r): r for r in ranges}
+    links: list[Link] = []
+    bound: dict[tuple[str, int], int] = {}   # (src stem, port) -> link index: one bind per port
+    for i, item in enumerate(raw):
+        at = f"{where}: links[{i}]"
+        if not isinstance(item, dict):
+            raise VerifyError(f"{at} must be an object")
+        _reject_unknown(at, item, LINK_KEYS)
+        src, dst = _require_str(at, item, "from"), _require_str(at, item, "to")
+        for key, stem in (("from", src), ("to", dst)):
+            if stem not in by_stem:
+                raise VerifyError(f"{at}: {key} {stem!r} names no range; ranges: {sorted(by_stem)}")
+        if src == dst:
+            raise VerifyError(f"{at}: from and to must be different ranges")
+        if by_stem[dst].count != 1:
+            raise VerifyError(f"{at}: to {dst!r} must be a range of count 1 (one clone per port)")
+        ports = item.get("ports")
+        if (not isinstance(ports, list) or not ports or len(set(map(repr, ports))) != len(ports)
+                or not all(isinstance(p, int) and not isinstance(p, bool) and 1 <= p <= 65535
+                           for p in ports)):
+            raise VerifyError(f"{at}: ports must be a non-empty list of distinct TCP ports (1..65535)")
+        declared = _declared_ports(by_stem[dst].profile)
+        undeclared = sorted(set(ports) - declared)
+        if undeclared:
+            raise VerifyError(f"{at}: port(s) {undeclared} are not declared by profile "
+                              f"{by_stem[dst].profile!r} (declared: {sorted(declared)})")
+        for p in ports:
+            if (src, p) in bound:
+                raise VerifyError(f"{at}: port {p} on {src!r} is already linked by links[{bound[src, p]}]")
+            bound[src, p] = i
+        links.append(Link(src=src, dst=dst, ports=tuple(ports)))
+    return tuple(links)
+
+
 def _targets(where: str, raw: object) -> Targets:
     at = f"{where}: targets"
     if not isinstance(raw, dict):
@@ -213,10 +275,14 @@ def load_engagement(eid: str) -> Engagement:
         raise VerifyError(f"{where}: ranges must be a non-empty list")
     known = set(list_profiles())
     ranges = tuple(_range(where, i, raw, known) for i, raw in enumerate(man["ranges"]))
+    stems = [range_stem(eid, r) for r in ranges]
+    if len(set(stems)) != len(stems):
+        raise VerifyError(f"{where}: two ranges share a clone-name stem; give each a distinct prefix")
+    links = _links(where, eid, man.get("links", []), ranges)
 
     targets = _targets(where, man.get("targets", {}))
     agent_budget = _agent_budget(where, man.get("agent_budget", {}))
     evidence = _evidence(where, man.get("evidence", {}))
 
     return Engagement(id=eid, label=label, operator=operator, authorization=authorization,
-                      ranges=ranges, targets=targets, agent_budget=agent_budget, evidence=evidence)
+                      ranges=ranges, links=links, targets=targets, agent_budget=agent_budget, evidence=evidence)

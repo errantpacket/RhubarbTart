@@ -12,6 +12,7 @@
   rhubarb engagement define FILE|ID                 validate + acknowledge a scope manifest
   rhubarb engagement list                           defined engagements and their clone counts
   rhubarb engagement provision ID                   stand up its ranges from verified images
+  rhubarb engagement connect ID                     open its links until Ctrl-C (#30)
   rhubarb engagement teardown ID [--yes]            remove every clone tagged to it
 
 Only clones created by `rhubarb new` can be run, reset or removed through this tool; built
@@ -24,6 +25,7 @@ API and formats its structured result for the terminal — see docs/INTERFACE-PL
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -145,7 +147,7 @@ def cmd_rm(a) -> None:
 
 
 # ---- engagement commands -------------------------------------------------------------------
-# Thin adapters over the core's engagement ops (api.provision/teardown/engagements/
+# Thin adapters over the core's engagement ops (api.provision/connect/teardown/engagements/
 # engagement_clones, over engagements.py). No tart/keychain/record logic lives here.
 
 def _engagement_id(arg: str) -> str:
@@ -188,6 +190,23 @@ def cmd_engagement_provision(a) -> None:
     for name in res.skipped:
         say(f"skipped {name}: already exists (not re-created)")
     say(f"engagement {res.engagement}: {len(res.created)} created, {len(res.skipped)} skipped")
+
+
+def cmd_engagement_connect(a) -> None:
+    eid = _engagement_id(a.engagement)
+    say(f"engagement {eid}: opening links (Ctrl-C closes them)")
+
+    def stop(_sig, _frame):
+        raise KeyboardInterrupt
+
+    # Close the tunnels however we're stopped: Ctrl-C (even if SIGINT was inherited as ignored,
+    # as in a background job), `kill`, or the terminal going away.
+    for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, stop)
+    try:
+        api.connect(eid, progress=say)
+    except KeyboardInterrupt:
+        say(f"engagement {eid}: links closed")
 
 
 def cmd_engagement_teardown(a) -> None:
@@ -248,7 +267,7 @@ def main(argv: list[str] | None = None) -> None:
     rm.add_argument("name")
     rm.add_argument("--yes", action="store_true")
     rm.set_defaults(fn=cmd_rm)
-    eng = sub.add_parser("engagement", help="define / list / provision / teardown a scoped engagement")
+    eng = sub.add_parser("engagement", help="define / list / provision / connect / teardown a scoped engagement")
     esub = eng.add_subparsers(dest="engagement_cmd", required=True)
     ed = esub.add_parser("define", help="validate and acknowledge a manifest (engagements/<id>.json)")
     ed.add_argument("engagement", metavar="FILE|ID")
@@ -257,6 +276,9 @@ def main(argv: list[str] | None = None) -> None:
     ep = esub.add_parser("provision", help="stand up the engagement's clone set from verified images")
     ep.add_argument("engagement", metavar="ID")
     ep.set_defaults(fn=cmd_engagement_provision)
+    ec = esub.add_parser("connect", help="open the manifest's links (target ports on each source's loopback)")
+    ec.add_argument("engagement", metavar="ID")
+    ec.set_defaults(fn=cmd_engagement_connect)
     et = esub.add_parser("teardown", help="remove every clone tagged to the engagement")
     et.add_argument("engagement", metavar="ID")
     et.add_argument("--yes", action="store_true")

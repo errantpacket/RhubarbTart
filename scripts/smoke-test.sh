@@ -108,6 +108,10 @@ test -s /etc/machine-id || bad "machine-id empty (not regenerated for this clone
 test -s /var/lib/rhubarbtart/installed.txt || bad "installed.txt missing"
 if [[ "$ROSETTA" == true ]]; then test -e /proc/sys/fs/binfmt_misc/rosetta || bad "rosetta binfmt not registered"; fi
 if [[ "$FAMILY" == nixos ]]; then nixos-version || bad "nixos-version failed"; fi
+if systemctl cat juice-shop >/dev/null 2>&1; then   # lab target: no egress (#30)
+  deny="$(systemctl show -p IPAddressDeny --value juice-shop)"
+  [[ "$deny" == *0.0.0.0/0* && "$deny" == *::/0* ]] || bad "juice-shop egress not denied ($deny)"
+fi
 echo "packages recorded: $(wc -l < /var/lib/rhubarbtart/installed.txt)"
 EOF
     log "ok: no passwordless sudo, no auto-login, firewall active, fresh machine-id"

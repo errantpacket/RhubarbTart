@@ -6,3 +6,9 @@ vendor/**/*.cer
 __pycache__/
 .ruff_cache/
 .toolchain/
+
+# macOS Finder metadata
+.DS_Store
+
+# Sealed evidence vaults (exported, never committed)
+vaults/

@@ -72,8 +72,25 @@ engagement id.
 
 Every entry is one line of `journal.jsonl` and includes the hash of the entry before it, and
 outputs and files are stored by their sha256. `evidence verify` recomputes all of it and reports
-an edited, reordered or deleted entry or an altered file. The journal is not signed or encrypted
-yet; that is the vault ([#86](https://github.com/errantpacket/RhubarbTart/issues/86)).
+an edited, reordered or deleted entry or an altered file.
+
+**Sealing a vault.** `rhubarb vault seal ID` turns the evidence store into a signed, sealed,
+portable bundle you can hand off:
+
+| Command | What it does |
+|---|---|
+| `vault seal ID [--out DIR]` | Verify the chain, then write a read-only `<id>-<time>.vault/` (default under `./vaults`) |
+| `vault verify DIR [--pub KEY]` | Check the vault's signature and every hash, offline, anywhere |
+
+The bundle holds `root.json` (the engagement scope, the chain head, and the sha256 of the
+journal and of every item), the journal and items themselves, each range's build provenance
+(which verified image produced the evidence), and `cosign.pub`. `root.json` is signed with the
+same offline cosign key that signs published images ([publishing](publishing.md)), so one
+signature over it anchors the whole set: `vault verify` checks the signature, then re-derives
+every hash. The tree is made read-only on seal, and a copy carried to another machine verifies
+with nothing but the bundle. Confidentiality at rest currently rests on the host disk
+(FileVault); per-engagement encryption is a follow-up. Sealing is repeatable: more evidence, then
+seal again for a new timestamped bundle.
 
 **Networking between clones.** Clones can't reach each other: Tart's default network drops
 traffic between VMs. A manifest's `links` are the only path, and they go through your Mac:

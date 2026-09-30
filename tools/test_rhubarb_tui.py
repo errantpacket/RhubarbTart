@@ -436,6 +436,96 @@ async def _keys() -> None:
               "(image of clone work-1)" in _static_text(app.query_one("#provenance-body")))
 
 
+def _test_theme() -> None:
+    """#131: the TUI follows herdr's theme: built-in names map to Textual themes, auto_switch
+    picks dark_name/light_name, [theme.custom] tokens override colours (bad ones skipped), the
+    config is found where herdr finds it, and it only applies inside herdr unless asked."""
+    import tempfile
+
+    from textual.theme import BUILTIN_THEMES
+
+    from rhubarb.tui import theme as T
+
+    check("theme: no config -> herdr's default (catppuccin -> catppuccin-mocha)",
+          T.textual_theme({}).primary == BUILTIN_THEMES["catppuccin-mocha"].primary)
+    check("theme: every herdr built-in resolves to a Textual theme",
+          all(T.textual_theme({"theme": {"name": n}}).name == T.THEME_NAME
+              for n in [*T.BUILTIN_MAP, *T.EXTRA_THEMES, "terminal"]))
+    check("theme: a mapped name uses that Textual palette",
+          T.textual_theme({"theme": {"name": "dracula"}}).background
+          == BUILTIN_THEMES["dracula"].background)
+    check("theme: a herdr theme Textual lacks is defined here (kanagawa)",
+          T.textual_theme({"theme": {"name": "kanagawa"}}).background == "#1f1f28")
+    check("theme: terminal -> Textual's ANSI theme for the appearance",
+          T.textual_theme({"theme": {"name": "terminal"}}, "light").ansi
+          and not T.textual_theme({"theme": {"name": "terminal"}}, "light").dark)
+    check("theme: an unknown name falls back to herdr's default",
+          T.textual_theme({"theme": {"name": "no-such"}}).primary
+          == BUILTIN_THEMES["catppuccin-mocha"].primary)
+    auto = {"theme": {"auto_switch": True, "dark_name": "nord", "light_name": "gruvbox-light"}}
+    check("theme: auto_switch uses dark_name / light_name by appearance",
+          T.herdr_theme_name(auto, "dark") == "nord"
+          and T.herdr_theme_name(auto, "light") == "gruvbox-light")
+    check("theme: without auto_switch, name wins over dark_name",
+          T.herdr_theme_name({"theme": {"name": "vesper", "dark_name": "nord"}}) == "vesper")
+    custom = {"theme": {"name": "nord", "auto_switch": True, "custom": {
+        "accent": "#ff0000", "panel_bg": "reset", "text": "not-a-colour", "bogus": "#00ff00",
+        "red": "rgb(1,2,3)", "dark": {"accent": "#00ff00"}, "light": {"accent": "#0000ff"}}}}
+    o_dark, o_light = T.herdr_overrides(custom, "dark"), T.herdr_overrides(custom, "light")
+    check("theme: custom tokens map to Textual fields; the appearance layer wins",
+          o_dark.get("primary") == "#00ff00" and o_light.get("primary") == "#0000ff"
+          and o_dark.get("error") == "rgb(1,2,3)")
+    check("theme: reset, unknown tokens and unparsable colours are skipped",
+          "background" not in o_dark and "foreground" not in o_dark and len(o_dark) == 2)
+    check("theme: without auto_switch the dark/light layers are ignored",
+          T.herdr_overrides({"theme": {"custom": {"accent": "#111111", "dark": {"accent": "#222222"}}}})
+          == {"primary": "#111111"})
+    check("theme: config path follows HERDR_CONFIG_PATH, then XDG_CONFIG_HOME",
+          T.herdr_config_path({"HERDR_CONFIG_PATH": "/x/c.toml", "XDG_CONFIG_HOME": "/y"})
+          == Path("/x/c.toml")
+          and T.herdr_config_path({"XDG_CONFIG_HOME": "/y"}) == Path("/y/herdr/config.toml"))
+    with tempfile.TemporaryDirectory() as d:
+        bad = Path(d) / "config.toml"
+        bad.write_text("this is [not toml")
+        check("theme: a malformed config reads as herdr's defaults",
+              T.load_herdr_config({"HERDR_CONFIG_PATH": str(bad)}) == {})
+        good = Path(d) / "good.toml"
+        good.write_text('[theme]\nname = "dracula"\n')
+        env = {"HERDR_PANE_ID": "w1:p1", "HERDR_CONFIG_PATH": str(good)}
+        chosen = T.choose_theme([], env)
+        check("theme: inside herdr, the synced theme is chosen",
+              getattr(chosen, "background", None) == BUILTIN_THEMES["dracula"].background)
+        check("theme: outside herdr, Textual's default stays", T.choose_theme([], {}) is None)
+        check("theme: --theme / RHUBARB_TUI_THEME override the sync",
+              T.choose_theme(["--theme", "nord"], env) == "nord"
+              and T.choose_theme(["--theme=gruvbox"], env) == "gruvbox"
+              and T.choose_theme([], {**env, "RHUBARB_TUI_THEME": "flexoki"}) == "flexoki")
+
+
+async def _theme_app() -> None:
+    """#131: the running app adopts the chosen theme; a bad name is logged, not fatal."""
+    from rhubarb.tui import theme as T
+
+    api.images = _mock_images
+    api.clones = _mock_clones
+    api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.tail_log = _mock_tail_log
+    from rhubarb_tui import RhubarbTUI
+
+    app = RhubarbTUI(theme_choice=T.textual_theme({"theme": {"name": "vesper"}}))
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        check("theme app: herdr's theme is registered and active",
+              app.theme == T.THEME_NAME
+              and app.current_theme.background == T.EXTRA_THEMES["vesper"].background)
+    app = RhubarbTUI(theme_choice="no-such-theme")
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        check("theme app: an unknown --theme is reported and the default stays",
+              app.theme == "textual-dark" and "theme not applied" in _log_text(app))
+
+
 def _test_mouse() -> None:
     """Inside herdr the TUI leaves the mouse to herdr; flags and env override."""
     from rhubarb_tui import mouse_enabled
@@ -1154,6 +1244,8 @@ async def _action_prompts() -> None:
 def main() -> None:
     asyncio.run(_render())
     _test_mouse()
+    _test_theme()
+    asyncio.run(_theme_app())
     _test_guard()
     _test_rm_handler()
     _test_action_handlers()

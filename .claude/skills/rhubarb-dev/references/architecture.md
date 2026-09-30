@@ -185,6 +185,11 @@ hash-locked in `tools/rhubarb_tui.py.lock` (check.sh verifies the pin and the lo
   gathers names and choices. `build` alone shells out to `scripts/build.sh` (builds are not in
   the core), refuses in an SSH session, and writes `logs/build-<profile>-<UTC>.log` (0600, via
   `api.new_build_log`) with the VNC password redacted.
+- `theme.py` maps herdr's `[theme]` (config at `HERDR_CONFIG_PATH`, `$XDG_CONFIG_HOME/herdr` or
+  `~/.config/herdr`) to a Textual theme when the TUI runs inside herdr: built-in names to the
+  Textual theme of the same palette, the rest defined in `EXTRA_THEMES`, `[theme.custom]` tokens
+  via `TOKEN_MAP`. It is pure apart from reading that file and the macOS appearance, and a bad
+  config falls back to herdr's default. `--theme` / `RHUBARB_TUI_THEME` override it.
 - The TUI is a thin client of `api.py`: it never calls `tart` or the keychain directly.
 - `api.read_log`/`tail_log` accept only ids from `list_logs()` (`events.log` or
   `logs/<name>.log`), open them with `O_NOFOLLOW` and require a regular file inside the state

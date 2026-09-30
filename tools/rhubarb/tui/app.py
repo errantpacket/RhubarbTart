@@ -75,8 +75,11 @@ class RhubarbTUI(ActionDispatch, App):
                                "delete_clone"})
     WRITE_ACTIONS = CLONE_ACTIONS | {"new_clone", "build"}
 
-    def __init__(self, *args, **kwargs) -> None:
+    def __init__(self, *args, theme_choice=None, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        # A Textual theme name or Theme to use (see rhubarb.tui.theme.choose_theme); None keeps
+        # Textual's default.
+        self._theme_choice = theme_choice
         self._tick_n = 0
         self._polling = False          # a background refresh is in flight: skip the next one
         self._refreshing = False       # a full refresh (start-up, `r`, after an action) is running
@@ -111,11 +114,30 @@ class RhubarbTUI(ActionDispatch, App):
         )
 
     def on_mount(self) -> None:
+        self._apply_theme()
         self.sub_title = "control plane · loading…"
         self._log_action("Ready. Press ? for every key. Action output appears here; a build's "
                          "full output is also in the Logs tab (4).")
         self.action_refresh_all()
         self.set_interval(self.TICK, self._tick)
+
+    def _apply_theme(self) -> None:
+        """Use the chosen theme (herdr's, or --theme / RHUBARB_TUI_THEME). A bad choice is
+        reported in the action log and the default theme stays; it never stops the TUI."""
+        from textual.theme import Theme
+
+        choice = self._theme_choice
+        try:
+            if isinstance(choice, Theme):
+                self.register_theme(choice)
+                self.theme = choice.name
+            elif choice:
+                if choice not in self.available_themes:
+                    raise ValueError(f"unknown theme {choice!r}; try one of: "
+                                     + ", ".join(sorted(self.available_themes)))
+                self.theme = choice
+        except Exception as e:
+            self._log_action(f"theme not applied: {e}", ok=False)
 
     def action_refresh_all(self) -> None:
         """Reload every pane from the core API (read-only) off the UI thread. Used at start-up,
@@ -309,4 +331,11 @@ def mouse_enabled(argv: list[str], env) -> bool:
 def main() -> None:
     import os
 
-    RhubarbTUI().run(mouse=mouse_enabled(sys.argv[1:], os.environ))
+    from .theme import choose_theme
+
+    argv = sys.argv[1:]
+    try:
+        theme = choose_theme(argv, os.environ)
+    except Exception:   # a theme problem must never stop the TUI from starting
+        theme = None
+    RhubarbTUI(theme_choice=theme).run(mouse=mouse_enabled(argv, os.environ))

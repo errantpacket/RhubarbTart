@@ -39,6 +39,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `RHUBARB_COSIGN_PUB` | `config/keys/rhubarb-cosign.pub` | `publish.sh verify`: public key to verify against (another publisher's) |
 | `GITHUB_TOKEN` | unset | Optional; avoids GitHub API rate limits while resolving |
 | `RHUBARB_TUI_MOUSE` | on (off inside herdr) | `./rhubarb-tui`: `1`/`0` turns mouse capture on or off; `--mouse` / `--no-mouse` override it |
+| `RHUBARB_TUI_THEME` | herdr's theme inside herdr, else Textual's default | `./rhubarb-tui`: any Textual theme name (for example `nord`); `--theme NAME` does the same |
 | `RBT_SERVICE_SOCKET` · `RBT_RANGE_CLONE` | set by `herdr arm` | `rbt-range`: the control-plane socket and the one clone this agent may drive |
 | `RBT_APPROVAL_WAIT` · `RBT_APPROVAL_POLL` | `600` · `5` | `rbt-range`: seconds to wait for an operator approval of a tiered command, and between checks (`0` disables waiting) |
 | `RBT_HERDR` | unset | `herdr arm`: path to the `herdr` binary if it is not on `PATH` or in a default install location |
@@ -119,7 +120,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `rbt-range` · `tools/rhubarb_agent.py` · `tools/rhubarb/agent.py` | Scoped range client an agent uses to run commands in its one assigned clone |
 | `tools/rhubarb/{herdr,approvals}.py` | `rhubarb herdr arm` (launch an engagement's agents) · tiered-command approvals, ledgered in the evidence journal |
 | `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb_tui.py.lock` | TUI launcher shim, launcher (carries the pinned Textual) and its hashed lockfile |
-| `tools/rhubarb/tui/` | Textual TUI over `api.py`: app shell (`app.py`), action dispatch (`dispatch.py`), read-only panes (`images_pane`, `clones_pane`, `provenance_pane`, `logs_pane`), table helpers (`tables.py`), modals (`confirm.py`, `prompt.py`), and one module per action in `actions/` (`build`, `enroll`, `new`, `reset`, `rm`, `run`, `ssh`) |
+| `tools/rhubarb/tui/` | Textual TUI over `api.py`: app shell (`app.py`), action dispatch (`dispatch.py`), read-only panes (`images_pane`, `clones_pane`, `provenance_pane`, `logs_pane`), table helpers (`tables.py`), herdr theme sync (`theme.py`), modals (`confirm.py`, `prompt.py`), and one module per action in `actions/` (`build`, `enroll`, `new`, `reset`, `rm`, `run`, `ssh`) |
 | `tools/bootstrap.sh` · `tools/check.sh` | Toolchain install · static checks and tests |
 | `tools/test_rhubarb.py` · `tools/tests/` · `tools/testdata/` | Offline self-tests: the runner, the tests grouped by area, and their fixtures |
 | `tools/test_rhubarb_tui.py` (+ `.lock`) | Headless TUI render test (mocked core API) |

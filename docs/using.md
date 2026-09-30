@@ -74,14 +74,20 @@ Every entry is one line of `journal.jsonl` and includes the hash of the entry be
 outputs and files are stored by their sha256. `evidence verify` recomputes all of it and reports
 an edited, reordered or deleted entry or an altered file.
 
-**Control-plane service (read-only).** `rhubarb serve` runs a small HTTP service over a **Unix
-domain socket** (0600, under the state dir by default, or `--socket PATH`) that exposes the same
-read-only views the TUI uses — `/images`, `/clones`, `/engagements`, `/engagements/<id>/evidence`,
-`/provenance/<vm>`. It is the surface the herdr interface will sit on
-([charter](HERDR-CHARTER.md)). There is no TCP port and no token: filesystem permissions on the
-socket are the boundary, like the clone records. Every endpoint is a call into the same audited
-core; the service never touches `tart` or the keychain itself. This slice is read-only (mutating
-methods return 405); guarded actions and an event stream come later.
+**Control-plane service.** `rhubarb serve` runs a small HTTP service over a **Unix domain socket**
+(0600, under the state dir by default, or `--socket PATH`) — the surface the herdr interface will
+sit on ([charter](HERDR-CHARTER.md)). There is no TCP port and no token: filesystem permissions on
+the socket are the boundary, like the clone records. Every endpoint is a call into the same
+audited core; the service never touches `tart` or the keychain itself.
+
+- **GET** (read-only, the TUI's views): `/images`, `/clones`, `/engagements`,
+  `/engagements/<id>/evidence`, `/provenance/<vm>`.
+- **POST** (guarded actions, each one core call that already journals evidence):
+  `/engagements/<id>/provision|collect|seal|teardown`, and `/clones/<name>/exec` (run a command;
+  its output round-trips losslessly as base64). Bad input is 400; the wrong method on a known
+  route is 405.
+
+An event-subscribe stream (for herdr's sidebar and approvals) is the remaining slice.
 
 **Sealing a vault.** `rhubarb vault seal ID` turns the evidence store into a signed, sealed,
 portable bundle you can hand off:

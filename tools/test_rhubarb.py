@@ -1679,7 +1679,8 @@ def test_control_plane_service() -> None:
     def boom(vm):
         raise FileNotFoundError(f"no provenance for {vm}")
 
-    saved = (api.images, api.clones, api.engagements, api.provenance)
+    saved = (api.images, api.clones, api.engagements, api.provenance,
+             api.provision, api.teardown, api.exec)
     with tempfile.TemporaryDirectory() as tmp:
         sock = Path(tmp) / "service.sock"
         api.images = lambda: [img]
@@ -1693,7 +1694,7 @@ def test_control_plane_service() -> None:
             check("socket is created 0600", (sock.stat().st_mode & 0o777) == 0o600)
 
             st, body = service.request(sock, "GET", "/health")
-            check("GET /health -> 200 ok, read-only", st == 200 and body["ok"] and body["readonly"])
+            check("GET /health -> 200 ok", st == 200 and body["ok"] and body["service"] == "rhubarb")
 
             st, body = service.request(sock, "GET", "/images")
             check("GET /images serializes the dataclass list",
@@ -1715,10 +1716,51 @@ def test_control_plane_service() -> None:
             check("an unknown route is 404", st == 404 and "no such route" in body["error"])
 
             st, body = service.request(sock, "POST", "/clones")
-            check("a mutating method is 405 in this read-only slice", st == 405)
+            check("POST to a GET-only collection route is 405", st == 405)
 
             check("get_json raises on a non-200",
                   _raises(lambda: service.get_json(sock, "/nope"), VerifyError))
+
+            # -- guarded actions (POST), core mocked --
+            import base64
+            calls = []
+            api.provision = lambda eid: (calls.append(("provision", eid))
+                                         or api.ProvisionResult(engagement=eid, created=[], skipped=["x"]))
+            api.teardown = lambda eid, collect_first=True, progress=None: (
+                calls.append(("teardown", eid, collect_first)) or ["a", "b"])
+            api.exec = lambda name, command, timeout=None: (
+                calls.append(("exec", name, command, timeout))
+                or api.ExecResult(name=name, command=command, exit_code=0, stdout=b"\x00\xffOUT",
+                                  stderr=b"", timed_out=False, evidence_seq=7))
+
+            st, body = service.request(sock, "POST", "/engagements/demo/provision")
+            check("POST provision runs the core call and returns its result",
+                  st == 200 and body["skipped"] == ["x"] and ("provision", "demo") in calls)
+
+            st, body = service.request(sock, "POST", "/engagements/demo/teardown",
+                                       body={"collect_first": False})
+            check("POST teardown passes a validated flag through",
+                  st == 200 and body["removed"] == ["a", "b"] and ("teardown", "demo", False) in calls)
+
+            st, body = service.request(sock, "POST", "/clones/jsl-attacker/exec",
+                                       body={"command": "id"})
+            check("POST exec returns the result with stdout base64-encoded (lossless)",
+                  st == 200 and body["evidence_seq"] == 7
+                  and base64.b64decode(body["stdout"]) == b"\x00\xffOUT")
+
+            st, body = service.request(sock, "POST", "/clones/jsl-attacker/exec", body={})
+            check("POST exec without a command is 400", st == 400 and "command" in body["error"])
+
+            st, body = service.request(sock, "POST", "/clones/jsl-attacker/exec",
+                                       body={"command": "id", "timeout": -1})
+            check("POST exec with a bad timeout is 400", st == 400 and "timeout" in body["error"])
+
+            st, _ = service.request(sock, "POST", "/images")
+            check("POST to a GET-only route is 405", st == 405)
+
+            st, _ = service.request(sock, "GET", "/engagements/demo/provision")
+            check("GET on a POST-only route is 405", st == 405)
+
         finally:
             srv.shutdown()
             srv.server_close()
@@ -1730,7 +1772,8 @@ def test_control_plane_service() -> None:
         p2.write_text("i am not a socket")
         check("refuses to replace a non-socket file at the path",
               _raises(lambda: service.make_server(p2), VerifyError) and p2.read_text() == "i am not a socket")
-    api.images, api.clones, api.engagements, api.provenance = saved
+    (api.images, api.clones, api.engagements, api.provenance,
+     api.provision, api.teardown, api.exec) = saved
 
 
 if __name__ == "__main__":

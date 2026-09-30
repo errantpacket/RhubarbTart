@@ -107,7 +107,9 @@ The longer-term goal is to run AI agents through a management interface (herdr) 
 research, penetration tests and CTFs inside these VMs, with evidence saved to a separate store
 outside them. A verified, disposable guest is the building block for that. You can already
 create and remove a whole set of clones for one scope as an
-[engagement](docs/using.md#engagements). See [`docs/PLAN.md`](docs/PLAN.md) for the plan.
+[engagement](docs/using.md#engagements), capture what happens inside as signed, sealed evidence,
+and drive it toward the herdr interface whose boundary is set in the
+[herdr charter](docs/HERDR-CHARTER.md). See [`docs/PLAN.md`](docs/PLAN.md) for the plan.
 
 </details>
 

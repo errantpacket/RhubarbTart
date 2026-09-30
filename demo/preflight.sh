@@ -1,61 +1,49 @@
 #!/bin/bash
-# Stage the RhubarbTart capability demo so the recording has no dead air (#112).
+# Stage the RhubarbTart capability demo (#112): the agent customizes + builds a guest image, then a
+# clone of it is run under an engagement and sealed into a signed evidence vault.
 #
-#   ./demo/preflight.sh          # provision + boot the lab, start the service + network link
-#   ./demo/preflight.sh --reset  # tear the lab down first, then stage fresh
+#   ./demo/preflight.sh          # start the control-plane service; clean slate for a live take
+#   ./demo/preflight.sh --reset  # also tear down any prior demo clones and remove the demo profile
 #
-# Prints READY when the engagement is up, the control-plane service is listening, and the
-# attacker can reach the Juice Shop target over the link. Run it BEFORE you hit record; then
-# follow demo/run-of-show.md. Clean up afterwards with ./demo/teardown.sh.
+# Prints READY. Run it BEFORE recording, then follow demo/run-of-show.md. Clean up with
+# ./demo/teardown.sh. The slow part (the build) happens on camera in Scene 3 — speed it up in post.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 # shellcheck source=scripts/env.sh
 source "$ROOT/scripts/env.sh"
 
-ENGAGEMENT=juiceshop-lab
-ATTACKER=jsl-attacker
-TARGET=jsl-target
+ENGAGEMENT=nixos-demo-build
 RUN=/private/tmp/rbt-demo
 mkdir -p "$RUN"
-
 log() { echo "[preflight] $*"; }
 die() { echo "[preflight] FAILED: $*" >&2; exit 1; }
 
 if [[ "${1:-}" == "--reset" ]]; then
-  log "resetting: tearing the lab down first"
-  "$ROOT/demo/teardown.sh" || true
+  log "resetting: tearing down prior demo state"
+  "$ROOT/demo/teardown.sh" --purge || true
 fi
 
-# 1. Provision the engagement's ranges from their verified images (idempotent: skips existing).
-log "provisioning engagement $ENGAGEMENT (from verified images)"
-./rhubarb engagement provision "$ENGAGEMENT" 2>&1 | sed 's/^/  /'
+# 1. Clean slate so the agent creates the profile/lock live on camera.
+if [[ -e profiles/nixos-demo.json || -e locks/nixos-demo.lock.json ]]; then
+  rm -f profiles/nixos-demo.json locks/nixos-demo.lock.json
+  log "removed a leftover nixos-demo profile/lock (the agent recreates them in Scene 2)"
+fi
 
-# 2. Boot both clones headless.
-for vm in "$TARGET" "$ATTACKER"; do
-  if ./rhubarb list 2>/dev/null | awk -v v="$vm" '$1==v && $0 ~ /running/{f=1} END{exit !f}'; then
-    log "$vm already running"
-  else
-    log "booting $vm"
-    ./rhubarb run "$vm" --headless --detach 2>&1 | sed 's/^/  /'
-  fi
-done
+# 2. Confirm the NixOS inputs are cached, so Scene 3's build is fast (no big downloads on camera).
+ISO="$(uv run --quiet tools/resolve.py plan juiceshop-target 2>/dev/null \
+  | /usr/bin/python3 -c 'import sys,json
+try: print(json.load(sys.stdin)["base"]["image"]["sha256"])
+except Exception: print("")' || true)"
+if [[ -n "$ISO" && -d "cache/artifacts/$ISO" ]]; then
+  log "NixOS base image is cached"
+else
+  log "WARNING: the NixOS base image may not be cached; Scene 3's build could download it"
+fi
 
-# 3. Wait until the attacker answers SSH and the target's Juice Shop answers on :3000.
-log "waiting for $ATTACKER to accept SSH"
-for _ in $(seq 1 60); do ./rhubarb ssh "$ATTACKER" -- true >/dev/null 2>&1 && break; sleep 3; done
-./rhubarb ssh "$ATTACKER" -- true >/dev/null 2>&1 || die "$ATTACKER never became reachable"
-
-TARGET_IP="$(tart ip "$TARGET" 2>/dev/null || true)"
-[[ -n "$TARGET_IP" ]] || die "no IP for $TARGET"
-log "waiting for Juice Shop on $TARGET ($TARGET_IP:3000)"
-for _ in $(seq 1 60); do curl -sf -o /dev/null -m 3 "http://$TARGET_IP:3000/" && break; sleep 3; done
-curl -sf -o /dev/null -m 3 "http://$TARGET_IP:3000/" || die "Juice Shop never answered on $TARGET"
-
-# 4. Start the control-plane service on its default socket (what `rhubarb herdr arm` uses).
+# 3. Start the control-plane service on its default socket (used by evidence in Scene 5).
 SOCK="$(cd "$ROOT/tools" && uv run --quiet python -c \
   'from rhubarb.service import default_socket_path; print(default_socket_path())')"
-[[ -n "$SOCK" ]] || die "could not resolve the default service socket path"
 if [[ -S "$SOCK" ]]; then
   log "control-plane service already listening ($SOCK)"
 else
@@ -66,27 +54,11 @@ else
   [[ -S "$SOCK" ]] || die "the service did not start (see $RUN/service.log)"
 fi
 
-# 5. Open the network link so the attacker reaches the target's :3000 on its own loopback.
-if pgrep -f "engagement connect $ENGAGEMENT" >/dev/null 2>&1; then
-  log "network link already open"
-else
-  log "opening the engagement network link (attacker 127.0.0.1:3000 -> target)"
-  nohup ./rhubarb engagement connect "$ENGAGEMENT" >"$RUN/connect.log" 2>&1 &
-  echo $! >"$RUN/connect.pid"
-  for _ in $(seq 1 20); do grep -q "127.0.0.1:3000" "$RUN/connect.log" 2>/dev/null && break; sleep 0.5; done
-fi
-# Confirm the link end to end from inside the attacker.
-if ./rhubarb ssh "$ATTACKER" -- 'curl -sf -o /dev/null -m 5 http://127.0.0.1:3000/' >/dev/null 2>&1; then
-  log "verified: attacker reaches Juice Shop at 127.0.0.1:3000 over the link"
-else
-  log "WARNING: the attacker could not reach 127.0.0.1:3000 yet; give the link a moment"
-fi
-
 echo
 log "READY. Environment staged:"
-echo "  engagement : $ENGAGEMENT  (attacker=$ATTACKER, target=$TARGET)"
 echo "  service    : $SOCK"
-echo "  link       : attacker 127.0.0.1:3000 -> Juice Shop on $TARGET"
+echo "  engagement : $ENGAGEMENT (range: profile nixos-demo — built by the agent in Scene 3)"
+echo "  slate      : nixos-demo profile/lock absent (the agent creates them on camera)"
 echo
 echo "  Next: start recording, open herdr, and follow demo/run-of-show.md."
 echo "  When done: ./demo/teardown.sh"

@@ -1,0 +1,9 @@
+{
+  "id": "nixos-demo-build",
+  "label": "Agent-built image: capture a run as evidence",
+  "operator": "errantpacket",
+  "authorization": "internal capability demo; the image is built by the agent from pinned, verified inputs",
+  "ranges": [
+    { "profile": "nixos-demo", "count": 1, "prefix": "demo-box" }
+  ]
+}

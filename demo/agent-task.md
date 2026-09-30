@@ -1,30 +1,28 @@
 # Agent task (paste into the `recon` agent pane)
 
-This is the rehearsed prompt for the live Claude agent in the demo. It demonstrates
-RhubarbTart's **scoped range client** and the **tiered-approval** workflow with benign commands
-in an isolated lab VM we own — no attack simulation, no data exfiltration. Copy the block below
-into the `recon` pane after `arm`, then narrate while it works.
+The demo agent is **Claude Code on Opus 4.8** (pinned in `engagements/juiceshop-lab.herdr.json`),
+running in a herdr pane at the RhubarbTart repo. Its job is to **customize RhubarbTart** — real,
+verifiable engineering work — not to attack anything. It shows the pinned-inputs + verification
+model with a capable agent driving it.
 
-> Every action goes through `rbt-range` (recorded as evidence). Step 4 is a **destructive**
-> command (a scratch cleanup), which is a *tiered* action, so the operator-approval pause happens
-> on camera. Nothing leaves the box.
+Paste this into the `recon` pane after `arm`, then narrate while it works (~1 min):
 
 ---
 
-You are demonstrating RhubarbTart's scoped range tooling on an authorized internal lab. In this
-armed engagement, `rbt-range -- <command>` runs a shell command inside the lab VM through the
-control plane, and every command is recorded as tamper-evident evidence on the host. The lab's
-OWASP Juice Shop service (which we build and own) is reachable at `http://127.0.0.1:3000`.
+You are working in the RhubarbTart repo (your cwd). RhubarbTart builds hardened Tart VM images from
+pinned, verified inputs. Make a small customization to demonstrate the workflow:
 
-Please run these steps with `rbt-range`, briefly narrating each:
+1. Create `profiles/nixos-demo.json` for a NixOS research box on the `nixos-26.05` base, including
+   the packages `chrome` and `tailscale`, with options `desktop: xfce` and `rosetta: true`. Model
+   it on `profiles/nixos-research.json`.
+2. Run `uv run tools/resolve.py plan nixos-demo` — this previews the pinned inputs without
+   downloading. Point out that the base ISO is SHA-256 pinned and the packages inherit the base's
+   nixpkgs revision.
+3. Run `./tools/check.sh` to confirm the repo's security invariants still pass with the new profile.
 
-1. Confirm access: `rbt-range -- id`
-2. Read the local service's challenge list (this is our own app, on loopback):
-   `rbt-range -- "curl -s http://127.0.0.1:3000/api/Challenges/ | head -c 300"`
-3. Write a short note into the evidence folder (stays on the box):
-   `rbt-range -- "mkdir -p ~/evidence && printf '# Note\n\nJuice Shop reachable on the lab link; challenge API responded.\n' > ~/evidence/note.md && echo saved"`
-4. Clean up a scratch directory. This is a **destructive** command, so it is a tiered action and
-   will pause for operator approval — wait for it to be approved, then confirm it completed:
-   `rbt-range -- "mkdir -p ~/scratch && date > ~/scratch/tmp && rm -rf ~/scratch && echo cleaned"`
+Narrate each step briefly. Do not commit, push, or run a full build.
 
-Stop after step 4 and summarize what you did. Do not run any command that sends data off the box.
+---
+
+> Opus 4.8 completes this autonomously in the dry run (creates the profile, previews the pins, and
+> check.sh passes). If it pauses on a permission prompt, approve it in the pane.

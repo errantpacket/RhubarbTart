@@ -1,6 +1,6 @@
 {
   "agents": [
-    { "name": "recon", "kind": "claude", "clone": "jsl-attacker" }
+    { "name": "recon", "kind": "claude", "clone": "jsl-attacker", "model": "claude-opus-4-8" }
   ],
   "tiered": [
     "(^|[^a-zA-Z])curl\\s.*://(?!127\\.0\\.0\\.1|localhost)",

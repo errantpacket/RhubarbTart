@@ -1893,7 +1893,8 @@ def test_herdr_arm() -> None:
     # committed config loads
     cfg = herdr.load_config("juiceshop-lab")
     check("load_config reads the committed engagement herdr config",
-          cfg == [{"name": "recon", "kind": "claude", "clone": "jsl-attacker"}])
+          cfg == [{"name": "recon", "kind": "claude", "clone": "jsl-attacker",
+                   "model": "claude-opus-4-8"}])
 
     # validation rejections via a temp config path
     saved_cfgpath = herdr.config_path
@@ -1939,7 +1940,7 @@ def test_herdr_arm() -> None:
         sock.write_text("")   # arm only checks existence
         cfgp = Path(tmp) / "two.herdr.json"
         cfgp.write_text(_json.dumps({"agents": [
-            {"name": "recon", "kind": "claude", "clone": "jsl-attacker"},
+            {"name": "recon", "kind": "claude", "clone": "jsl-attacker", "model": "claude-opus-4-8"},
             {"name": "slow", "kind": "codex", "clone": "jsl-target"}]}))
         saved = (herdr._herdr, herdr.herdr_bin, herdr.config_path, api.engagement_clones)
         try:
@@ -1960,8 +1961,10 @@ def test_herdr_arm() -> None:
                   "RBT_RANGE_CLONE=jsl-target" in split_call)
             check("arm puts the repo on PATH in each pane",
                   sum(1 for c in calls if c[:2] == ("pane", "run") and "export" in c[3]) == 2)
-            check("arm starts each agent with its kind and pane",
-                  ("agent", "start", "recon", "--kind", "claude", "--pane", "w1:p1") == calls[[c[:2] for c in calls].index(("agent","start"))][:7])
+            start_call = next(c for c in calls if c[:2] == ("agent", "start") and c[2] == "recon")
+            check("arm starts each agent with its kind, pane, and configured model",
+                  start_call[:7] == ("agent", "start", "recon", "--kind", "claude", "--pane", "w1:p1")
+                  and "--model" in start_call and "claude-opus-4-8" in start_call)
             check("arm records a slow agent's note instead of failing",
                   res.agents[1].name == "slow" and res.agents[1].note == "agent_not_ready")
 

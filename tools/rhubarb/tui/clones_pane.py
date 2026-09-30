@@ -57,32 +57,38 @@ class ClonesPane(VerticalScroll):
         required host tool such as ``tart`` is not installed) by showing the
         message rather than letting the app crash.
         """
+        self.render_data(self.fetch())
+
+    def fetch(self) -> dict:
+        """The blocking read (it runs ``tart list``), safe off the UI thread (#120).
+
+        Returns ``{"result": CloneList}`` or ``{"error": message}``; never raises.
+        """
         from rhubarb import api  # lazy: package imports without tart present
 
+        try:
+            return {"result": api.clones()}
+        except FileNotFoundError as e:
+            tool = getattr(e, "filename", None) or str(e)
+            return {"error": f"{tool}: required host tool not installed (run this on the build Mac)."}
+        except api.VerifyError as e:
+            return {"error": f"cannot read clones: {e}"}
+        except Exception as e:  # never let a pane refresh take down the app
+            return {"error": f"unexpected error reading clones: {e}"}
+
+    def render_data(self, data: dict) -> None:
+        """Apply a ``fetch()`` result (UI thread)."""
+        if not self.is_mounted:
+            return
         status = self.query_one("#clones-status", Static)
         table = self.query_one("#clones-table", DataTable)
         problems = self.query_one("#clones-problems", Static)
-
-        try:
-            result = api.clones()
-        except FileNotFoundError as e:
-            tool = getattr(e, "filename", None) or str(e)
+        if "error" in data:
             table.display = False
             problems.display = False
-            status.update(Text(f"{tool}: required host tool not installed "
-                               "(run this on the build Mac).", style="red bold"))
+            status.update(Text(data["error"], style="red bold"))
             return
-        except api.VerifyError as e:
-            table.display = False
-            problems.display = False
-            status.update(Text(f"cannot read clones: {e}", style="red bold"))
-            return
-        except Exception as e:  # never let a pane refresh take down the app
-            table.display = False
-            problems.display = False
-            status.update(Text(f"unexpected error reading clones: {e}", style="red bold"))
-            return
-
+        result = data["result"]
         self._render_clones(status, table, result.clones)
         self._render_problems(problems, result.problems)
 

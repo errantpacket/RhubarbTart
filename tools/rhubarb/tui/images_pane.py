@@ -60,18 +60,33 @@ class ImagesPane(VerticalScroll):
         """
         if not self.is_mounted:
             return  # compose() has not run yet; the shell will call us again.
+        self.render_data(self.fetch())
 
+    def fetch(self) -> dict:
+        """The blocking read (it runs ``tart list``), safe off the UI thread (#120).
+
+        Returns ``{"rows": [...]}`` or ``{"error": message}``; never raises.
+        """
         from rhubarb import api
 
         try:
-            rows = api.images()
+            return {"rows": api.images()}
         except api.VerifyError as exc:
-            self._show_error(str(exc) or "could not read images")
-            return
+            return {"error": str(exc) or "could not read images"}
         except FileNotFoundError as exc:
             tool = getattr(exc, "filename", None) or "a required host tool"
-            self._show_error(f"{tool} is not installed — cannot list images")
+            return {"error": f"{tool} is not installed — cannot list images"}
+        except Exception as exc:  # never let a refresh take down the app
+            return {"error": f"unexpected error reading images: {exc}"}
+
+    def render_data(self, data: dict) -> None:
+        """Apply a ``fetch()`` result (UI thread)."""
+        if not self.is_mounted:
             return
+        if "error" in data:
+            self._show_error(data["error"])
+            return
+        rows = data["rows"]
 
         table = self.query_one("#images-table", DataTable)
         table.clear()

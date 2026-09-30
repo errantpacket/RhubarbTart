@@ -130,11 +130,131 @@ def _mock_provenance(vm):
     return MOCK_PROVENANCE
 
 
+MOCK_LOGS = {
+    "logs/build-kali-research-20260930T120000Z.log": (
+        api.LogRef(id="logs/build-kali-research-20260930T120000Z.log",
+                   label="build kali-research-20260930T120000Z", kind="build",
+                   size=2048, mtime="2026-09-30T12:05:00+00:00"),
+        "[build] installing kali\n[smoke] PASSED\n[build] done: rbt-kali-research-cc4479ae7492"),
+    "logs/work-1.log": (
+        api.LogRef(id="logs/work-1.log", label="work-1", kind="clone",
+                   size=64, mtime="2026-09-30T11:00:00+00:00"),
+        "tart run work-1\nbooted"),
+}
+
+
+def _mock_list_logs():
+    return [ref for ref, _ in sorted(MOCK_LOGS.values(), key=lambda v: v[0].mtime, reverse=True)]
+
+
+def _mock_read_log(log_id, max_lines=2000):
+    return MOCK_LOGS[log_id][1]
+
+
+def _view_text(app) -> str:
+    """The plain text in the Logs tab's viewer."""
+    from textual.widgets import Log
+
+    return "\n".join(str(line) for line in app.query_one("#logs-view", Log).lines)
+
+
+async def _logs_tab() -> None:
+    """#120: the Logs tab lists build/clone logs newest first, shows the highlighted log,
+    follows the selection, tails a log that grew, and the header shows when data was read."""
+    from textual.widgets import DataTable
+
+    api.images = _mock_images
+    api.clones = _mock_clones
+    api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
+
+    from rhubarb_tui import RhubarbTUI
+
+    app = RhubarbTUI()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("4")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        table = app.query_one("#logs-table", DataTable)
+        check("logs tab: lists every log", table.row_count == 2)
+        check("logs tab: newest first (the build)",
+              "build kali-research" in _row_text(table.get_row_at(0)))
+        check("logs tab: shows the newest log", "[smoke] PASSED" in _view_text(app))
+        check("header: shows when data was last read", "updated" in app.sub_title)
+
+        table.focus()
+        await pilot.press("down")
+        await pilot.pause()
+        check("logs tab: follows the highlighted log", "booted" in _view_text(app)
+              and "[smoke] PASSED" not in _view_text(app))
+
+        # The clone log grows: a refresh tails the new content.
+        ref, _ = MOCK_LOGS["logs/work-1.log"]
+        MOCK_LOGS["logs/work-1.log"] = (
+            api.LogRef(id=ref.id, label=ref.label, kind=ref.kind, size=128,
+                       mtime="2026-09-30T13:00:00+00:00"),
+            "tart run work-1\nbooted\nshutting down")
+        await pilot.press("r")
+        await pilot.pause()
+        check("logs tab: tails a log that grew", "shutting down" in _view_text(app))
+
+
+async def _polling() -> None:
+    """#120: the poller reads tart-backed panes OFF the UI thread, skips while a poll is in
+    flight, and leaves `tart` alone while an action runs."""
+    import threading
+
+    api.images = _mock_images
+    api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
+    seen = []
+
+    def counting_clones():
+        seen.append(threading.current_thread() is threading.main_thread())
+        return MOCK_CLONES
+
+    api.clones = counting_clones
+    from rhubarb_tui import RhubarbTUI
+
+    app = RhubarbTUI()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("2")                         # Clones tab: the switch polls it
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("poller: the tab switch read clones off the UI thread",
+              seen and seen[-1] is False)
+        base = len(seen)
+
+        app._action_running = True
+        app._refresh_active()
+        await app.workers.wait_for_complete()
+        check("poller: leaves `tart` alone while an action runs", len(seen) == base)
+
+        app._action_running = False
+        app._polling = True
+        app._refresh_active()
+        await app.workers.wait_for_complete()
+        check("poller: skips while a poll is in flight", len(seen) == base)
+
+        app._polling = False
+        app._refresh_active()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("poller: refreshes the visible pane in a worker and clears the flag",
+              len(seen) == base + 1 and seen[-1] is False and not app._polling)
+
+
 async def _render() -> None:
     # Mock the core API before the app mounts (each pane calls api.* in refresh_data).
     api.images = _mock_images
     api.clones = _mock_clones
     api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
 
     import rhubarb_tui
     from textual.widgets import DataTable, Static, TabbedContent
@@ -263,6 +383,8 @@ async def _actions() -> None:
     api.images = _mock_images
     api.clones = _mock_clones
     api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
     api.rm = lambda name: (rm_calls.append(name),
                            api.RemoveResult(name=name, image="rbt-kali-research-cc4479ae7492",
                                             keychain_deleted=True))[1]
@@ -472,6 +594,8 @@ async def _action_writes() -> None:
     api.images = _mock_images
     api.clones = _mock_clones
     api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
 
     def _fake_reset(name, same_image=False, rotate=True, progress=None):
         reset_calls.append((name, same_image, rotate))
@@ -557,6 +681,8 @@ async def _action_prompts() -> None:
     api.images = _mock_images
     api.clones = _mock_clones
     api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
     api.list_profiles = lambda: ["kali-research", "nixos-research"]
 
     new_calls: list = []
@@ -730,6 +856,8 @@ def main() -> None:
     asyncio.run(_actions())
     asyncio.run(_action_writes())
     asyncio.run(_action_prompts())
+    asyncio.run(_logs_tab())
+    asyncio.run(_polling())
     if FAILS:
         sys.exit(f"{len(FAILS)} TUI render test(s) failed")
     print("all rhubarb TUI render tests passed")

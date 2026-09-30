@@ -1,6 +1,6 @@
 ---
 name: rhubarb-profiles
-description: Design, create and customize RhubarbTart guest profiles, i.e. decide what goes into a security-research VM. Covers choosing the OS base (macOS 26, macOS 27, NixOS, Kali), picking tools from the package catalog and which OS each is available on (Chrome, OWASP ZAP, Cloudflare WARP, Tailscale), VM size, username, desktop, Rosetta for x86 binaries, Kali metapackages, and validating the profile file. Use this whenever the user wants a new VM or guest for some kind of research or testing, asks what a guest can contain or which OS to pick, wants to change a profile's tools, options or sizes, or wants to copy or compare profiles. For refreshing versions or pins use rhubarb-update-inputs; for building and running use rhubarb-build.
+description: Design, create and customize RhubarbTart guest profiles, i.e. decide what goes into a security-research VM. Covers choosing the OS base (macOS 26, macOS 27, NixOS, Kali), picking tools from the package catalog and which OS each is available on (Chrome, OWASP ZAP, Cloudflare WARP, Tailscale, the Juice Shop lab target), VM size, username, desktop, Rosetta for x86 binaries, Kali metapackages, and validating the profile file. Use this whenever the user wants a new VM or guest for some kind of research or testing, asks what a guest can contain or which OS to pick, wants to change a profile's tools, options or sizes, or wants to copy or compare profiles. For refreshing versions or pins use rhubarb-update-inputs; for building and running use rhubarb-build.
 ---
 
 # Designing RhubarbTart guest profiles
@@ -30,8 +30,9 @@ Check the live catalog with `ls config/packages/`; each file lists the OS famili
 |---|---|---|---|---|
 | `chrome` | ✓ | ✓ | ✓ | macOS pkg URL is unversioned, so its hash is trust-on-first-use |
 | `zap` | ✓ | ✓ | ✓ | Kali: from the Kali archive (`zaproxy`) |
-| `warp` | ✓ | ✓ | ✓ | Enrolled per clone with a service token (`enroll.sh … warp --org`) |
+| `warp` | ✓ | ✓ | ✓ | Enrolled per clone with a service token (`rhubarb enroll NAME warp --org TEAM`) |
 | `tailscale` | ✓ | ✓ | ✓ | macOS: one system-extension approval per clone |
+| `juice-shop` | | ✓ | | Lab **target** (OWASP Juice Shop on port 3000), never for an attacker VM. Runs with no egress; reached from other clones only through an engagement's `links` |
 
 A tool that isn't in the catalog needs a trustworthy source first (vendor-signed or
 vendor-hashed). That's a `rhubarb-update-inputs` task (`references/adding-inputs.md`), not
@@ -45,7 +46,7 @@ something to improvise in a profile.
   "description": "Kali for web-app testing",
   "base": "kali-rolling",
   "packages": ["chrome", "zap"],
-  "username": "admin",
+  "username": "webtester",
   "vm": { "cpu": 6, "memory_gb": 12, "disk_gb": 100 },
   "options": { "desktop": "xfce", "rosetta": false, "kali_metapackages": ["kali-linux-headless"] }
 }
@@ -56,7 +57,7 @@ something to improvise in a profile.
 | `id` | Must equal the filename; `[a-z0-9][a-z0-9-]{1,40}` |
 | `base` | A file in `config/bases/` |
 | `packages` | Catalog ids, no duplicates, each with a variant for the base's family |
-| `username` | 3–16 lowercase letters/digits, starting with a letter (default `admin`) |
+| `username` | 3–16 lowercase letters/digits, starting with a letter (default `admin`). Kali rejects names the Debian installer reserves, including `admin`, so Kali profiles must set one |
 | `vm` | Only `cpu` (2–64), `memory_gb` (4–256), `disk_gb` (40–2048); omitted keys use the base's defaults |
 | `options.desktop` | NixOS/Kali only: `"none"` or `"xfce"` |
 | `options.rosetta` | NixOS/Kali only: `true`/`false`; clones must then run with `tart run --rosetta=rosetta` |
@@ -76,14 +77,15 @@ desktop, is purged and pinned out automatically (#59).
    must be re-resolved (build refuses a stale lock).
 4. Show the user the new `locks/NAME.lock.json`, commit it with their go-ahead, then build (the
    `rhubarb-build` skill), and work in clones: `./rhubarb new web-1 --profile NAME`.
-5. Add the profile to the README **Profiles** table.
+5. Add the profile to the README **Choose a guest** table.
 
 ## Confirm with the user
 
 - **The research goal.** It decides the base: Kali's toolset versus NixOS's reproducibility, and
   macOS for testing Apple clients.
 - **VPN/ZTNA needs.** Enrollment is always per clone and at runtime, never baked, so they'll
-  need tokens or auth keys in their host keychain (the `rhubarb-build` skill covers `enroll.sh`).
+  need tokens or auth keys in their host keychain (the `rhubarb-build` skill covers
+  `rhubarb enroll`).
 - **Whether the image will be shared.** Tools installed from a vendor portal (licensed,
   tenant-specific installers) mean private registries only.
 - **Sizing.** Kali with `kali-linux-default` plus a desktop wants 80 GB+ of disk and 8 GB+ of RAM.

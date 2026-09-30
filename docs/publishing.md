@@ -9,7 +9,7 @@ New to the terms? See [Key concepts](concepts.md#sharing-images-optional).
 
 | Piece | What it is |
 |---|---|
-| `scripts/registry.sh start\|stop\|status` | A private OCI registry ([zot](https://zotregistry.dev), pinned in `.toolchain`) listening on **127.0.0.1:5780 only**. It stores images under the git-ignored `cache/registry/` |
+| `scripts/registry.sh start\|stop\|status` | A private OCI registry ([zot](https://zotregistry.dev), pinned in `.toolchain`) listening on **127.0.0.1 only**, port 5780 (`RHUBARB_REGISTRY_PORT` changes it). It stores images under the git-ignored `cache/registry/` |
 | `scripts/signing-key.sh init\|status` | Creates the **cosign** key pair once. The private key and its passphrase live only in your macOS keychain; the public key is committed at `config/keys/rhubarb-cosign.pub` |
 | `scripts/publish.sh publish <image>` | Pushes a smoke-passed image, signs it, attaches its provenance record as a signed attestation, verifies the result, and records `out/<image>.published.json` |
 | `scripts/publish.sh verify <ref@digest>` | Checks a published image's signature and provenance against the public key |
@@ -44,7 +44,7 @@ RhubarbTart signs **offline**:
   reach the registry host. Everything else goes to a dead proxy, and you'll see a harmless
   `Could not fetch trusted_root.json` warning.
 
-The trade-off: with no public log, trust rests entirely on the committed public key. Anyone
+The trade-off: with no public log, trust rests on the committed public key alone. Anyone
 verifying needs that key (`RHUBARB_COSIGN_PUB` points `verify` at another publisher's).
 
 </details>
@@ -77,7 +77,8 @@ rm -rf cache/registry out/*.published.json      # the registry's storage + its p
 ```
 
 Published images can be recreated any time with `publish.sh publish`. The signing key stays in the
-keychain for next time.
+keychain for next time. The same key also signs sealed evidence vaults
+([Using your VMs](using.md#engagements)).
 
 </details>
 

@@ -6,17 +6,21 @@ How to validate a change: `check.sh`, the off-Mac paths, and the project skills 
 ./tools/check.sh    # before every commit; also runs on Linux
 ```
 
-`check.sh` runs shell, Packer and Python checks, the offline self-tests (Ed25519 RFC 8032 vectors,
-NAR hash vs real Nix, Debian version ordering, clone records, the `rhubarb` CLI lifecycle and
-password rotation), a headless Textual TUI render test, and profile validation. It also greps every family
-for regressions of the rules above: Homebrew or `packer init` creeping back, default credentials,
-`NOPASSWD`, auto-login, password SSH, unsigned repos, baked VPN secrets, and plugin-version drift.
+`check.sh` runs shell, Packer and Python checks, the offline self-tests, a headless Textual TUI
+render test, and profile validation. The self-tests cover Ed25519 RFC 8032 vectors, NAR hash vs
+real Nix, Debian version ordering, clone records, the `rhubarb` CLI lifecycle, password rotation,
+engagements and links, the evidence chain, vault seal and verify, the control-plane service, the
+range client, `herdr arm`, tiered approvals and the logs API. It also greps for regressions of the
+[ground rules](../CONTRIBUTING.md#ground-rules): Homebrew or `packer init` creeping back, default
+credentials, `NOPASSWD`, auto-login, password SSH, disabled SIP or Gatekeeper, unsigned repos,
+baked VPN secrets, plain-HTTP downloads, the service or herdr driver bypassing the core, and
+plugin-version or Textual-lock drift.
 
 - Host and macOS guest scripts run under macOS `/bin/bash` 3.2. Under `set -e`, `! cmd` never
   fails the script, so write `if cmd; then die …; fi`.
 - NixOS changes can be evaluated without a Mac, using Docker against the pinned nixpkgs.
 
-**Working with Claude Code?** The repo ships four project skills:
+**Claude Code skills.** The repo ships four project skills:
 
 | Skill | Use it to… |
 |---|---|

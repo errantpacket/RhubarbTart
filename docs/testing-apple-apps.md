@@ -1,19 +1,18 @@
 # Testing macOS and iOS apps
 
 Testing Apple software has a few problems that are specific to the platform. This page lays them
-out and shows how RhubarbTart addresses each, and it is honest about the one it cannot solve
-(virtualizing iOS).
+out, shows how RhubarbTart addresses each, and names the one it cannot solve (virtualizing iOS).
 
 | Challenge | How RhubarbTart addresses it |
 |---|---|
-| A Mac is hard to return to a known-clean state | Work in a **disposable clone**; the sealed image is never booted, and `reset` gives a pristine copy in seconds |
+| A Mac is hard to return to a known-clean state | Work in a **disposable clone**; the sealed image is never booted, and `reset` gives a fresh copy of the image |
 | Test results depend on what was installed | The image is built from **pinned, verified inputs** and named by their hash, so you can state exactly what the test machine contained |
 | Repeating a test from an identical start | Re-clone the same image, or re-provision an engagement; every run starts from the same recorded baseline |
-| Isolating untrusted apps and separating clients | Each test in its own clone with its **own credentials**; clones can't reach each other; engagements scope the network |
-| Hardening must be realistic, not altered | SIP, Gatekeeper and the firewall stay **on**; the build tools are notarized; the posture is proven from outside before the image is named |
+| Isolating untrusted apps and separating clients | Each test in its own clone with its **own credentials**; clones can't reach each other; an engagement's links are the only path between its clones |
+| Hardening must be realistic, not altered | SIP, Gatekeeper and the firewall stay **on**; the build toolchain is pinned and verified; the posture is proven from outside before the image is named |
 | Several macOS versions to cover | A **profile per version** (macOS 26 and 27 today), each pinned and built the same way |
 | iOS can't run in a VM | RhubarbTart gives a clean, reproducible **macOS** host for the iOS toolchain (Xcode, the Simulator, proxies); it does not, and cannot, virtualize iOS |
-| Apps talk to backends you need to observe | Add intercepting proxies as packages; engagements scope egress and record the session as evidence |
+| Apps talk to backends you need to observe | Add intercepting proxies as packages; commands run through an engagement are journaled as evidence and can be sealed into a signed vault |
 
 ## The challenges, in detail
 
@@ -47,22 +46,23 @@ clone away is instant. See [Key concepts](concepts.md) and [Using your VMs](usin
 
 ### A test machine you can describe exactly
 
-The image is built only from pinned, verified vendor inputs, and its name is the hash of those
+The image is built only from pinned, verified vendor inputs, and its name carries a hash of those
 inputs (see [Trust model](trust-model.md) and [How it works](how-it-works.md)). So a report can
-state precisely what the test machine contained, and anyone can rebuild the identical machine.
+state precisely what the test machine contained, and anyone with the lock can rebuild it from the
+same inputs.
 Anything you find that was not in the image came from the app under test, not from leftover tooling.
 
 ### Isolation per test and per client
 
 Every clone gets its own random password, kept in the host keychain, never shared between clones
-(see [macOS guests and containers](macos-and-containers.md) for the credential model). Clones can't
-reach each other; an [engagement](using.md#engagements) groups a scope, scopes its network, and can
-give a target no route out. One client's work is one engagement, and nothing crosses that line.
+(see [Using your VMs](using.md)). Clones can't reach each other. An
+[engagement](using.md#engagements) groups one client's clones, and its declared links are the only
+path between them. One client's work is one engagement.
 
 ### Realistic, hardened macOS
 
 The macOS guests keep SIP, Gatekeeper and the application firewall on, disable auto-login and
-password-free sudo, and are built with a notarized toolchain. That posture is asserted at seal and
+password-free sudo, and are built with a pinned, verified toolchain. That posture is asserted at seal and
 **proven from outside by a smoke test** before the image is named, so the environment matches a
 real, hardened Mac rather than a loosened test rig ([Trust model](trust-model.md)).
 
@@ -75,7 +75,8 @@ picking the profile, not maintaining a rack of hand-configured Macs.
 ### A workstation for the iOS toolchain
 
 For iOS work, the macOS guest is where Xcode, the iOS Simulator, intercepting proxies and analysis
-tools live. RhubarbTart makes that host clean, pinned and disposable. It is explicit about the
+tools live. Xcode is not in the package catalog today, so it is added by hand or as a new
+catalog entry. RhubarbTart makes that host clean, pinned and disposable. It is explicit about the
 boundary: **it is not an iOS VM**, and real-device testing still needs a device. What it gives you
 is a reproducible, throwaway Mac to run the Simulator and the surrounding tooling on.
 
@@ -83,13 +84,14 @@ is a reproducible, throwaway Mac to run the Simulator and the surrounding toolin
 
 Apple apps lean on backends, so testing usually means watching and shaping traffic. Add an
 intercepting proxy to a profile's tool list (ZAP ships as a package today; others can be added, see
-[Define your own guest](profiles.md)), and use an engagement to scope egress and record the session
-as tamper-evident [evidence](using.md#engagements). You get a controlled network and a signed record
-of what the test did.
+[Define your own guest](profiles.md)). Run the test's commands in an engagement's clone with
+`rhubarb exec`, and each one is journaled as tamper-evident [evidence](using.md#engagements) that
+you can seal into a signed vault. Engagements do not filter a clone's outbound traffic yet; the
+network control today is that clones can't reach each other.
 
-## In short
+## Scope
 
-RhubarbTart does not virtualize iOS, because nothing can. What it does is remove the part of Apple
-app testing that is actually painful: getting, keeping and proving a clean, hardened, isolated Mac,
-and being able to throw it away and start again identically. For macOS apps that is the whole job;
+RhubarbTart does not virtualize iOS, because Apple's virtualization cannot. It handles the part of
+Apple app testing that is hard to do by hand: getting, keeping and proving a clean, hardened,
+isolated Mac, and throwing it away to start again from the same image. For macOS apps that is the whole job;
 for iOS apps it is the reproducible host the Simulator and your backend tooling run on.

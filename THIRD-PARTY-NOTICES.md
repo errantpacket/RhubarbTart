@@ -6,7 +6,7 @@ terms.
 
 ## Code adapted into this repository
 
-**cirruslabs/macos-image-templates** — MIT License. The macOS Setup Assistant `boot_command`
+**cirruslabs/macos-image-templates**: MIT License. The macOS Setup Assistant `boot_command`
 keystroke sequence in `packer/macos/*.pkr.hcl` was adapted from this project.
 
 ```
@@ -35,7 +35,7 @@ SOFTWARE.
 
 ## Bundled runtime dependency
 
-**Textualize/textual** — MIT License. Pinned and hash-locked for the `./rhubarb-tui` dashboard
+**Textualize/textual**: MIT License. Pinned and hash-locked for the `./rhubarb-tui` dashboard
 (`tools/rhubarb_tui.py`), fetched by `uv` at run time; not redistributed in this repository.
 
 ## Tools RhubarbTart runs (fetched by `tools/bootstrap.sh`, invoked as separate programs)
@@ -62,5 +62,5 @@ which place their own conditions on commercial and production use.
 Operating-system installers and packages (Apple IPSW/macOS, Kali, NixOS, Google Chrome, ZAP,
 Cloudflare WARP, Tailscale, and others named in `config/`) are downloaded from their vendors, then
 pinned and verified. RhubarbTart does not redistribute them. Building or running a guest is subject
-to the vendor's own terms — for example, Apple's macOS Software License Agreement (macOS runs only
+to the vendor's own terms; for example, Apple's macOS Software License Agreement (macOS runs only
 on Apple-branded hardware) applies to whoever builds or runs a macOS guest.

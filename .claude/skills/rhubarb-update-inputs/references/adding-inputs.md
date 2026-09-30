@@ -3,7 +3,7 @@
 ## Contents
 - [The bar for any new input](#the-bar)
 - [A new tool](#new-tool)
-- [A new OS base or release](#new-base)
+- [A new OS base or release](#new-os-base-or-release)
 
 ## The bar
 
@@ -14,7 +14,7 @@ This file is for new inputs, which must meet the same bar as the existing ones:
 2. It has a hash anchor. Prefer a vendor-published one: a signed apt `InRelease`, a GPG-signed
    `SHA256SUMS`, a GitHub release digest, a vendor `.sha256`, or a signature chain like
    Tailscale's distsign. Otherwise it is trust-on-first-use, recorded as `tofu:` in
-   `hash_sources` and called out in the README provenance table.
+   `hash_sources` and called out in the provenance table (`docs/trust-model.md`).
 3. It carries a signature check where the platform has one. macOS: Developer ID + notarization +
    a pinned Team ID. Linux: apt/GPG with a pinned key *file* in `config/keys/` **and** a pinned
    fingerprint (`key_fpr`).
@@ -37,16 +37,17 @@ the families that have a trustworthy source. Existing resolvers:
 | `distro` | kali | `package` | Kali archive (apt-verified); version recorded in image |
 | `nix` | nixos | `attr` (package) or `module` (`services.<module>.enable`), optional `unfree` | pinned nixpkgs |
 | `local` | macos | `path` under `vendor/`, `kind`, `team_id`, optional `app` | TOFU + signature |
+| `github-release` | any (used by nixos `juice-shop`) | `repo`, `asset` (with `{version}`), `kind` | GitHub's published sha256 asset digest (refused without one) |
 | `chrome-mac`, `zap-mac`, `warp-mac`, `tailscale-mac` | macos | see existing files | vendor-specific |
 
 For a signed apt repo, add its key to `config/keys/` (verify the fingerprint from a second source)
 and reuse `apt`. macOS variants need `app` (the bundle name in `/Applications`) so the guest can
 re-verify the installed bundle.
 
-**`signed: false` (macOS)** — for a macOS `dmg`/`pkg` that ships *no* Apple signature (e.g. ZAP).
-The host skips `codesign`/notarization and the guest skips its re-verify; integrity comes solely
+**`signed: false` (macOS)** is for a macOS `dmg`/`pkg` that ships *no* Apple signature (e.g. ZAP).
+The host skips `codesign`/notarization and the guest skips its re-verify. Integrity comes only
 from the pinned `sha256`, so a `signed: false` variant **must** resolve a non-null hash (a
-`github-release-digest`, a vendor `.sha256`, etc.) — resolve refuses it otherwise. This is a
+`github-release-digest`, a vendor `.sha256`, etc.); resolve refuses it otherwise. This is a
 weaker tier than Developer ID + notarization; record it as such in the Provenance table. Default
 is `true` (full signature verification).
 
@@ -59,7 +60,7 @@ admin console):
    "vendor/<id>/<file>"`, `team_id: null` (pin later), `app` (the installed bundle name),
    `signed: false` only if the installer is unsigned.
 2. Place the downloaded installer at `vendor/<id>/<file>` on the build host. Everything under
-   `vendor/` is git-ignored (`vendor/**/*.pkg`, `*.cer`) — tenant installers are never committed.
+   `vendor/` is git-ignored (`vendor/**/*.pkg`, `*.cer`), so tenant installers are never committed.
    See `vendor/README.md`.
 3. `resolve.py resolve <profile>` TOFU-pins its `sha256`; if signed it verifies the Developer ID
    signature and **prints the observed Team ID**. Pin that `team_id` in the package file and
@@ -77,18 +78,24 @@ reference-implementation values.
 ### 3. Guest side
 
 - **macOS:** `guest/macos/install.sh` installs any `pkg`/`dmg` and re-verifies `/Applications/<app>`
-  (Team ID + notarization), unless the variant is `signed: false` — then integrity is the
+  (Team ID + notarization), unless the variant is `signed: false`; then integrity is the
   `SHA256SUMS` check only. Add a self-updater disable if the tool has one; see the WARP updater.
 - **Kali:** `guest/kali/install.sh` installs `deb` and `distro` kinds generically. If the `.deb`
   adds an apt source, neutralize that the way Chrome's is.
 - **NixOS:** usually nothing, since `nix/modules/packages.nix` maps `attr`/`module`. Check with
-  the Docker eval recipe in `rhubarb-dev`.
+  the Docker eval recipe in `rhubarb-dev`. A tool built from a staged file (like Juice Shop's
+  release tarball) needs its own module that selects the variant by a `service` field; see
+  `nix/modules/juice-shop.nix`.
+- **Services:** a variant's `ports` are checked from outside by the smoke test and are the only
+  ports an engagement `link` may forward to. A lab target must have no egress (Juice Shop:
+  systemd `IPAddressDeny`, checked by the smoke test).
 - **Runtime identity:** if the tool keeps any (VPN or agent enrollment), wipe it in the family's
   seal step and add an `enroll.sh` case. Never bake it.
 
 ### 4. Docs and checks
 
-Update the README Provenance table (and Profiles, if it's used). `./tools/check.sh` must pass.
+Update the Provenance table in `docs/trust-model.md` (and the README **Choose a guest** table, if
+a shipped profile uses the tool). `./tools/check.sh` must pass.
 Then resolve, review the diff (including the new signer) and build.
 
 ## New OS base or release
@@ -109,4 +116,4 @@ Then resolve, review the diff (including the new signer) and build.
   with the Docker recipe from `rhubarb-dev` first; options get renamed between releases.
 - **New Linux family:** that's a project. It needs `FAMILIES` in `profiles.py` (and any
   family-specific `OPTIONS`), a `bases.py` planner, a Packer template, guest install and finalize
-  scripts, a `build.sh` case, smoke-test checks, and README posture rows. Use `rhubarb-dev`.
+  scripts, a `build.sh` case, smoke-test checks, and security posture rows in `docs/trust-model.md`. Use `rhubarb-dev`.

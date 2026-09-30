@@ -16,7 +16,7 @@ same host could reach the socket directly. Hard isolation of the agent from othe
 per-engagement driver VM (model C); scope to targets is enforced below the guest by the network
 (#30). This client makes the intended path convenient and fully recorded.
 
-Thin client of ``service.py``; no tart, no keychain. Run via ``./rbt-range`` (tools/rbt_range.py).
+Thin client of ``service.py``; no tart, no keychain. Run via ``./rbt-range`` (tools/rhubarb_agent.py).
 """
 
 import os

@@ -1,4 +1,4 @@
-# RhubarbTart — notes for agents
+# RhubarbTart: notes for agents
 
 Provenance-first, hardened Tart images. Before changing code, load the `rhubarb-dev` skill. For
 builds and clones, load `rhubarb-build`.
@@ -10,7 +10,7 @@ builds and clones, load `rhubarb-build`.
   (`fix|feat|docs|chore|validate`).
 - `./tools/check.sh` must pass before you commit. Commit as `errantpacket`.
 - Open a PR into `main` with `Closes #N` and what you verified (and what only a Mac build can show).
-  Keep history linear; the branch is deleted on merge.
+  Keep history linear (PRs are squash-merged); the branch is deleted on merge.
 - Mac validation evidence goes on the issue as a comment. Handoff/coordination files are temporary
   and never committed.
 

@@ -94,6 +94,8 @@ def cmd_run(a) -> None:
 
 def cmd_stop(a) -> None:
     rec = clones.load(a.name)
+    if hostops.is_running(rec["name"]) and not hostops.sync_guest(rec["name"], rec["username"]):
+        say(f"{rec['name']}: couldn't flush the guest's disk first (no SSH?); recent writes may be lost")
     hostops.stop_vm(rec["name"])
     say(f"stopped {rec['name']}")
 

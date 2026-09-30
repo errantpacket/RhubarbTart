@@ -111,6 +111,24 @@ def start_vm(name: str, rosetta: bool, headless: bool, log: Path | None = None) 
                             start_new_session=True)
 
 
+def sync_guest(name: str, username: str) -> bool:
+    """Best-effort `sync` inside a running clone over its pinned SSH, before stopping it.
+
+    `tart stop` ends a Linux guest about 2 s into its shutdown, before the filesystem is flushed,
+    so recent writes (host keys, machine-id, logs) would be lost (#91). `sync` needs no
+    privileges. Never blocks a stop: returns False on any failure (no IP, no SSH, timeout).
+    """
+    res = tart("ip", name, capture=True, check=False)
+    ip = (res.stdout or "").strip()
+    if res.returncode != 0 or not ip:
+        return False
+    try:
+        return subprocess.run([*ssh_args(name, username, ip), "sync"], capture_output=True,
+                              text=True, timeout=20).returncode == 0
+    except subprocess.TimeoutExpired:
+        return False
+
+
 def stop_vm(name: str) -> None:
     if is_running(name):
         tart("stop", name, capture=True, check=False)
@@ -296,6 +314,9 @@ if printf '%s\n' "$OLD" | sudo -S -p '' -v 2>/dev/null; then echo "old password 
 sudo -k
 printf '%s\n' "$NEW" | sudo -S -p '' -v 2>/dev/null || { echo "new password rejected" >&2; exit 1; }
 sudo -k
+# `tart stop` cuts a Linux guest's shutdown short (no final flush, #91): make the new password
+# (and anything else this first boot wrote, e.g. host keys) durable before rhubarb stops the VM.
+sync
 echo ROTATED
 '''
 

@@ -245,7 +245,10 @@ def _evidence(where: str, raw: object) -> Evidence:
 
 
 def list_engagements() -> list[str]:
-    return sorted(p.stem for p in ENGAGEMENTS.glob("*.json"))
+    # engagements/<id>.json are manifests; engagements/<id>.herdr.json (herdr config, #108) sit
+    # beside them and are NOT engagements. Return only valid manifest ids.
+    return sorted(p.stem for p in ENGAGEMENTS.glob("*.json")
+                  if not p.name.endswith(".herdr.json") and ID_RE.match(p.stem))
 
 
 def load_engagement(eid: str) -> Engagement:

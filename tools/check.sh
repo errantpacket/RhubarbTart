@@ -114,6 +114,11 @@ else bad "downloads use curl with --proto =https (no plain http fetches; loopbac
   while IFS= read -r line; do echo "          $line"; done <<<"$hits"; fi
 check "the host-only toolchain is not bypassed with 'source' of the pin file" \
   '(^|[;&|[:space:]])(source|\.)[[:space:]]+[^[:space:]]*toolchain\.env' scripts tools
+# The control-plane service (#104) must stay a thin client of the typed core: it may not reach
+# tart, the keychain (security) or ssh directly — only through api.py.
+check "control-plane service touches only the typed core (no direct tart/keychain/ssh)" \
+  '(^|[^a-zA-Z_.])(subprocess|hostops|os\.system|security |/usr/bin/security)' tools/rhubarb/service.py
+
 # Evidence pulled from a guest is parsed, never unpacked onto the host (#85): the guest is under
 # test, and its archive could plant symlinks or ../ paths.
 check "guest evidence is never extracted onto the host (no tarfile extract/extractall)" \

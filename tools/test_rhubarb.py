@@ -34,6 +34,14 @@ def check(name: str, cond: bool) -> None:
         FAILS.append(name)
 
 
+def _raises(fn, exc) -> bool:
+    try:
+        fn()
+        return False
+    except exc:
+        return True
+
+
 def _is_frozen(obj, attr: str, value) -> bool:
     """True iff setting attr on obj raises (a frozen dataclass forbids assignment)."""
     try:
@@ -1651,6 +1659,80 @@ def test_vault_seal_verify() -> None:
         j.write_bytes(orig)
 
 
+def test_control_plane_service() -> None:
+    """#104: the read-only control-plane service routes to the typed core over a 0600 Unix
+    socket, serializes dataclasses to JSON, and maps core errors to HTTP status (core mocked;
+    no tart/keychain)."""
+    import threading
+    from pathlib import Path
+
+    from rhubarb import api, service
+    from rhubarb.common import VerifyError
+
+    img = api.Image(name="rbt-kali-research-000000000000", profile="kali-research", kind="image",
+                    status="current", clones=1)
+    clones = api.CloneList(clones=[api.Clone(
+        name="jsl-attacker", profile="kali-research", family="kali", image="rbt-x", state="running",
+        freshness="current", password_mode="unique", password_account="jsl-attacker",
+        enrollments=[], created_at="2026-01-02T00:00:00Z", engagement="juiceshop-lab")], problems=[])
+
+    def boom(vm):
+        raise FileNotFoundError(f"no provenance for {vm}")
+
+    saved = (api.images, api.clones, api.engagements, api.provenance)
+    with tempfile.TemporaryDirectory() as tmp:
+        sock = Path(tmp) / "service.sock"
+        api.images = lambda: [img]
+        api.clones = lambda: clones
+        api.engagements = lambda: ["juiceshop-lab", "demo"]
+        api.provenance = boom
+        srv = service.make_server(sock)
+        t = threading.Thread(target=srv.serve_forever, daemon=True)
+        t.start()
+        try:
+            check("socket is created 0600", (sock.stat().st_mode & 0o777) == 0o600)
+
+            st, body = service.request(sock, "GET", "/health")
+            check("GET /health -> 200 ok, read-only", st == 200 and body["ok"] and body["readonly"])
+
+            st, body = service.request(sock, "GET", "/images")
+            check("GET /images serializes the dataclass list",
+                  st == 200 and body[0]["name"] == "rbt-kali-research-000000000000"
+                  and body[0]["status"] == "current" and body[0]["clones"] == 1)
+
+            st, body = service.request(sock, "GET", "/clones")
+            check("GET /clones returns the CloneList shape",
+                  st == 200 and body["clones"][0]["engagement"] == "juiceshop-lab"
+                  and body["problems"] == [])
+
+            st, body = service.request(sock, "GET", "/engagements")
+            check("GET /engagements returns the ids", st == 200 and "demo" in body)
+
+            st, body = service.request(sock, "GET", "/provenance/whatever")
+            check("a core FileNotFoundError maps to 404", st == 404 and "no provenance" in body["error"])
+
+            st, body = service.request(sock, "GET", "/nope")
+            check("an unknown route is 404", st == 404 and "no such route" in body["error"])
+
+            st, body = service.request(sock, "POST", "/clones")
+            check("a mutating method is 405 in this read-only slice", st == 405)
+
+            check("get_json raises on a non-200",
+                  _raises(lambda: service.get_json(sock, "/nope"), VerifyError))
+        finally:
+            srv.shutdown()
+            srv.server_close()
+            t.join(timeout=5)
+
+    # A non-socket file at the path is refused, never clobbered.
+    with tempfile.TemporaryDirectory() as tmp:
+        p2 = Path(tmp) / "service.sock"
+        p2.write_text("i am not a socket")
+        check("refuses to replace a non-socket file at the path",
+              _raises(lambda: service.make_server(p2), VerifyError) and p2.read_text() == "i am not a socket")
+    api.images, api.clones, api.engagements, api.provenance = saved
+
+
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops, test_engagement_links,
@@ -1660,7 +1742,8 @@ if __name__ == "__main__":
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
               test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
               test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement, test_guest_sync,
-              test_evidence_store, test_evidence_exec_collect, test_vault_seal_verify):
+              test_evidence_store, test_evidence_exec_collect, test_vault_seal_verify,
+              test_control_plane_service):
         print(t.__name__)
         # Each test gets a throwaway state dir, so nothing (records, evidence) can reach the
         # operator's real one; tests that manage RHUBARB_STATE_DIR themselves still may.

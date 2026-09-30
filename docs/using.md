@@ -20,7 +20,10 @@ while you scroll back. `B` runs `scripts/build.sh`, so like any build it needs t
 session; it refuses to start over SSH.
 
 Inside herdr it leaves the mouse to herdr; use `./rhubarb-tui --mouse` (or `RHUBARB_TUI_MOUSE=1`)
-to capture it anyway, or `--no-mouse` to turn it off elsewhere.
+to capture it anyway, or `--no-mouse` to turn it off elsewhere. It also takes herdr's colour theme:
+the `[theme]` in herdr's `config.toml`, including `auto_switch` (dark or light follows the Mac's
+appearance) and any `[theme.custom]` colours. Use `--theme NAME` (or `RHUBARB_TUI_THEME=NAME`) to
+pick a Textual theme instead, for example `nord` or `catppuccin-latte`.
 
 ```sh
 ./rhubarb images                              # built images; which one is current per profile

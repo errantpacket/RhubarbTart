@@ -47,7 +47,9 @@ lib.mkIf (variant != null) {
       StateDirectory = "juice-shop";
       StateDirectoryMode = "0750";
       ExecStartPre = "${pkgs.bash}/bin/bash -c 'rm -rf ${appDir} && cp -r ${juiceShop}/share/juice-shop ${appDir} && chmod -R u+w ${appDir}'";
-      WorkingDirectory = appDir;
+      # "-": the app dir doesn't exist yet when ExecStartPre (which creates it) runs; systemd
+      # would otherwise fail that step at CHDIR. ExecStart then runs inside the fresh copy.
+      WorkingDirectory = "-${appDir}";
       ExecStart = "${pkgs.nodejs_22}/bin/node build/app";
       Restart = "on-failure";
       # Sandbox: it's an intentionally vulnerable app, so contain it tightly.

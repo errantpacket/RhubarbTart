@@ -10,7 +10,8 @@
   rhubarb enroll NAME tailscale|warp [--org TEAM]
   rhubarb reset NAME [--same-image] [--no-rotate]   back to a clean clone (drops enrollment)
   rhubarb rm NAME [--yes]
-  rhubarb serve [--socket PATH]                     control-plane service (read-only) on a 0600 Unix socket
+  rhubarb serve [--socket PATH]                     control-plane service on a 0600 Unix socket
+  rhubarb herdr arm ID [--socket PATH]              launch the engagement's agents under herdr (charter model A)
   rhubarb engagement define FILE|ID                 validate + acknowledge a scope manifest
   rhubarb engagement list                           defined engagements and their clone counts
   rhubarb engagement provision ID                   stand up its ranges from verified images
@@ -307,6 +308,15 @@ def cmd_vault_verify(a) -> None:
         f"signature verified; head {rep.chain_head[:16]}")
 
 
+def cmd_herdr_arm(a) -> None:
+    from . import herdr
+    res = herdr.arm(_engagement_id(a.engagement), socket_path=a.socket, progress=say)
+    for ag in res.agents:
+        say(f"{ag.name} ({ag.kind}) -> clone {ag.clone}, pane {ag.pane}"
+            + (f"  [{ag.note}]" if ag.note else ""))
+    say(f"engagement {res.engagement}: armed {len(res.agents)} agent(s) in workspace {res.workspace}")
+
+
 def cmd_serve(a) -> None:
     from . import service
 
@@ -385,9 +395,15 @@ def main(argv: list[str] | None = None) -> None:
     et.add_argument("--yes", action="store_true")
     et.add_argument("--no-collect", action="store_true", help="don't pull evidence first")
     et.set_defaults(fn=cmd_engagement_teardown)
-    srv = sub.add_parser("serve", help="run the read-only control-plane service on a Unix socket")
+    srv = sub.add_parser("serve", help="run the control-plane service on a Unix socket")
     srv.add_argument("--socket", metavar="PATH", help="socket path (default: <state>/service.sock)")
     srv.set_defaults(fn=cmd_serve)
+    hd = sub.add_parser("herdr", help="agent-driven engagements via herdr (charter model A)")
+    hdsub = hd.add_subparsers(dest="herdr_cmd", required=True)
+    ha = hdsub.add_parser("arm", help="launch the engagement's configured agents under herdr")
+    ha.add_argument("engagement", metavar="ID")
+    ha.add_argument("--socket", metavar="PATH", help="control-plane socket (default: <state>/service.sock)")
+    ha.set_defaults(fn=cmd_herdr_arm)
     vt = sub.add_parser("vault", help="seal / verify a signed evidence bundle")
     vtsub = vt.add_subparsers(dest="vault_cmd", required=True)
     vs = vtsub.add_parser("seal", help="write a signed, sealed, portable evidence bundle")

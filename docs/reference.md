@@ -95,7 +95,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `config/toolchain.env` | Host toolchain pins |
 | `locks/*.lock.json` | Resolved inputs per profile (generated, reviewed, committed) |
 | `tools/resolve.py` · `tools/rhubarb/` | `list` · `plan` · `resolve` · `verify` · `provenance` · `preflight` · `toolchain-pin` |
-| `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb/tui/` · `tools/rhubarb_tui.py.lock` | Textual TUI over `rhubarb/api.py` (read-only panes + confirm-gated write actions): launcher shim, app shell, pane widgets, action modules, and the pinned + hashed Textual lockfile |
+| `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb/tui/` · `tools/rhubarb_tui.py.lock` | Textual TUI over `rhubarb/api.py` (read-only panes + confirm-gated write actions): launcher shim + launcher (carries the pinned Textual), app (`tui/app.py`), action dispatch (`tui/dispatch.py`), pane widgets, action modules, and the hashed Textual lockfile |
 | `tools/bootstrap.sh` · `tools/check.sh` · `tools/test_rhubarb.py` | Toolchain install · static checks · offline crypto/parsing self-tests |
 | `tools/serve_preseed.py` | One-shot preseed server bound only to Tart's host address |
 | `packer/macos/` · `packer/linux/` | Build templates per family |

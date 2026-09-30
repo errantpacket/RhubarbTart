@@ -183,6 +183,23 @@ class LogRef:
 
 
 @dataclass(frozen=True)
+class LogTail:
+    """What ``tail_log()`` read (#122): the new text of a log since the last read.
+
+    text:    complete lines, then the log's unfinished last line if it has one.
+    cursor:  pass back to the next ``tail_log()`` call to get only what was written since.
+    reset:   True when ``text`` replaces everything shown so far: a first read, or the log was
+             truncated or replaced. Otherwise ``text`` continues the previous read.
+    partial: the last line of ``text`` is unfinished; the next read sends it again, completed.
+    """
+
+    text: str
+    cursor: tuple
+    reset: bool
+    partial: bool
+
+
+@dataclass(frozen=True)
 class NewResult:
     """The result of ``new()`` (and of ``reset()``, which re-clones): the fresh clone and
     what happened to its password.
@@ -750,13 +767,14 @@ def list_logs() -> list[LogRef]:
     return sorted(out, key=lambda r: r.mtime, reverse=True)
 
 
-def read_log(log_id: str, max_lines: int = 2000) -> str:
-    """The last ``max_lines`` lines of a log from ``list_logs()``. Read-only.
+def _open_log(log_id: str):
+    """Open a log from ``list_logs()`` for reading: ``(binary file, stat)``.
 
     ``log_id`` is resolved inside the state dir and must name a regular file (opened without
     following symlinks). Raises ``VerifyError`` for an unknown or unsafe id and
     ``FileNotFoundError`` if the log has gone.
     """
+    import stat as _stat
     base = _clones.state_dir()
     name = log_id[len("logs/"):] if log_id.startswith("logs/") else None
     if log_id == "events.log":
@@ -766,17 +784,61 @@ def read_log(log_id: str, max_lines: int = 2000) -> str:
     else:
         raise VerifyError(f"invalid log id {log_id!r}")
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)   # FileNotFoundError / ELOOP propagate
-    with os.fdopen(fd, "rb") as f:
-        import stat as _stat
-        st = os.fstat(f.fileno())
-        if not _stat.S_ISREG(st.st_mode):
-            raise VerifyError(f"{log_id}: not a regular file")
+    f = os.fdopen(fd, "rb")
+    st = os.fstat(f.fileno())
+    if not _stat.S_ISREG(st.st_mode):
+        f.close()
+        raise VerifyError(f"{log_id}: not a regular file")
+    return f, st
+
+
+def read_log(log_id: str, max_lines: int = 2000) -> str:
+    """The last ``max_lines`` lines of a log from ``list_logs()``. Read-only.
+
+    Raises ``VerifyError`` for an unknown or unsafe id and ``FileNotFoundError`` if the log
+    has gone.
+    """
+    f, st = _open_log(log_id)
+    with f:
         f.seek(max(0, st.st_size - MAX_LOG_BYTES))
         data = f.read()
     lines = data.decode(errors="replace").splitlines()
     if st.st_size > MAX_LOG_BYTES and lines:
         lines = lines[1:]   # the first line is probably cut mid-way
     return "\n".join(lines[-max_lines:])
+
+
+def tail_log(log_id: str, cursor: tuple | None = None, max_lines: int = 2000) -> LogTail:
+    """Follow a log from ``list_logs()``: what was written since ``cursor``. Read-only (#122).
+
+    Without a cursor, or when the log was truncated or replaced since (or grew by more than
+    the read window), returns the last ``max_lines`` lines with ``reset=True``. Otherwise
+    returns only the new bytes, so following a growing build log costs what it wrote.
+    Raises like ``read_log()``.
+    """
+    f, st = _open_log(log_id)
+    ident = (st.st_dev, st.st_ino)
+    with f:
+        start = None
+        if cursor is not None and len(cursor) == 3 and tuple(cursor[:2]) == ident:
+            offset = cursor[2]
+            if 0 <= offset <= st.st_size and st.st_size - offset <= MAX_LOG_BYTES:
+                start = offset
+        reset = start is None
+        if reset:
+            start = max(0, st.st_size - MAX_LOG_BYTES)
+        f.seek(start)
+        data = f.read(st.st_size - start)
+    if reset and start > 0:
+        cut = data.find(b"\n")          # the first line is probably cut mid-way
+        start, data = (start + cut + 1, data[cut + 1:]) if cut >= 0 else (st.st_size, b"")
+    done = data.rfind(b"\n") + 1        # bytes up to the end of the last complete line
+    end = start + done
+    lines = data.decode(errors="replace").splitlines()
+    if reset:
+        lines = lines[-max_lines:]
+    return LogTail(text="\n".join(lines), cursor=(*ident, end), reset=reset,
+                   partial=done < len(data))
 
 
 def new_build_log(profile: str) -> Path:

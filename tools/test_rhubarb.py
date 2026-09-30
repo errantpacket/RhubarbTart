@@ -2161,6 +2161,32 @@ def test_logs_api() -> None:
         check(f"read_log refuses {bad!r}", _raises(lambda b=bad: api.read_log(b), VerifyError))
     check("read_log refuses to follow a symlink", _raises(lambda: api.read_log("logs/evil.log"), OSError))
 
+    # tail_log (#122): a first read is a reset; later reads return only what was appended.
+    grow = logs / "grow.log"
+    grow.write_text("a\nb\npart")
+    t1 = api.tail_log("logs/grow.log")
+    check("tail_log: a first read resets and shows the unfinished last line",
+          t1.reset and t1.text == "a\nb\npart" and t1.partial)
+    with open(grow, "a") as f:
+        f.write("ial\nc\n")
+    t2 = api.tail_log("logs/grow.log", t1.cursor)
+    check("tail_log: returns only the new text, re-sending the completed line",
+          not t2.reset and t2.text == "partial\nc" and not t2.partial)
+    t3 = api.tail_log("logs/grow.log", t2.cursor)
+    check("tail_log: nothing new -> empty, not a reset", not t3.reset and t3.text == "")
+    grow.write_text("fresh\n")                               # truncated in place
+    check("tail_log: a truncated log resets", api.tail_log("logs/grow.log", t3.cursor).reset)
+    t4 = api.tail_log("logs/grow.log")
+    grow.unlink()
+    grow.write_text("fresh\nreplacement is longer\n")        # a new file under the same name
+    t5 = api.tail_log("logs/grow.log", t4.cursor)
+    check("tail_log: a replaced log resets", t5.reset and t5.text.startswith("fresh"))
+    check("tail_log: a large log resets to the tail, not a cut first line",
+          api.tail_log("logs/big.log", max_lines=5).text == "last-but-one\nlast")
+    check("tail_log refuses unsafe ids like read_log",
+          _raises(lambda: api.tail_log("../x.log"), VerifyError)
+          and _raises(lambda: api.tail_log("logs/evil.log"), OSError))
+
     p = api.new_build_log("kali-research")
     check("new_build_log makes a private build-<profile>-<time>.log",
           p.parent == logs and p.name.startswith("build-kali-research-") and p.suffix == ".log"

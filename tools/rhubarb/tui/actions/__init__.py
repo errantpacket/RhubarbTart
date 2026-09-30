@@ -33,7 +33,7 @@ Each module (``run`` / ``ssh`` / ``enroll`` / ``new`` / ``reset`` / ``rm`` /
 (``api.VerifyError`` / ``FileNotFoundError``) and returns ``ActionOutcome(ok=False,
 ...)``. Any other exception propagates and the app's worker wrapper reports it.
 
-## Dispatch pattern (implemented in the app shell, ``tools/rhubarb_tui.py``)
+## Dispatch pattern (implemented by the app shell, ``rhubarb/tui/dispatch.py``)
 
     1. Resolve the target (the highlighted clone in the read-only clones table).
     2. If ``REQUIRES_CLONE``: ``require_clone(name)`` — refuses non-clones

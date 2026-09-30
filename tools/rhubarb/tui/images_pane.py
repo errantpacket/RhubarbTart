@@ -12,31 +12,11 @@ imported lazily inside ``refresh_data`` so the package imports (and the headless
 render test runs) without ``tart`` present.
 """
 
-from contextlib import nullcontext as _nullcontext
-
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import DataTable, Static
 
-
-def _cursor_key(table: DataTable):
-    """The row key under the cursor, or None."""
-    try:
-        if table.row_count and table.is_valid_coordinate(table.cursor_coordinate):
-            return table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
-    except Exception:
-        pass
-    return None
-
-
-def _restore_cursor(table: DataTable, key) -> None:
-    """Put the cursor back on ``key`` if that row still exists."""
-    if key is None:
-        return
-    try:
-        table.move_cursor(row=table.get_row_index(key), animate=False)
-    except Exception:
-        pass
+from .tables import rebuilding
 
 
 class ImagesPane(VerticalScroll):
@@ -69,7 +49,7 @@ class ImagesPane(VerticalScroll):
     )
 
     def compose(self) -> ComposeResult:
-        yield Static("", id="images-status")
+        yield Static("Loading images…", id="images-status")
         table = DataTable(id="images-table", zebra_stripes=True, cursor_type="row")
         table.add_columns(*(label for label, _ in self._COLUMNS))
         yield table
@@ -119,20 +99,18 @@ class ImagesPane(VerticalScroll):
         sig = [(i.name, i.profile, i.status, i.clones) for i in rows]
         if sig != self._sig:
             self._sig = sig
-            prev = _cursor_key(table)
-            with table.prevent(DataTable.RowHighlighted) if prev else _nullcontext():
+            with rebuilding(table):
                 table.clear()
                 for img in rows:
                     table.add_row(img.name, img.profile, img.status, str(img.clones), key=img.name)
-                _restore_cursor(table, prev)
 
         status = self.query_one("#images-status", Static)
         status.remove_class("-error")
         if not rows:
-            status.update("No images built on this host yet.")
+            status.update("No images built on this host yet. Press B to build one.")
         else:
             n = len(rows)
-            status.update(f"{n} image{'s' if n != 1 else ''}")
+            status.update(f"{n} image{'s' if n != 1 else ''} · Enter shows provenance")
 
     def _show_error(self, message: str) -> None:
         """Surface an error/empty condition in the status line and clear the table."""

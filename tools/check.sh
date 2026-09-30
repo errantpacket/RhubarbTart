@@ -5,7 +5,8 @@
 #
 # 1. Lint/syntax: bash -n, shellcheck, packer validate -syntax-only + fmt, python compile + ruff.
 # 2. Invariants: grep for regressions of the project's security/provenance rules
-#    (README "Rules" and "Security posture"). Each failure names the file and line.
+#    (CONTRIBUTING.md "Ground rules", docs/trust-model.md "Security posture"). Each failure names
+#    the file and line.
 #
 # Tools are taken from .toolchain/bin when present, then PATH; shellcheck and ruff
 # fall back to `uvx` (shellcheck-py / ruff). A check whose tool is unavailable is
@@ -23,14 +24,36 @@ ok() { echo "  ok    $*"; }
 bad() { echo "  FAIL  $*"; failures=$((failures + 1)); }
 skip() { echo "  SKIP  $*"; skipped=$((skipped + 1)); }
 
-SH_FILES=(rhubarb rhubarb-tui tools/bootstrap.sh tools/check.sh scripts/*.sh guest/*/*.sh)
-INV_SH=(rhubarb rhubarb-tui tools/bootstrap.sh scripts/*.sh guest/*/*.sh)   # invariant scans skip this file's own patterns
-MACOS_BASH=(rhubarb rhubarb-tui tools/bootstrap.sh scripts/*.sh guest/macos/*.sh)   # run by macOS /bin/bash 3.2
+SH_FILES=(rhubarb rhubarb-tui rbt-range tools/bootstrap.sh tools/check.sh scripts/*.sh guest/*/*.sh)
+INV_SH=(rhubarb rhubarb-tui rbt-range tools/bootstrap.sh scripts/*.sh guest/*/*.sh)   # invariant scans skip this file's own patterns
+MACOS_BASH=(rhubarb rhubarb-tui rbt-range tools/bootstrap.sh scripts/*.sh guest/macos/*.sh)   # run by macOS /bin/bash 3.2
 HCL_FILES=(packer/*/*.pkr.hcl)
 
 echo "== syntax & lint"
 for f in "${SH_FILES[@]}"; do bash -n "$f" || bad "bash -n $f"; done
 ok "bash -n (${#SH_FILES[@]} files)"
+
+# The lists above are kept by hand. Make sure every tracked bash script is on them (so it is
+# linted and scanned), and that every tracked script with a shebang is executable in git (the
+# CLI runs scripts/enroll.sh directly; a 0644 checkout fails with "permission denied", #127).
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  unlisted="" notexec=""
+  while IFS= read -r entry; do
+    mode="${entry%% *}" f="${entry#*$'\t'}"
+    first="$(head -n 1 "$f" 2>/dev/null || true)"
+    case "$first" in '#!'*) ;; *) continue ;; esac
+    [[ "$mode" == 100755 ]] || notexec="$notexec $f"
+    case "$first" in
+      *bash*) listed=0
+              for s in "${SH_FILES[@]}"; do [[ "$s" == "$f" ]] && listed=1; done
+              ((listed)) || unlisted="$unlisted $f" ;;
+    esac
+  done < <(git ls-files -s)
+  if [[ -z "$unlisted" ]]; then ok "every tracked bash script is linted and scanned"
+  else bad "bash scripts missing from SH_FILES in tools/check.sh:$unlisted"; fi
+  if [[ -z "$notexec" ]]; then ok "every tracked script with a shebang is executable"
+  else bad "scripts with a shebang but no execute bit (git update-index --chmod=+x):$notexec"; fi
+else skip "script list and execute-bit checks (not a git checkout)"; fi
 
 if command -v shellcheck >/dev/null; then SC=(shellcheck)
 elif command -v uvx >/dev/null; then SC=(uvx --quiet --from shellcheck-py shellcheck)
@@ -48,16 +71,16 @@ if command -v packer >/dev/null; then
 else skip "packer (run tools/bootstrap.sh)"; fi
 
 if command -v uv >/dev/null; then
-  if uv run --quiet --no-project python -m py_compile tools/resolve.py tools/rhubarb_cli.py tools/rhubarb_tui.py tools/test_rhubarb_tui.py tools/serve_preseed.py tools/rhubarb/*.py tools/rhubarb/tui/*.py tools/rhubarb/tui/actions/*.py
+  if uv run --quiet --no-project python -m py_compile tools/*.py tools/rhubarb/*.py tools/rhubarb/tui/*.py tools/rhubarb/tui/actions/*.py
   then ok "python sources compile"; else bad "python syntax"; fi
   if uv run --quiet --no-project python tools/test_rhubarb.py >/dev/null
-  then ok "self-tests (ed25519, NAR, dpkg, clone records, rhubarb CLI, password rotation)"
+  then ok "self-tests (verification, clone records, CLI, core API, engagements, evidence, service)"
   else bad "self-tests (run: uv run tools/test_rhubarb.py)"; fi
   # Headless TUI render test: mounts the Textual app with a mocked core API (no Mac/
   # tart/keychain) and asserts each pane renders. Runs via `uv run --script` under the
   # hash-locked script lockfile, like ./rhubarb-tui. See docs/INTERFACE-PLAN.md, Gate B.
   if uv run --quiet --script tools/test_rhubarb_tui.py >/dev/null
-  then ok "TUI render test (headless Textual Pilot, mock API — read-only)"
+  then ok "TUI test (headless Textual Pilot, mocked core API)"
   else bad "TUI render test (run: uv run --script tools/test_rhubarb_tui.py)"; fi
   if out="$(uv run --quiet --no-project python tools/resolve.py list)" && ! grep -q INVALID <<<"$out"
   then ok "all profiles load ($(wc -l <<<"$out" | tr -d ' '))"; else bad "profile config"; echo "$out"; fi

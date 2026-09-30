@@ -30,7 +30,6 @@ PREFIX_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 
 TOP_KEYS = {"id", "label", "operator", "authorization", "ranges", "links", "targets", "agent_budget",
             "evidence"}
-REQUIRED_KEYS = {"id", "label", "operator", "authorization", "ranges"}
 RANGE_KEYS = {"profile", "count", "prefix"}
 LINK_KEYS = {"from", "to", "ports"}
 TARGET_KEYS = {"hosts", "cidrs", "domains", "urls"}

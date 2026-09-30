@@ -164,7 +164,7 @@ case "$FAMILY" in
       [[ -n "$SSH_FROM" && "$SSH_FROM" =~ ^[0-9.]+$ ]] \
         || die "Kali needs RHUBARB_SSH_FROM to be the vmnet host IPv4 (preseed server binds there)"
       pkgs="$(py 'import json,sys; o=json.load(open(sys.argv[1]))["options"]; d={"xfce":["kali-desktop-xfce"]}.get(o.get("desktop"),[]); print(" ".join(o.get("kali_metapackages",[])+d))' "$STAGE/profile.json")"
-      (umask 077; sed -e "s|@USER@|$PKR_VAR_username|" -e "s|@PACKAGES@|$pkgs|" kali/preseed.cfg.tmpl \
+      (umask 077; sed -e "s|@USER@|$PKR_VAR_username|" -e "s|@PACKAGES@|$pkgs|" guest/kali/preseed.cfg.tmpl \
         | BOOT="$PKR_VAR_bootstrap_password" py 'import os,sys; sys.stdout.write(sys.stdin.read().replace("@BOOTSTRAP@", os.environ["BOOT"]))' \
         > "$WORK/preseed.cfg")
       port=$((20000 + RANDOM % 20000))

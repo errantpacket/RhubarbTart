@@ -4,7 +4,7 @@
 #
 # usage: RB_SSH_FROM=<pattern|""> install.sh <stage-dir>
 #   <stage-dir>/SHA256SUMS, profile.json, lock.json, nixpkgs-*.tar.gz   from resolve.py verify
-#   <stage-dir>/nix/                                                    repo nix/ (configuration)
+#   <stage-dir>/nix/                                                    guest/nixos/nix/ (configuration)
 #   <stage-dir>/authorized_keys                                         empty => no sshd
 #   <stage-dir>/password                                                final password (0600), shredded here
 
@@ -44,7 +44,7 @@ mkfs.fat -F 32 -n BOOT "${DISK}1" >/dev/null
 mkfs.ext4 -q -F -L nixos "${DISK}2"
 udevadm settle   # register the new filesystem labels (by-label symlinks) after mkfs
 # Mount by device path, not by-label: the by-label symlink can lag mkfs and fail the mount.
-# The labels still exist for the installed system (nix/modules/tart-vm.nix mounts by-label).
+# The labels still exist for the installed system (guest/nixos/nix/modules/tart-vm.nix mounts by-label).
 mount "${DISK}2" /mnt
 mkdir -p /mnt/boot && mount -o umask=077 "${DISK}1" /mnt/boot
 

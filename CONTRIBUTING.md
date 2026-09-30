@@ -17,7 +17,7 @@ as a discussion first:
   (`tools/bootstrap.sh`); build plugins are installed offline.
 - **Images stay hardened.** No default/weak passwords, no auto-login, no passwordless sudo,
   key-only SSH (or none), firewall on, no shared machine or VPN identity. Every posture change
-  needs an assertion in the family's `guest/*/finalize.sh` (or the `nix/` declaration) **and**, where
+  needs an assertion in the family's `guest/*/finalize.sh` (or the `guest/nixos/nix/` declaration) **and**, where
   observable, a check in `scripts/smoke-test.sh`.
 - **Secrets never get baked or logged.** Passwords and enrollment tokens live in the host keychain
   and only move keychain → subprocess stdin → shred. Never `argv`, files, images, or logs.

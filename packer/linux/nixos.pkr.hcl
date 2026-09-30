@@ -107,11 +107,8 @@ build {
     destination = "/tmp/rhubarb"
   }
 
-  provisioner "file" {
-    source      = "${path.root}/../../nix/"
-    destination = "/tmp/rhubarb/nix"
-  }
-
+  # guest/nixos/ carries install.sh, finalize.sh and the system definition in nix/, which lands in
+  # /tmp/rhubarb/nix for install.sh to copy into /etc/nixos.
   provisioner "file" {
     source      = "${path.root}/../../guest/nixos/"
     destination = "/tmp/rhubarb"

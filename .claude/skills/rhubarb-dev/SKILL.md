@@ -38,7 +38,7 @@ present it to the user as a trade-off, not an implementation detail.
 5. **Sealed images have no auto-login, key-only SSH (or none), a firewall on, no shared
    identity** (host keys, machine-id, VPN state), and no build residue.
 6. **The seal asserts; the smoke test proves from outside.** Each posture change needs an
-   assertion in that family's `finalize.sh` (or the `nix/` declaration plus a finalize check) and,
+   assertion in that family's `finalize.sh` (or the `guest/nixos/nix/` declaration plus a finalize check) and,
    where observable, a smoke-test check. Only a smoke-passed image gets the final name.
 7. **VM names derive from inputs** (`inputs_sha256`: profile + artifact hashes + signers, no
    timestamps).

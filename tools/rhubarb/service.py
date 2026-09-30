@@ -25,7 +25,9 @@ import os
 import socket
 import socketserver
 import stat
-from collections.abc import Callable
+import time
+import urllib.parse
+from collections.abc import Callable, Iterator
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 
@@ -147,6 +149,10 @@ class _Handler(BaseHTTPRequestHandler):
     def _parts(self) -> list[str]:
         return [p for p in self.path.split("?", 1)[0].strip("/").split("/") if p]
 
+    def _query(self) -> dict[str, str]:
+        q = self.path.split("?", 1)
+        return {k: v[-1] for k, v in urllib.parse.parse_qs(q[1]).items()} if len(q) == 2 else {}
+
     def _run(self, call: Callable[[], object]) -> None:
         try:
             self._send(200, call())
@@ -157,8 +163,57 @@ class _Handler(BaseHTTPRequestHandler):
         except Exception as e:  # noqa: BLE001 - a route bug must not take the socket down
             self._send(500, {"error": f"{type(e).__name__}: {e}"})
 
+    # Event stream: tail an engagement's evidence journal as NDJSON (the control plane's
+    # authoritative record of what happened), for herdr's sidebar. Not a normal route because
+    # the response is unbounded, so it can't carry a Content-Length.
+    STREAM_POLL_SECONDS = 0.5
+    STREAM_KEEPALIVE_SECONDS = 15
+
+    def _stream_events(self, eid: str) -> None:
+        q = self._query()
+        try:
+            from_seq = int(q.get("from", "0"))
+            if from_seq < 0:
+                raise ValueError
+        except ValueError:
+            self._send(400, {"error": "'from' must be a non-negative integer"})
+            return
+        follow = q.get("follow", "true").lower() not in ("false", "0", "no")
+        try:
+            api.evidence_entries(eid)   # validates the id; raises VerifyError on a bad one
+        except (VerifyError, FileNotFoundError) as e:
+            self._send(404, {"error": str(e)})
+            return
+        self.close_connection = True   # unbounded body -> framed by connection close
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson")
+        self.send_header("Connection", "close")
+        self.end_headers()
+        last_seq = from_seq
+        last_write = time.monotonic()
+        try:
+            while True:
+                for entry in api.evidence_entries(eid):
+                    if entry.get("seq", 0) > last_seq:
+                        self.wfile.write(json.dumps(_jsonable(entry)).encode() + b"\n")
+                        self.wfile.flush()
+                        last_seq = entry["seq"]
+                        last_write = time.monotonic()
+                if not follow:
+                    return
+                if time.monotonic() - last_write >= self.STREAM_KEEPALIVE_SECONDS:
+                    self.wfile.write(b"\n")   # blank line: keepalive, ignored by the client
+                    self.wfile.flush()
+                    last_write = time.monotonic()
+                time.sleep(self.STREAM_POLL_SECONDS)
+        except (BrokenPipeError, ConnectionResetError):
+            return   # client went away; end the stream quietly
+
     def do_GET(self) -> None:
         parts = self._parts()
+        if len(parts) == 3 and parts[0] == "engagements" and parts[2] == "events":
+            self._stream_events(parts[1])
+            return
         handler = _get_route(parts)
         if handler is None:
             code, msg = (405, "method not allowed") if _post_route(parts) else \
@@ -305,3 +360,30 @@ def post_json(socket_path: str | Path, path: str, body: dict | None = None,
         msg = out.get("error") if isinstance(out, dict) else out
         raise VerifyError(f"service POST {path} -> {status}: {msg}")
     return out
+
+
+def stream_events(socket_path: str | Path, engagement: str, from_seq: int = 0,
+                  follow: bool = True, timeout: float | None = None) -> Iterator[dict]:
+    """Yield an engagement's evidence entries as they are journaled (NDJSON over the socket).
+
+    ``from_seq`` replays entries after that seq (0 = all). ``follow`` keeps tailing; set it False
+    to replay and stop. Blank keepalive lines are skipped. Close the generator to end the stream.
+    """
+    conn = _UnixConnection(str(socket_path), timeout=timeout)
+    path = f"/engagements/{engagement}/events?from={from_seq}&follow={'true' if follow else 'false'}"
+    try:
+        conn.request("GET", path)
+        resp = conn.getresponse()
+        if resp.status != 200:
+            raw = resp.read()
+            try:
+                msg = json.loads(raw).get("error")
+            except ValueError:
+                msg = raw.decode(errors="replace")
+            raise VerifyError(f"service {path} -> {resp.status}: {msg}")
+        for line in resp:
+            line = line.strip()
+            if line:
+                yield json.loads(line)
+    finally:
+        conn.close()

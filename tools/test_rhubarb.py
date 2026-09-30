@@ -1680,7 +1680,7 @@ def test_control_plane_service() -> None:
         raise FileNotFoundError(f"no provenance for {vm}")
 
     saved = (api.images, api.clones, api.engagements, api.provenance,
-             api.provision, api.teardown, api.exec)
+             api.provision, api.teardown, api.exec, api.evidence_entries)
     with tempfile.TemporaryDirectory() as tmp:
         sock = Path(tmp) / "service.sock"
         api.images = lambda: [img]
@@ -1761,6 +1761,44 @@ def test_control_plane_service() -> None:
             st, _ = service.request(sock, "GET", "/engagements/demo/provision")
             check("GET on a POST-only route is 405", st == 405)
 
+            # -- event stream (NDJSON tail of the evidence journal) --
+            import threading
+            import time as _time
+            journal = [{"seq": 1, "kind": "lifecycle", "data": {"event": "provision"}},
+                       {"seq": 2, "kind": "exec", "data": {"command": "id"}}]
+            api.evidence_entries = lambda eid: list(journal)
+
+            evs = list(service.stream_events(sock, "demo", follow=False))
+            check("stream replays the whole journal when follow=false",
+                  [e["seq"] for e in evs] == [1, 2])
+            evs = list(service.stream_events(sock, "demo", from_seq=1, follow=False))
+            check("stream 'from' replays only entries after that seq",
+                  [e["seq"] for e in evs] == [2])
+            check("a negative 'from' is rejected (400 -> VerifyError)",
+                  _raises(lambda: list(service.stream_events(sock, "demo", from_seq=-1, follow=False)),
+                          VerifyError))
+
+            api.evidence_entries = lambda eid: (_ for _ in ()).throw(VerifyError("bad id"))
+            check("stream on a bad engagement is 404 -> VerifyError",
+                  _raises(lambda: list(service.stream_events(sock, "demo", follow=False)), VerifyError))
+            api.evidence_entries = lambda eid: list(journal)
+
+            got = []
+            gen = service.stream_events(sock, "demo", from_seq=2, follow=True, timeout=10)
+
+            def reader():
+                for e in gen:
+                    got.append(e)
+                    break
+
+            t = threading.Thread(target=reader, daemon=True)
+            t.start()
+            _time.sleep(0.6)
+            journal.append({"seq": 3, "kind": "exec", "data": {"command": "whoami"}})
+            t.join(timeout=5)
+            check("follow=true streams a newly appended entry", [e["seq"] for e in got] == [3])
+            gen.close()
+
         finally:
             srv.shutdown()
             srv.server_close()
@@ -1773,7 +1811,7 @@ def test_control_plane_service() -> None:
         check("refuses to replace a non-socket file at the path",
               _raises(lambda: service.make_server(p2), VerifyError) and p2.read_text() == "i am not a socket")
     (api.images, api.clones, api.engagements, api.provenance,
-     api.provision, api.teardown, api.exec) = saved
+     api.provision, api.teardown, api.exec, api.evidence_entries) = saved
 
 
 if __name__ == "__main__":

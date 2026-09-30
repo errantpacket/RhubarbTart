@@ -42,6 +42,27 @@ log "clone $SMOKE booted at $IP"
 
 port_open() { nc -z -G 3 "$IP" "$1" >/dev/null 2>&1; }
 
+# Linux mount checks, run on the first boot and again after a reboot (#98): a Kali clone once
+# came up on its second boot with / read-only and no fstab mounts, because the fstab generator's
+# units were missing, while its first boot had been fine.
+# shellcheck disable=SC2016  # expands in the guest's shell, not here
+LINUX_MOUNTS='set -e
+export PATH=/run/wrappers/bin:/run/current-system/sw/bin:/usr/bin:/bin:$PATH
+bad() { echo "mounts: $*" >&2; exit 1; }
+opts="$(findmnt -no OPTIONS /)"
+case ",$opts," in *,rw,*) ;; *) bad "root filesystem is not read-write ($opts)" ;; esac
+t="$HOME/.rhubarb-smoke-write"
+( : > "$t" ) 2>/dev/null || bad "home directory not writable"
+rm -f "$t"
+# -L, not -e: on NixOS the link points into a store path that need not exist (systemd resolves
+# the unit by name), so only "the generator created the link" is meaningful.
+test -L /run/systemd/generator/local-fs.target.wants/systemd-remount-fs.service \
+  || bad "fstab generator did not link systemd-remount-fs (fstab mounts were not set up)"
+failed="$(systemctl --failed --type=mount --no-legend --plain | awk "{print \$1}")"
+test -z "$failed" || bad "mount units failed: $failed"
+if [ "$ROSETTA" = true ]; then test -e /proc/sys/fs/binfmt_misc/rosetta || bad "rosetta binfmt not registered"; fi
+echo "root $opts"'
+
 if [[ "$SSH_ENABLED" == 1 ]]; then
   for _ in $(seq 1 40); do port_open 22 && break; sleep 3; done
   port_open 22 || fail "SSH port not reachable"
@@ -115,6 +136,28 @@ fi
 echo "packages recorded: $(wc -l < /var/lib/rhubarbtart/installed.txt)"
 EOF
     log "ok: no passwordless sudo, no auto-login, firewall active, fresh machine-id"
+    "${SSH[@]}" "ROSETTA=${RHUBARB_ROSETTA:-false} bash -c '$LINUX_MOUNTS'" >/dev/null \
+      || fail "mount checks failed on the first boot"
+    log "ok: root read-write, home writable, fstab mounts up"
+
+    # 4. Second boot (#98): flush, stop, boot the same clone again and repeat the mount checks.
+    #    `sync` needs no privileges; it keeps tart's stop from losing the first boot's writes.
+    "${SSH[@]}" sync || true
+    tart stop "$SMOKE" >/dev/null 2>&1 || true
+    wait "$RUN_PID" 2>/dev/null || true
+    tart run "${RUN_ARGS[@]}" "$SMOKE" >>"$WORK/run.log" 2>&1 &
+    RUN_PID=$!
+    IP="$(vm_ip "$SMOKE")" || fail "no IP within 300s on the second boot"
+    for _ in $(seq 1 40); do port_open 22 && break; sleep 3; done
+    port_open 22 || fail "SSH port not reachable on the second boot"
+    ssh-keyscan -t ed25519 "$IP" 2>/dev/null > "$WORK/known_hosts2"
+    [[ "$(cut -d' ' -f2- "$WORK/known_hosts")" == "$(cut -d' ' -f2- "$WORK/known_hosts2")" ]] \
+      || fail "host key changed across a reboot of the same clone"
+    cp "$WORK/known_hosts2" "$WORK/known_hosts"
+    SSH=(ssh "${SSH_OPTS[@]}" "$USER_NAME@$IP")
+    "${SSH[@]}" "ROSETTA=${RHUBARB_ROSETTA:-false} bash -c '$LINUX_MOUNTS'" >/dev/null \
+      || fail "mount checks failed on the second boot"
+    log "ok: second boot: root read-write, fstab mounts up, host key unchanged"
   fi
 else
   sleep 60  # let launchd settle so a closed port means disabled, not "not yet up"

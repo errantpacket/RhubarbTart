@@ -13,12 +13,12 @@ directly. The API is imported lazily inside ``refresh_data`` so that importing
 this package never requires ``tart`` to be installed (headless test / Linux dev).
 """
 
-from contextlib import nullcontext
-
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
 from textual.widgets import DataTable, Static, TabbedContent
+
+from .tables import rebuilding
 
 # Column headers, in order. "FRESHNESS" is the image-staleness verdict
 # (current / outdated / image-deleted); "PASSWORD" is the keychain mode
@@ -99,14 +99,6 @@ class ClonesPane(VerticalScroll):
     # -- rendering helpers ----------------------------------------------------
 
     def _render_clones(self, status: Static, table: DataTable, clones: list) -> None:
-        # Preserve the highlighted clone across refreshes where we can.
-        prev_key = None
-        try:
-            if table.row_count and table.is_valid_coordinate(table.cursor_coordinate):
-                prev_key = table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
-        except Exception:
-            prev_key = None
-
         if not clones:
             table.clear()  # keeps columns
             self._sig = None
@@ -121,10 +113,10 @@ class ClonesPane(VerticalScroll):
         if sig == self._sig:
             return   # nothing changed: leave the table (and the cursor) alone
         self._sig = sig
-        with table.prevent(DataTable.RowHighlighted) if prev_key else nullcontext():
-            self._fill(table, clones, prev_key)
+        with rebuilding(table):   # keeps the highlighted clone across the rebuild
+            self._fill(table, clones)
 
-    def _fill(self, table: DataTable, clones: list, prev_key) -> None:
+    def _fill(self, table: DataTable, clones: list) -> None:
         table.clear()  # keeps columns
         for c in clones:
             enrolled = ", ".join(c.enrollments) if c.enrollments else "-"
@@ -137,12 +129,6 @@ class ClonesPane(VerticalScroll):
                 enrolled,
                 key=c.name,
             )
-
-        if prev_key is not None:
-            try:
-                table.move_cursor(row=table.get_row_index(prev_key), animate=False)
-            except Exception:
-                pass
 
     def _render_problems(self, problems: Static, records: list) -> None:
         if not records:

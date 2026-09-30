@@ -17,6 +17,8 @@ from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.widgets import DataTable, Log, Static
 
+from .tables import rebuilding
+
 _KIND_STYLE = {"build": "cyan", "clone": "green", "events": "magenta"}
 MAX_LINES = 2000
 
@@ -129,7 +131,7 @@ class LogsPane(Horizontal):
                 # A log appeared, went, or moved up the list: rebuild, then put the cursor back
                 # on the selected log. Its highlight events are suppressed, or the rebuild's
                 # "row 0 highlighted" would pull the selection back to the top.
-                with table.prevent(DataTable.RowHighlighted):
+                with rebuilding(table, keep=data["selected"]):
                     table.clear()
                     for rid, label, kind, size, when in rows:
                         # Logs of clones that no longer exist stay readable, but step back.
@@ -137,12 +139,6 @@ class LogsPane(Horizontal):
                         table.add_row(Text(label, style=dim),
                                       Text(kind, style=dim or _KIND_STYLE.get(kind, "")),
                                       Text(size, style=dim), Text(when, style=dim), key=rid)
-                    if data["selected"] is not None:
-                        try:
-                            table.move_cursor(row=table.get_row_index(data["selected"]),
-                                              animate=False)
-                        except Exception:
-                            pass
             self._rows = rows
 
         self._selected = data["selected"]

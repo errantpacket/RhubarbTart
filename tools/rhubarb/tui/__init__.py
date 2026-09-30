@@ -7,7 +7,7 @@ Each pane lives in its own module so pane agents can work without conflict:
     provenance_pane.ProvenancePane  -> api.provenance(v) (api.Provenance)
     logs_pane.LogsPane              -> api.list_logs() / api.read_log(id)   (#120)
 
-Pane contract (the shell, tools/rhubarb_tui.py, depends only on this):
+Pane contract (the shell, rhubarb/tui/app.py, depends only on this):
   * Each module exposes exactly the widget class named above.
   * Each class subclasses a Textual container and implements:
       - ``compose(self) -> ComposeResult`` — build the pane's widgets.

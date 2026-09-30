@@ -67,15 +67,20 @@ else skip "python checks (need uv)"; fi
 echo "== invariants"
 # check <description> <grep -E pattern> <paths...>: pattern must NOT match.
 check() {
-  local desc=$1 pattern=$2 hits
+  local desc=$1 pattern=$2 hits p
   shift 2
+  # A scan target that no longer exists would make grep find nothing and the check pass; after a
+  # move or rename, fail instead so the check gets pointed at the new path.
+  for p in "$@"; do
+    if [[ ! -e "$p" ]]; then bad "$desc (scan target missing: $p)"; return; fi
+  done
   hits="$(grep -rnE -- "$pattern" "$@" 2>/dev/null || true)"
   if [[ -z "$hits" ]]; then ok "$desc"; return; fi
   bad "$desc"
   while IFS= read -r line; do echo "          $line"; done <<<"$hits"
 }
 
-BUILD_CODE=(packer guest scripts nix kali tools/bootstrap.sh tools/resolve.py tools/rhubarb)
+BUILD_CODE=(packer guest scripts nix tools/bootstrap.sh tools/resolve.py tools/rhubarb)
 
 check "no Homebrew in the toolchain path" \
   '(^|[;&|[:space:]])brew[[:space:]]' scripts tools/bootstrap.sh
@@ -86,11 +91,11 @@ check "no --from-ipsw=latest / from_ipsw = \"latest\"" \
 check "no default credentials in templates" \
   'default[[:space:]]*=[[:space:]]*"(admin|password|packer|kali|nixos)"' packer
 check "no NOPASSWD sudoers being written" \
-  'NOPASSWD[^|]*(tee|>)|visudo|wheelNeedsPassword[[:space:]]*=[[:space:]]*false' packer guest nix kali
+  'NOPASSWD[^#]*(tee|>)|visudo|wheelNeedsPassword[[:space:]]*=[[:space:]]*false' packer guest nix
 check "no auto-login configured (kcpassword/autoLoginUser writes)" \
-  '(^|[[:space:];&|])(xxd|install|cp|mv|tee)[[:space:]][^#]*kcpassword|defaults write[^#]*autoLoginUser|autoLogin\.enable[[:space:]]*=[[:space:]]*true|autologinUser[[:space:]]*=[[:space:]]*"|autologin-user=[^[:space:]]|logsInAutomatically=true' packer guest nix kali
+  '(^|[[:space:];&|])(xxd|install|cp|mv|tee)[[:space:]][^#]*kcpassword|defaults write[^#]*autoLoginUser|autoLogin\.enable[[:space:]]*=[[:space:]]*true|autologinUser[[:space:]]*=[[:space:]]*"|autologin-user=[^[:space:]]|logsInAutomatically=true' packer guest nix
 check "sshd never re-enables password/kbd-interactive auth" \
-  '(PasswordAuthentication|KbdInteractiveAuthentication)([[:space:]]+yes|[[:space:]]*=[[:space:]]*true)|PermitRootLogin[[:space:]]*=?[[:space:]]*"?yes' packer guest nix kali
+  '(PasswordAuthentication|KbdInteractiveAuthentication)([[:space:]]+yes|[[:space:]]*=[[:space:]]*true)|PermitRootLogin[[:space:]]*=?[[:space:]]*"?yes' packer guest nix
 check "Gatekeeper/SIP never disabled" \
   'spctl[[:space:]]+(--global-disable|--master-disable)|csrutil[[:space:]]+disable' packer guest scripts
 check "no log() helper shadowing macOS log(1) in guest scripts" \
@@ -101,11 +106,11 @@ check "bash 3.2 compatible (macOS /bin/bash: no assoc arrays, mapfile, \${x,,}, 
   'declare -A|mapfile|readarray|\$\{[A-Za-z_]+,,\}|\$\{[A-Za-z_]+\^\^\}|\|&|&>>|coproc' \
   "${MACOS_BASH[@]}"
 check "preseed template carries no literal password (only @BOOTSTRAP@)" \
-  'passwd/(user|root)-password(-again)?[[:space:]]+password[[:space:]]+[^@[:space:]]' kali
+  'passwd/(user|root)-password(-again)?[[:space:]]+password[[:space:]]+[^@[:space:]]' guest/kali
 check "Linux guests never trust unsigned repos" \
-  'trusted=yes|allow-unauthenticated|AllowInsecureRepositories|require-sigs[[:space:]]*=[[:space:]]*false' guest nix kali
+  'trusted=yes|allow-unauthenticated|AllowInsecureRepositories|require-sigs[[:space:]]*=[[:space:]]*false' guest nix
 check "VPN secrets never baked (no auth keys / service tokens in build code)" \
-  'tskey-(auth|client)-[A-Za-z0-9]|auth_client_secret</key><string>[^$%<]' packer guest nix kali config
+  'tskey-(auth|client)-[A-Za-z0-9]|auth_client_secret</key><string>[^$%<]' packer guest nix config
 # Plain http is allowed only to loopback (the localhost-only registry, #32), never the network.
 hits="$(grep -rnE 'curl[^#]*http://' "${BUILD_CODE[@]}" 2>/dev/null \
   | grep -vE 'http://(127\.0\.0\.1|localhost)[:/"]' || true)"

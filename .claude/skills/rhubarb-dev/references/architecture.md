@@ -54,7 +54,7 @@ rbt-<id>-<inputs12>-unverified ─▶ smoke-test.sh (throwaway clone) ─▶ tar
 | Resolver CLI: plan, resolve, verify/staging, provenance, preflight, toolchain-pin | `tools/resolve.py` |
 | Offline self-tests; headless TUI render test | `tools/test_rhubarb.py`; `tools/test_rhubarb_tui.py` |
 | NixOS system definition | `nix/configuration.nix`, `nix/modules/{tart-vm,hardening,packages,desktop,juice-shop}.nix` |
-| Kali unattended install | `kali/preseed.cfg.tmpl`, `tools/serve_preseed.py` |
+| Kali unattended install | `guest/kali/preseed.cfg.tmpl`, `tools/serve_preseed.py` |
 | Toolchain install; toolchain PATH | `tools/bootstrap.sh`; `scripts/env.sh` |
 | Orchestration, passwords, naming | `scripts/build.sh` |
 | External proof | `scripts/smoke-test.sh` |

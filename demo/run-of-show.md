@@ -97,13 +97,20 @@ cat engagements/juiceshop-lab.herdr.json     # which agent, kind, clone; and the
 ./rhubarb herdr arm juiceshop-lab            # launches the agent in herdr, pinned to jsl-attacker
 ```
 
-**Switch to herdr**, paste the prompt from `demo/agent-task.md` into the `recon` pane, and let it
-do its read-only recon (`rbt-range -- id`, read the challenge API). Narrate: every call goes
-through the control plane and is journaled on the host.
+**Switch to herdr.** A workspace `rbt-juiceshop-lab` opened with a `recon` agent pinned to
+`jsl-attacker`. Show that the agent's *only* tool into the range is `rbt-range`, and that its env
+is scoped to that one clone.
 
-> The agent's own Claude Code classifier gates in-guest writes, so you drive the write + the gated
-> action yourself in Scene 7 (same tool, deterministic). To let the agent do it instead, allow
-> `./rbt-range` in its Claude Code permissions first.
+**Say:** "The agent is on a leash: one clone, one recorded path, and it can't reach anything the
+manifest doesn't allow. On top of that, the agent's own safeguards are a second layer — ask it to
+do something out of scope and it pushes back."
+
+> **Execution is operator-driven (Scene 7).** A capable coding agent will often question or refuse
+> range commands, and its harness may gate in-guest writes — good defense-in-depth, but not
+> camera-reliable. So the demo shows the agent *armed* here, and you drive the actual `rbt-range`
+> flow in Scene 7 (identical, deterministic). To have the agent execute instead, pre-allow
+> `./rbt-range` in its Claude Code permissions and give it a clearly in-scope task — expect it to
+> confirm first.
 
 ## Scene 7 — The scoped client + a gated sensitive action (90s)
 

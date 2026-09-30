@@ -99,6 +99,14 @@ sanctioned, recorded path; hard isolation of an agent from other clones on the s
 per-engagement driver VM ([charter](HERDR-CHARTER.md) model C), and reach to targets is enforced
 by the network (#30).
 
+**Arming agents (`rhubarb herdr arm ID`).** With an engagement provisioned and `rhubarb serve`
+running, `arm` launches its configured agents under [herdr](https://herdr.dev): it creates a herdr
+workspace, gives each agent its own pane pinned to one range clone (`RBT_RANGE_CLONE`) and the
+control-plane socket, puts the repo on the pane's `PATH` so `rbt-range` resolves, and starts the
+agent CLI there. Which agents run, of what kind, against which clone is committed, reviewable herdr
+config at `engagements/<id>.herdr.json`; `arm` records that config's hash and the agents it started
+as an `arm` evidence entry, so a sealed vault shows what each agent was permitted to do.
+
 **Sealing a vault.** `rhubarb vault seal ID` turns the evidence store into a signed, sealed,
 portable bundle you can hand off:
 

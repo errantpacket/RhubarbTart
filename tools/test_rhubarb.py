@@ -1877,6 +1877,112 @@ def test_scoped_range_client() -> None:
         service.post_json = saved
 
 
+def test_herdr_arm() -> None:
+    """#108 slice 2: herdr.arm validates config, drives herdr to make a pane per agent pinned to
+    its clone, and journals an 'arm' evidence entry. herdr + core mocked (no herdr/tart)."""
+    import json as _json
+    from pathlib import Path
+
+    from rhubarb import api, evidence, herdr
+    from rhubarb.common import VerifyError
+
+    # committed config loads
+    cfg = herdr.load_config("juiceshop-lab")
+    check("load_config reads the committed engagement herdr config",
+          cfg == [{"name": "recon", "kind": "claude", "clone": "jsl-attacker"}])
+
+    # validation rejections via a temp config path
+    saved_cfgpath = herdr.config_path
+    with tempfile.TemporaryDirectory() as tmp:
+        def write(obj):
+            p = Path(tmp) / "x.herdr.json"
+            p.write_text(_json.dumps(obj))
+            herdr.config_path = lambda eid: p
+        for label, obj in [
+            ("an unknown top key", {"agents": [{"name": "a", "kind": "claude", "clone": "c"}], "x": 1}),
+            ("an empty agents list", {"agents": []}),
+            ("an unknown agent kind", {"agents": [{"name": "a", "kind": "nope", "clone": "c"}]}),
+            ("a bad agent name", {"agents": [{"name": "A B", "kind": "claude", "clone": "c"}]}),
+            ("a duplicate name", {"agents": [{"name": "a", "kind": "claude", "clone": "c"},
+                                             {"name": "a", "kind": "codex", "clone": "d"}]}),
+            ("a missing key", {"agents": [{"name": "a", "kind": "claude"}]}),
+        ]:
+            write(obj)
+            check(f"load_config rejects {label}", _raises(lambda: herdr.load_config("x"), VerifyError))
+    herdr.config_path = saved_cfgpath
+
+    # arm orchestration, herdr + core mocked
+    calls = []
+
+    def fake_herdr(*args, check=True):
+        calls.append(args)
+        if args[:2] == ("workspace", "create"):
+            return {"workspace": {"workspace_id": "w1"}, "root_pane": {"pane_id": "w1:p1"}}
+        if args[:2] == ("pane", "split"):
+            return {"pane": {"pane_id": "w1:p2"}}
+        if args[:2] == ("agent", "start"):
+            return {"_error": "agent_not_ready"} if "slow" in args else {}
+        return {}
+
+    def clone(name, eng="juiceshop-lab"):
+        return api.Clone(name=name, profile="kali-research", family="kali", image="rbt-x",
+                         state="running", freshness="current", password_mode="unique",
+                         password_account=name, enrollments=[], created_at="2026-01-02T00:00:00Z",
+                         engagement=eng)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        sock = Path(tmp) / "service.sock"
+        sock.write_text("")   # arm only checks existence
+        cfgp = Path(tmp) / "two.herdr.json"
+        cfgp.write_text(_json.dumps({"agents": [
+            {"name": "recon", "kind": "claude", "clone": "jsl-attacker"},
+            {"name": "slow", "kind": "codex", "clone": "jsl-target"}]}))
+        saved = (herdr._herdr, herdr.herdr_bin, herdr.config_path, api.engagement_clones)
+        try:
+            herdr._herdr = fake_herdr
+            herdr.herdr_bin = lambda: "herdr"
+            herdr.config_path = lambda eid: cfgp
+            api.engagement_clones = lambda eid: [clone("jsl-attacker"), clone("jsl-target")]
+
+            res = herdr.arm("juiceshop-lab", socket_path=str(sock))
+            check("arm makes a workspace then splits for the 2nd agent",
+                  any(c[:2] == ("workspace", "create") for c in calls)
+                  and any(c[:2] == ("pane", "split") for c in calls))
+            ws_call = next(c for c in calls if c[:2] == ("workspace", "create"))
+            check("arm pins the socket and clone into the first pane's env",
+                  f"RBT_SERVICE_SOCKET={sock}" in ws_call and "RBT_RANGE_CLONE=jsl-attacker" in ws_call)
+            split_call = next(c for c in calls if c[:2] == ("pane", "split"))
+            check("arm pins the 2nd agent's clone in its split pane",
+                  "RBT_RANGE_CLONE=jsl-target" in split_call)
+            check("arm puts the repo on PATH in each pane",
+                  sum(1 for c in calls if c[:2] == ("pane", "run") and "export" in c[3]) == 2)
+            check("arm starts each agent with its kind and pane",
+                  ("agent", "start", "recon", "--kind", "claude", "--pane", "w1:p1") == calls[[c[:2] for c in calls].index(("agent","start"))][:7])
+            check("arm records a slow agent's note instead of failing",
+                  res.agents[1].name == "slow" and res.agents[1].note == "agent_not_ready")
+
+            j = evidence.entries("juiceshop-lab")
+            arm_entry = j[-1]
+            check("arm journals an evidence entry with the config hash and agents",
+                  arm_entry["kind"] == "lifecycle" and arm_entry["data"]["event"] == "arm"
+                  and len(arm_entry["data"]["config_sha256"]) == 64
+                  and [x["clone"] for x in arm_entry["data"]["agents"]] == ["jsl-attacker", "jsl-target"])
+
+            # refusals
+            api.engagement_clones = lambda eid: []
+            check("arm refuses an unprovisioned engagement",
+                  _raises(lambda: herdr.arm("juiceshop-lab", socket_path=str(sock)), VerifyError))
+            api.engagement_clones = lambda eid: [clone("jsl-attacker")]
+            check("arm refuses when a config clone is not in the engagement",
+                  _raises(lambda: herdr.arm("juiceshop-lab", socket_path=str(sock)), VerifyError))
+            api.engagement_clones = lambda eid: [clone("jsl-attacker"), clone("jsl-target")]
+            check("arm refuses when the control-plane service is not running",
+                  _raises(lambda: herdr.arm("juiceshop-lab", socket_path=str(Path(tmp) / "no.sock")),
+                          VerifyError))
+        finally:
+            (herdr._herdr, herdr.herdr_bin, herdr.config_path, api.engagement_clones) = saved
+
+
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops, test_engagement_links,
@@ -1887,7 +1993,7 @@ if __name__ == "__main__":
               test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
               test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement, test_guest_sync,
               test_evidence_store, test_evidence_exec_collect, test_vault_seal_verify,
-              test_control_plane_service, test_scoped_range_client):
+              test_control_plane_service, test_scoped_range_client, test_herdr_arm):
         print(t.__name__)
         # Each test gets a throwaway state dir, so nothing (records, evidence) can reach the
         # operator's real one; tests that manage RHUBARB_STATE_DIR themselves still may.

@@ -16,6 +16,8 @@
   rhubarb engagement connect ID                     open its links until Ctrl-C (#30)
   rhubarb engagement teardown ID [--yes] [--no-collect]   collect evidence, then remove its clones
   rhubarb evidence collect|list|verify ID           pull ~/evidence from its clones; show; check the chain
+  rhubarb vault seal ID [--out DIR]                 write a signed, sealed, portable evidence bundle
+  rhubarb vault verify DIR [--pub KEY]              check a sealed vault's signature and every hash
 
 Only clones created by `rhubarb new` can be run, reset or removed through this tool; built
 images (rbt-*) and other VMs are never modified. Records: see tools/rhubarb/clones.py.
@@ -288,6 +290,22 @@ def cmd_evidence_verify(a) -> None:
     say(f"engagement {eid}: {rep.entries} entries, {rep.items} items verified; head {rep.head[:16]}")
 
 
+def cmd_vault_seal(a) -> None:
+    vault = api.seal_vault(_engagement_id(a.engagement), out_dir=a.out, progress=say)
+    say(f"vault sealed (read-only): {vault}")
+    say(f"verify it anywhere with: ./rhubarb vault verify {vault}")
+
+
+def cmd_vault_verify(a) -> None:
+    rep = api.verify_vault(a.vault, pub=a.pub)
+    for p in rep.problems:
+        say(f"PROBLEM: {p}")
+    if rep.problems or not rep.signed:
+        sys.exit(f"[rhubarb] FAILED: vault does NOT verify ({len(rep.problems)} problem(s))")
+    say(f"vault OK: engagement {rep.engagement}, {rep.entries} entries, {rep.items} items, "
+        f"signature verified; head {rep.chain_head[:16]}")
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="rhubarb", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -349,6 +367,16 @@ def main(argv: list[str] | None = None) -> None:
     et.add_argument("--yes", action="store_true")
     et.add_argument("--no-collect", action="store_true", help="don't pull evidence first")
     et.set_defaults(fn=cmd_engagement_teardown)
+    vt = sub.add_parser("vault", help="seal / verify a signed evidence bundle")
+    vtsub = vt.add_subparsers(dest="vault_cmd", required=True)
+    vs = vtsub.add_parser("seal", help="write a signed, sealed, portable evidence bundle")
+    vs.add_argument("engagement", metavar="ID")
+    vs.add_argument("--out", metavar="DIR", help="where to write the vault (default: ./vaults)")
+    vs.set_defaults(fn=cmd_vault_seal)
+    vv = vtsub.add_parser("verify", help="check a sealed vault's signature and every hash")
+    vv.add_argument("vault", metavar="DIR")
+    vv.add_argument("--pub", metavar="KEY", help="public key (default: the vault's cosign.pub)")
+    vv.set_defaults(fn=cmd_vault_verify)
     ev = sub.add_parser("evidence", help="collect / list / verify an engagement's evidence")
     evsub = ev.add_subparsers(dest="evidence_cmd", required=True)
     for cmd, fn, hlp in (("collect", cmd_evidence_collect, "pull each clone's ~/evidence (and ground truth)"),

@@ -35,13 +35,14 @@ import subprocess
 import tarfile
 import time
 import urllib.request
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import clones as _clones
 from . import engagements as _engagements
 from . import evidence as _evidence
+from . import vault as _vault
 from . import hostops
 from .common import ROOT, VerifyError
 from .locks import image_name
@@ -1199,3 +1200,56 @@ def evidence_entries(engagement: str) -> list[dict]:
 def verify_evidence(engagement: str) -> _evidence.VerifyReport:
     """Recompute the engagement's evidence chain and item hashes. Read-only."""
     return _evidence.verify(engagement)
+
+
+# ---- vault (#86) ---------------------------------------------------------------------------
+# The vault is the signed, sealed, portable copy of an engagement's evidence. Building the
+# bundle is pure (vault.py); the cosign crypto is a shell-out (scripts/vault.sh), injected here
+# so vault.py stays testable off a Mac.
+
+VAULT_SCRIPT = ROOT / "scripts" / "vault.sh"
+
+
+def _cosign_version() -> str | None:
+    res = subprocess.run(["cosign", "version"], capture_output=True, text=True)
+    for line in (res.stdout or "").splitlines():
+        if "GitVersion:" in line:
+            return line.split("GitVersion:", 1)[1].strip()
+    return None
+
+
+def _sign_root(root: Path, bundle: Path) -> None:
+    r = subprocess.run([str(VAULT_SCRIPT), "sign", str(root), str(bundle)], capture_output=True,
+                       text=True)
+    if r.returncode != 0:
+        raise VerifyError((r.stderr or r.stdout or "cosign sign failed").strip())
+
+
+def _verify_root(root: Path, bundle: Path, pub: Path | None) -> None:
+    argv = [str(VAULT_SCRIPT), "verify", str(root), str(bundle)] + ([str(pub)] if pub else [])
+    r = subprocess.run(argv, capture_output=True, text=True)
+    if r.returncode != 0:
+        raise VerifyError((r.stderr or r.stdout or "signature does not verify").strip())
+
+
+def seal_vault(engagement: str, out_dir: str | None = None,
+               progress: ProgressFn | None = None) -> Path:
+    """Write and sign a sealed vault for the engagement, returning its path. The evidence chain
+    must verify first. ``out_dir`` defaults to ./vaults. Records a seal entry in the live
+    journal. Raises ``VerifyError`` (no/broken evidence, existing vault, signing failure)."""
+    _engagements.load_engagement(engagement)   # defined engagement
+    dest = Path(out_dir) if out_dir else ROOT / "vaults"
+    dest.mkdir(parents=True, exist_ok=True)
+    sealed_at = _clones.now()
+    vault = _vault.seal(engagement, dest, _sign_root, sealed_at, cosign_version=_cosign_version())
+    root = json.loads((vault / _vault.ROOT_NAME).read_text())
+    _evidence.append(engagement, "lifecycle", {"event": "seal", "vault": str(vault),
+                     "chain_head": root["chain_head"], "entries": root["entries"]})
+    _emit(progress, f"sealed {root['entries']} entries -> {vault}")
+    return vault
+
+
+def verify_vault(vault_dir: str, pub: str | None = None) -> _vault.VaultReport:
+    """Verify a standalone sealed vault (signature + every hash). Offline; needs no engagement
+    or state dir. Read-only."""
+    return _vault.verify(Path(vault_dir), _verify_root, Path(pub) if pub else None)

@@ -1573,6 +1573,84 @@ def test_evidence_exec_collect() -> None:
          api.clones, api._ground_truth) = orig
 
 
+def test_vault_seal_verify() -> None:
+    """#86: seal writes a signed, sealed, portable bundle over the evidence store; verify checks
+    the signature and every hash and catches tampering. cosign is faked (pure-logic test)."""
+    from pathlib import Path
+
+    from rhubarb import evidence, vault
+    from rhubarb.common import VerifyError
+
+    # A tiny fake "signature": sha256 of root.json's bytes. Proves the wiring and that verify
+    # re-runs the signer over root.json; the real cosign round-trip is checked on hardware.
+    def fake_sign(root: Path, bundle: Path) -> None:
+        bundle.write_text(_h(root.read_bytes()))
+
+    def fake_verify(root: Path, bundle: Path, pub) -> None:
+        if bundle.read_text() != _h(root.read_bytes()):
+            raise VerifyError("bad signature")
+
+    import hashlib
+    def _h(b): return hashlib.sha256(b).hexdigest()
+
+    # Build a small evidence store, then seal it.
+    evidence.append("juiceshop-lab", "lifecycle", {"event": "provision",
+                    "created": {"a": "rbt-kali-research-000000000000"}})
+    evidence.append("juiceshop-lab", "exec", {"command": "id", "exit_code": 0}, clone="a",
+                    blobs={"stdout": b"uid=1000\n", "stderr": b""})
+
+    with tempfile.TemporaryDirectory() as out:
+        out = Path(out)
+        v = vault.seal("juiceshop-lab", out, fake_sign, "2026-09-30T02:00:00+00:00", cosign_version="v3.1.3")
+        check("seal writes root.json, a signature bundle and the public-key placeholder is optional",
+              (v / "root.json").is_file() and (v / "root.bundle.json").is_file()
+              and (v / "journal.jsonl").is_file())
+        root = json.loads((v / "root.json").read_text())
+        check("root.json commits to chain head, entries and every item",
+              root["entries"] == 2 and root["chain_head"] == evidence.verify("juiceshop-lab").head
+              and len(root["items"]) == 2 and root["engagement"] == "juiceshop-lab")
+        check("seal copies every referenced item", all((v / "items" / d).is_file() for d in root["items"]))
+        check("sealed tree is read-only", (v.stat().st_mode & 0o200) == 0
+              and ((v / "root.json").stat().st_mode & 0o222) == 0)
+        rep = vault.verify(v, fake_verify)
+        check("a fresh vault verifies (signature + hashes)", rep.signed and rep.problems == []
+              and rep.entries == 2 and rep.items == 2)
+
+        # Tamper: flip an item's content -> hash mismatch AND signature (root unchanged) still ok,
+        # so the hash check is what catches an item swap.
+        os.chmod(v / "items", 0o700)
+        item = next(iter(root["items"]))
+        os.chmod(v / "items" / item, 0o600)
+        (v / "items" / item).write_bytes(b"tampered\n")
+        bad = vault.verify(v, fake_verify)
+        check("verify catches an altered item", any("altered" in p for p in bad.problems))
+
+        # Tamper: edit root.json -> signature fails.
+        os.chmod(v, 0o700)
+        os.chmod(v / "root.json", 0o600)
+        (v / "root.json").write_text(json.dumps({**root, "entries": 999}))
+        bad2 = vault.verify(v, fake_verify)
+        check("verify catches an edited root.json via the signature",
+              not bad2.signed and any("signature" in p for p in bad2.problems))
+
+    # Refusals: no evidence, and a broken chain.
+    with tempfile.TemporaryDirectory() as out:
+        try:
+            vault.seal("demo", Path(out), fake_sign, "2026-09-30T02:00:00+00:00")
+            check("seal refuses an engagement with no evidence", False)
+        except VerifyError:
+            check("seal refuses an engagement with no evidence", True)
+        j = evidence.store_dir("juiceshop-lab") / "journal.jsonl"
+        orig = j.read_bytes()
+        j.write_bytes(orig.replace(b'"command":"id"', b'"command":"XX"'))
+        try:
+            vault.seal("juiceshop-lab", Path(out), fake_sign, "2026-09-30T02:01:00+00:00")
+            check("seal refuses when the chain does not verify", False)
+        except VerifyError:
+            check("seal refuses when the chain does not verify", True)
+        j.write_bytes(orig)
+
+
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops, test_engagement_links,
@@ -1582,7 +1660,7 @@ if __name__ == "__main__":
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
               test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
               test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement, test_guest_sync,
-              test_evidence_store, test_evidence_exec_collect):
+              test_evidence_store, test_evidence_exec_collect, test_vault_seal_verify):
         print(t.__name__)
         # Each test gets a throwaway state dir, so nothing (records, evidence) can reach the
         # operator's real one; tests that manage RHUBARB_STATE_DIR themselves still may.

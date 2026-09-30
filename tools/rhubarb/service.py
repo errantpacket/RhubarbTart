@@ -3,14 +3,21 @@
 A thin HTTP server over a **Unix domain socket**, bound at 0600 and owned by the operator — no
 TCP, no token; filesystem permissions are the boundary, exactly like the StrictModes clone
 records (docs/HERDR-CHARTER.md, "Service shape"). Every endpoint is a call into the typed core
-(``api.py``); the service never touches ``tart`` or the keychain itself. This first slice is
-**read-only** (mirrors the TUI): images, clones, engagements, evidence, provenance. Guarded
-actions and an event stream come in later slices.
+(``api.py``); the service never touches ``tart`` or the keychain itself.
 
-Stdlib only — no web framework, so nothing new to pin. The same module provides a tiny client
-(``request``/``get_json``) so the CLI, tests and later herdr talk to the socket the same way.
+- **GET** (read-only, mirrors the TUI): images, clones, engagements, evidence, provenance.
+- **POST** (guarded actions, each one core call that already journals evidence): provision,
+  collect, seal, teardown, and exec (run a command in a clone). ``connect`` is a long-lived hold,
+  so it belongs with the event-stream slice, not a request/response endpoint.
+
+Stdlib only — no web framework, so nothing new to pin. Bytes fields (e.g. a command's stdout)
+are base64-encoded in the JSON, since the response must round-trip arbitrary output losslessly;
+the authoritative raw bytes are in the evidence store either way. The same module provides a tiny
+client (``request``/``get_json``/``post_json``) so the CLI, tests and later herdr talk to the
+socket the same way.
 """
 
+import base64
 import dataclasses
 import http.client
 import json
@@ -34,9 +41,11 @@ def default_socket_path() -> Path:
 
 
 def _jsonable(obj):
-    """Serialize the core's dataclasses / Paths to plain JSON types."""
+    """Serialize the core's dataclasses / Paths / bytes to plain JSON types."""
     if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
         return {k: _jsonable(v) for k, v in dataclasses.asdict(obj).items()}
+    if isinstance(obj, bytes):
+        return base64.b64encode(obj).decode()   # lossless; command output may be non-text
     if isinstance(obj, dict):
         return {k: _jsonable(v) for k, v in obj.items()}
     if isinstance(obj, (list, tuple)):
@@ -46,16 +55,50 @@ def _jsonable(obj):
     return obj
 
 
-# ---- routes (read-only) --------------------------------------------------------------------
-# Each returns a JSON-able value from one core call. A route raises VerifyError (-> 404) or
-# FileNotFoundError (-> 404) exactly as the core does; anything else is a 500.
+# ---- routes ---------------------------------------------------------------------------------
+# Each returns a JSON-able value from exactly one core call. A route raises VerifyError (-> 404)
+# or FileNotFoundError (-> 404) exactly as the core does; anything else is a 500. POST routes
+# also take the parsed JSON body and validate their inputs (-> 400 on bad input).
 
-def _route(method: str, parts: list[str]) -> Callable[[], object] | None:
-    if method != "GET":
-        return None
+MAX_BODY_BYTES = 1 << 20
+
+
+class BadRequest(Exception):
+    """Malformed request input (-> 400)."""
+
+
+def _str(body: dict, key: str) -> str:
+    v = body.get(key)
+    if not isinstance(v, str) or not v.strip():
+        raise BadRequest(f"{key!r} must be a non-empty string")
+    return v
+
+
+def _opt_bool(body: dict, key: str, default: bool) -> bool:
+    v = body.get(key, default)
+    if not isinstance(v, bool):
+        raise BadRequest(f"{key!r} must be a boolean")
+    return v
+
+
+def _opt_str(body: dict, key: str) -> str | None:
+    v = body.get(key)
+    if v is not None and (not isinstance(v, str) or not v.strip()):
+        raise BadRequest(f"{key!r} must be a non-empty string when present")
+    return v
+
+
+def _opt_number(body: dict, key: str) -> float | None:
+    v = body.get(key)
+    if v is not None and (not isinstance(v, (int, float)) or isinstance(v, bool) or v <= 0):
+        raise BadRequest(f"{key!r} must be a positive number when present")
+    return v
+
+
+def _get_route(parts: list[str]) -> Callable[[], object] | None:
     match parts:
         case ["health"]:
-            return lambda: {"ok": True, "service": "rhubarb", "readonly": True}
+            return lambda: {"ok": True, "service": "rhubarb"}
         case ["images"]:
             return api.images
         case ["clones"]:
@@ -68,6 +111,21 @@ def _route(method: str, parts: list[str]) -> Callable[[], object] | None:
             return lambda: api.verify_evidence(eid)
         case ["provenance", vm]:
             return lambda: api.provenance(vm)
+    return None
+
+
+def _post_route(parts: list[str]) -> Callable[[dict], object] | None:
+    match parts:
+        case ["engagements", eid, "provision"]:
+            return lambda _b: api.provision(eid)
+        case ["engagements", eid, "collect"]:
+            return lambda _b: api.collect(eid)
+        case ["engagements", eid, "seal"]:
+            return lambda b: {"vault": str(api.seal_vault(eid, out_dir=_opt_str(b, "out_dir")))}
+        case ["engagements", eid, "teardown"]:
+            return lambda b: {"removed": api.teardown(eid, collect_first=_opt_bool(b, "collect_first", True))}
+        case ["clones", name, "exec"]:
+            return lambda b: api.exec(name, _str(b, "command"), timeout=_opt_number(b, "timeout"))
     return None
 
 
@@ -86,23 +144,63 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def do_GET(self) -> None:
-        parts = [p for p in self.path.split("?", 1)[0].strip("/").split("/") if p]
-        handler = _route("GET", parts)
-        if handler is None:
-            self._send(404, {"error": f"no such route: /{'/'.join(parts)}"})
-            return
+    def _parts(self) -> list[str]:
+        return [p for p in self.path.split("?", 1)[0].strip("/").split("/") if p]
+
+    def _run(self, call: Callable[[], object]) -> None:
         try:
-            self._send(200, handler())
+            self._send(200, call())
+        except BadRequest as e:
+            self._send(400, {"error": str(e)})
         except (VerifyError, FileNotFoundError) as e:
             self._send(404, {"error": str(e)})
         except Exception as e:  # noqa: BLE001 - a route bug must not take the socket down
             self._send(500, {"error": f"{type(e).__name__}: {e}"})
 
-    def _reject(self) -> None:
-        self._send(405, {"error": "read-only service: only GET is supported in this slice"})
+    def do_GET(self) -> None:
+        parts = self._parts()
+        handler = _get_route(parts)
+        if handler is None:
+            code, msg = (405, "method not allowed") if _post_route(parts) else \
+                        (404, f"no such route: /{'/'.join(parts)}")
+            self._send(code, {"error": msg})
+            return
+        self._run(handler)
 
-    do_POST = do_PUT = do_DELETE = do_PATCH = _reject
+    def _read_body(self) -> dict:
+        n = int(self.headers.get("Content-Length") or 0)
+        if n < 0 or n > MAX_BODY_BYTES:
+            raise BadRequest(f"request body too large (> {MAX_BODY_BYTES} bytes)")
+        raw = self.rfile.read(n) if n else b""
+        if not raw:
+            return {}
+        try:
+            body = json.loads(raw)
+        except ValueError:
+            raise BadRequest("body is not valid JSON") from None
+        if not isinstance(body, dict):
+            raise BadRequest("body must be a JSON object")
+        return body
+
+    def do_POST(self) -> None:
+        parts = self._parts()
+        handler = _post_route(parts)
+        if handler is None:
+            code, msg = (405, "method not allowed") if _get_route(parts) else \
+                        (404, f"no such route: /{'/'.join(parts)}")
+            self._send(code, {"error": msg})
+            return
+        try:
+            body = self._read_body()
+        except BadRequest as e:
+            self._send(400, {"error": str(e)})
+            return
+        self._run(lambda: handler(body))
+
+    def _reject(self) -> None:
+        self._send(405, {"error": "method not allowed"})
+
+    do_PUT = do_DELETE = do_PATCH = _reject
 
 
 class _Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
@@ -170,12 +268,14 @@ class _UnixConnection(http.client.HTTPConnection):
         self.sock = sock
 
 
-def request(socket_path: str | Path, method: str, path: str,
+def request(socket_path: str | Path, method: str, path: str, body: dict | None = None,
             timeout: float = 30) -> tuple[int, object]:
     """One request to the service socket; returns (status, decoded-JSON-body)."""
     conn = _UnixConnection(str(socket_path), timeout=timeout)
     try:
-        conn.request(method, path)
+        data = json.dumps(body).encode() if body is not None else None
+        headers = {"Content-Type": "application/json"} if data is not None else {}
+        conn.request(method, path, body=data, headers=headers)
         resp = conn.getresponse()
         raw = resp.read()
         try:
@@ -194,3 +294,14 @@ def get_json(socket_path: str | Path, path: str) -> object:
         msg = body.get("error") if isinstance(body, dict) else body
         raise VerifyError(f"service {path} -> {status}: {msg}")
     return body
+
+
+def post_json(socket_path: str | Path, path: str, body: dict | None = None,
+              timeout: float = 300) -> object:
+    """POST a guarded action and return its body, raising ``VerifyError`` on a non-200. The
+    default timeout is generous because actions (provision, teardown) can take minutes."""
+    status, out = request(socket_path, "POST", path, body=body or {}, timeout=timeout)
+    if status != 200:
+        msg = out.get("error") if isinstance(out, dict) else out
+        raise VerifyError(f"service POST {path} -> {status}: {msg}")
+    return out

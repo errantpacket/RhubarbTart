@@ -1,165 +1,153 @@
 # RhubarbTart capability demo — run of show
 
-A ~6–8 minute recorded walkthrough of the full agent-driven-engagement chain: **verified images →
-engagement → network isolation → a real Claude agent under herdr → the scoped range client →
-tiered-action approval → evidence → a signed, sealed vault.**
+A ~7–9 minute recorded walkthrough of **RhubarbTart**: provenance-verified guest images, disposable
+clones with per-clone identity, engagements as a bounded scope, host-enforced network isolation, a
+control-plane over one audited core, tamper-evident evidence, and a signed portable vault — plus,
+as one capability among them, handing a range to an autonomous agent on a leash.
 
-The centerpiece is the **herdr TUI**. Keep a second terminal ("operator terminal") beside it for
-the `rhubarb` commands.
+**Layout.** Your **operator terminal** (the `rhubarb` CLI) is the star and stays on screen the
+whole time. Open a **herdr** window too — you only switch to it for Scene 6 (the agent). herdr is
+the agent runtime here, not the point; RhubarbTart is.
+
+Run everything from the repo root. `./rhubarb …` loads the pinned toolchain itself; for the
+`rbt-range` steps, export the two env vars shown in Scene 6.
 
 ---
 
 ## Before you record (off camera)
 
-1. From the repo root: `./demo/preflight.sh`
-   It provisions the lab from verified images, boots both clones, starts the control-plane
-   service, and opens the network link. Wait for **`READY`**.
-2. Open **herdr** in the window you'll record. Have the operator terminal ready beside it.
+1. `./demo/preflight.sh` — provisions the lab from verified images, boots both clones, starts the
+   control-plane service, and opens the network link. Wait for **`READY`**.
+2. Open **herdr** in the window you'll record (only needed at Scene 6).
 3. Have `demo/agent-task.md` open to paste from.
-4. Optional: `./demo/teardown.sh && ./demo/preflight.sh --reset` for a perfectly clean take.
+4. For a perfectly clean take: `./demo/teardown.sh && ./demo/preflight.sh --reset`, and clear any
+   prior evidence: `rm -rf ~/Library/Application\ Support/RhubarbTart/evidence/juiceshop-lab`.
 
-Everything below runs from the repo root with `source scripts/env.sh` already done in the operator
-terminal (or just use `./rhubarb …`, which loads the toolchain itself).
+Note `jsl-target`'s IP for Scene 4: `tart ip jsl-target`.
 
 ---
 
-## Scene 1 — What we're starting from (30s)
+## Scene 1 — Provenance you can trust (75s)
 
-**Say:** "Every guest here is built from pinned, verified inputs and proven hardened before it's
-named. Work happens only in disposable clones."
+**Say:** "Every guest is built from pinned inputs, verified twice, hardened, and proven from the
+outside before it's even named. The name *is* the hash of its inputs."
 
 ```sh
-./rhubarb images          # verified rbt-* images, current per profile
-./rhubarb list            # the engagement's clones, cloned from those images
+./rhubarb images                              # rbt-<profile>-<inputs-sha>, current per profile
+./demo/show-provenance.sh jsl-target          # what it was built from, and how
 ```
 
-**Point out:** the clones are `jsl-attacker` (Kali) and `jsl-target` (Juice Shop), each with its
-own rotated password, tagged to the `juiceshop-lab` engagement.
+**Point out:** the OS base and packages are pinned; the build toolchain (tart) is signed and
+notarized; it records the exact git commit; SSH was sealed key-only from the host. Nothing floats.
 
-## Scene 2 — The engagement is a bounded scope (30s)
+## Scene 2 — Disposable clones, unique identity (45s)
 
-**Say:** "An engagement is a committed, reviewable scope manifest — no manifest, no run."
+**Say:** "You never run the image. You run throwaway clones — each with its own rotated password,
+no shared identity."
+
+```sh
+./rhubarb list          # jsl-attacker + jsl-target, each PASSWORD=unique, tagged to the engagement
+```
+
+## Scene 3 — An engagement is a bounded, reviewable scope (45s)
+
+**Say:** "A whole scope is one committed manifest — ranges to stand up, and the one network path
+allowed. No manifest, no run. It provisions and tears down as a unit."
 
 ```sh
 ./rhubarb engagement list
-cat engagements/juiceshop-lab.json        # ranges + the single sanctioned network link
+cat engagements/juiceshop-lab.json
 ```
 
-## Scene 3 — Network isolation is real (60s)
+## Scene 4 — Host-enforced network isolation (75s)
 
-**Say:** "The clones can't reach each other. The only path is the one link the manifest declares."
+**Say:** "Clones can't reach each other. The only path is the one link the manifest declares — and
+it's enforced below the guest, so a compromised agent can't widen it."
 
 ```sh
-# Direct attacker -> target is blocked by vmnet isolation:
-./rhubarb ssh jsl-attacker -- 'curl -s -m 5 -o /dev/null -w "direct target: %{http_code}\n" http://TARGET_IP:3000/ || echo "direct target: unreachable"'
-
-# Over the declared link, the target shows up on the attacker's own loopback:
+TIP=$(tart ip jsl-target)
+# direct attacker -> target: blocked
+./rhubarb ssh jsl-attacker -- "curl -s -m5 -o /dev/null -w 'direct: %{http_code}\n' http://$TIP:3000/ || echo 'direct: unreachable'"
+# over the declared link, the target is on the attacker's own loopback:
 ./rhubarb ssh jsl-attacker -- 'curl -s http://127.0.0.1:3000/ | grep -o "<title>[^<]*</title>"'
-```
-
-**Say:** "And the target has no way out — an exploited Juice Shop can't reach your LAN, the
-internet, or your Mac." (Optional, quick:)
-
-```sh
+# and the target itself has no way out:
 ./rhubarb ssh jsl-target -- 'systemctl show -p IPAddressDeny --value juice-shop'
 ```
 
-> Replace `TARGET_IP` with the address `tart ip jsl-target` prints (preflight showed it). Or skip
-> the direct-check line and just show the link working — the isolation point still lands.
+## Scene 5 — One audited core, many surfaces (45s)
 
-## Scene 4 — Arm a real agent under herdr (60s)
-
-**Say:** "Now we hand this to an autonomous agent — but on a leash. `arm` launches it in herdr,
-pinned to one clone, whose only tool to touch the range is the scoped `rbt-range` client."
+**Say:** "The CLI, the dashboard, and the service all call one audited core — nothing else touches
+`tart` or the keychain. Here's the control-plane service on a private socket."
 
 ```sh
-cat engagements/juiceshop-lab.herdr.json   # which agent, what kind, which clone; and tiered rules
-./rhubarb herdr arm juiceshop-lab
+./rhubarb serve            # already running from preflight — show it, or `rhubarb list` again
 ```
 
-**Switch to herdr.** A workspace `rbt-juiceshop-lab` opened with a `recon` agent pane. Show the
-sidebar/agent state.
+*(Optional visual: `./rhubarb-tui` for the image/clone/provenance dashboard, then back.)*
 
-## Scene 5 — The agent works, on the sanctioned path (90s)
+## Scene 6 — Hand a range to an agent, on a leash (90s) — herdr
 
-Paste the prompt from **`demo/agent-task.md`** into the `recon` pane. The agent does its read-only
-recon live:
+**Say:** "RhubarbTart can also hand a range to an autonomous agent. herdr runs it; RhubarbTart
+bounds it. The agent's *only* way to touch the box is a scoped client, and everything it runs is
+recorded."
 
-1. confirms access (`rbt-range -- id`),
-2. reads the local Juice Shop challenge API.
+```sh
+cat engagements/juiceshop-lab.herdr.json     # which agent, kind, clone; and the tiered rules
+./rhubarb herdr arm juiceshop-lab            # launches the agent in herdr, pinned to jsl-attacker
+```
 
-**Say:** "Everything it does goes through the control plane and is recorded as evidence on the
-host — where the guest under test can't tamper with it. It has no other way to touch the box, and
-no way off it."
+**Switch to herdr**, paste the prompt from `demo/agent-task.md` into the `recon` pane, and let it
+do its read-only recon (`rbt-range -- id`, read the challenge API). Narrate: every call goes
+through the control plane and is journaled on the host.
 
-> **Who runs steps 3–4.** Claude Code's own auto-mode classifier gates in-guest filesystem writes,
-> so a fully-autonomous agent may stop before the write/cleanup steps. Two reliable options:
-> - **Operator-driven (recommended for a recording):** you run steps 3–4 in your operator terminal
->   with the same `rbt-range` (env already exported by `arm` in the agent pane; in your terminal
->   set `RBT_SERVICE_SOCKET` and `RBT_RANGE_CLONE=jsl-attacker`). Deterministic, always completes.
-> - **Agent-driven:** allow `./rbt-range` in the agent's Claude Code permissions first, then the
->   agent completes 3–4 itself (step 4 pauses for your approval).
->
-> Either way the evidence and the approval exchange are identical. The rest of this script uses the
-> operator terminal for steps 3–4.
+> The agent's own Claude Code classifier gates in-guest writes, so you drive the write + the gated
+> action yourself in Scene 7 (same tool, deterministic). To let the agent do it instead, allow
+> `./rbt-range` in its Claude Code permissions first.
 
-Operator terminal (steps 3–4 continue in Scene 6):
+## Scene 7 — The scoped client + a gated sensitive action (90s)
+
+Back in the **operator terminal**:
 
 ```sh
 export RBT_SERVICE_SOCKET="$HOME/Library/Application Support/RhubarbTart/service.sock"
 export RBT_RANGE_CLONE=jsl-attacker
-# step 3 — write a note into the clone (not tiered, runs immediately):
+
+# a normal action runs and is recorded:
 ./rbt-range -- "mkdir -p ~/evidence && printf '# Note\nJuice Shop reachable on the lab link.\n' > ~/evidence/note.md && echo saved"
-```
 
-## Scene 6 — A sensitive action pauses for approval (90s)
-
-Now run the **destructive** step (a scratch cleanup). Destructive operations are marked **tiered**
-in the herdr config, so it's held for approval. Run it in the background so you can approve it:
-
-```sh
-# step 4 — a destructive cleanup; this is held for approval:
+# a destructive action is TIERED — it's held for approval:
 ./rbt-range -- "mkdir -p ~/scratch && date > ~/scratch/tmp && rm -rf ~/scratch && echo cleaned" &
+./rhubarb herdr pending juiceshop-lab                 # the held command + its request id
+./rhubarb herdr approve juiceshop-lab <REQUEST_ID>    # single-use grant
 ```
 
-`rbt-range` prints `APPROVAL REQUIRED … request <id>` and waits. Show the held request:
+**Say:** "Sensitive actions pause for a human. The grant is single-use, and the whole
+request → grant → run exchange is on the record." The backgrounded command prints `cleaned`.
+
+## Scene 8 — Tamper-evident evidence (60s)
+
+**Say:** "Every command, output, artifact, approval, and the app's own ground truth — one
+hash-chained journal on the host, where the guest under test can't touch it."
 
 ```sh
-./rhubarb herdr pending juiceshop-lab      # the held command + its request id
+./rhubarb evidence collect juiceshop-lab     # pull artifacts + Juice Shop's challenge ground truth
+./rhubarb evidence list juiceshop-lab        # exec / artifact / ground_truth / approval / lifecycle
+./rhubarb evidence verify juiceshop-lab      # recompute the chain and every item
 ```
 
-**Say:** "The operator decides. Grants are single-use and recorded."
+## Scene 9 — A signed, portable vault (45s)
 
-```sh
-./rhubarb herdr approve juiceshop-lab <REQUEST_ID>
-```
-
-The backgrounded `rbt-range` resumes and prints `cleaned`. The point is the *gate*, and that the
-whole request → grant → consume → run exchange lands in the evidence journal.
-
-## Scene 7 — The evidence (60s)
-
-**Say:** "Every command, output, artifact, and the approval exchange is one hash-chained journal."
-
-```sh
-./rhubarb evidence collect juiceshop-lab   # pull the agent's ~/evidence + Juice Shop ground truth
-./rhubarb evidence list juiceshop-lab      # exec, artifact, ground_truth, approval, lifecycle
-./rhubarb evidence verify juiceshop-lab    # recompute the chain and every item
-```
-
-## Scene 8 — Seal a signed, portable vault (45s)
-
-**Say:** "Finally we seal it: a signed, read-only bundle that verifies anywhere with nothing but
-the bundle."
+**Say:** "Finally, seal it: a signed, read-only bundle that verifies anywhere with nothing but the
+bundle — the same offline key that signs our images."
 
 ```sh
 ./rhubarb vault seal juiceshop-lab --out /private/tmp/rbt-demo/vaults
 ./rhubarb vault verify /private/tmp/rbt-demo/vaults/juiceshop-lab-*.vault
 ```
 
-**Close:** "Verified image, bounded engagement, host-enforced isolation, an agent that can only
-reach its range through a recorded, gated path, and signed evidence at the end. That's the whole
-chain."
+**Close:** "Verified, hardened images. Disposable clones. A bounded engagement. Isolation enforced
+below the guest. A recorded, gated path for anything that runs — human or agent. And signed
+evidence at the end. That's RhubarbTart."
 
 ---
 
@@ -167,16 +155,13 @@ chain."
 
 ```sh
 ./demo/teardown.sh
-# optional, to remove this run's evidence store:
-# rm -rf ~/Library/Application\ Support/RhubarbTart/evidence/juiceshop-lab
+# optional: rm -rf ~/Library/Application\ Support/RhubarbTart/evidence/juiceshop-lab
 ```
 
 ## If something stalls on camera
 
-- **Agent ignores `rbt-range`:** re-paste step 1 from `demo/agent-task.md`; the prompt says it's
-  the only tool.
 - **Link check fails:** `./rhubarb ssh jsl-attacker -- 'curl -sf http://127.0.0.1:3000/ >/dev/null && echo ok'`;
-  if not ok, the link (a background `engagement connect`) may have dropped — re-run
-  `./demo/preflight.sh` to reopen it.
+  if not ok, re-run `./demo/preflight.sh` to reopen the link.
 - **`herdr arm` says the service isn't running:** `./demo/preflight.sh` restarts it.
-- **You want a clean slate:** `./demo/teardown.sh && ./demo/preflight.sh --reset`.
+- **Agent won't do the write steps:** expected — drive Scene 7 yourself; the tooling is identical.
+- **Clean slate:** `./demo/teardown.sh && ./demo/preflight.sh --reset`.

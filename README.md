@@ -223,7 +223,14 @@ Open work is tracked in the [issue tracker](https://github.com/errantpacket/Rhub
 | On hold | [#28](https://github.com/errantpacket/RhubarbTart/issues/28) A standard (non-admin) account for daily use; the design options are in the issue |
 | Roadmap | [#33](https://github.com/errantpacket/RhubarbTart/issues/33) The `herdr` agent management service |
 | Roadmap | [#37](https://github.com/errantpacket/RhubarbTart/issues/37) A published documentation site |
-| Decision | [#34](https://github.com/errantpacket/RhubarbTart/issues/34) Choose a license |
+
+## License
+
+RhubarbTart is licensed under the [Functional Source License 1.1 (Apache-2.0 future
+license)](LICENSE.md) (`FSL-1.1-ALv2`): free for personal, internal, educational and research use;
+the only restriction is using it to build a competing commercial product, and the license converts
+to Apache-2.0 two years after each release. Third-party components keep their own licenses, listed
+in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
 ---
 

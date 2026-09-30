@@ -210,7 +210,7 @@ elif a[0] == "delete-generic-password":
         _stub(bindir, "ssh", 'print("admin@x: Permission denied (publickey).", file=sys.stderr); sys.exit(255)\n')
         _stub(bindir, "ssh-keygen", "sys.exit(0)\n")
         env = dict(os.environ, PATH=f"{bindir}:{os.environ['PATH']}", STUB=str(t),
-                   RHUBARB_STATE_DIR=str(t / "state"), RHUBARB_SSH_WAIT="5")
+                   RHUBARB_STATE_DIR=str(t / "state"), RHUBARB_SSH_WAIT="5", RHUBARB_SSH_DENIED_RETRY="0")
 
         def rb(*args, inp=None):
             return subprocess.run([sys.executable, str(root / "tools" / "rhubarb_cli.py"), *args],
@@ -674,6 +674,39 @@ def test_github_release_resolver() -> None:
             check("github-release: malformed repo refused", True)
     finally:
         packages.get_json = orig
+
+
+def test_reset_keeps_engagement() -> None:
+    """#89: `rhubarb reset` re-clones under the same name and must keep the clone's engagement
+    tag, or the clone silently leaves its engagement and teardown orphans it."""
+    from rhubarb import api
+    from rhubarb import clones as cl
+    from rhubarb.locks import image_name
+    from rhubarb.profiles import load_profile
+    prof = load_profile("kali-research")
+    img = image_name(prof)
+    seen = {}
+    saved = (api._destroy, api._clone, api.hostops.local_vms, os.environ.get("RHUBARB_STATE_DIR"))
+    with tempfile.TemporaryDirectory() as d:
+        os.environ["RHUBARB_STATE_DIR"] = d
+        try:
+            cl.save(cl.new_record("jsl-attacker", prof, img, engagement="juiceshop-lab"))
+            api._destroy = lambda rec: False
+            api.hostops.local_vms = lambda: {img: {}}
+
+            def fake_clone(name, image, p, rotate, progress=None, engagement=None, from_registry=False):
+                seen.update(name=name, engagement=engagement)
+                return False, None
+            api._clone = fake_clone
+            api.reset("jsl-attacker", same_image=True, rotate=False)
+            check("reset re-clones with the clone's engagement tag", seen == {"name": "jsl-attacker",
+                                                                          "engagement": "juiceshop-lab"})
+        finally:
+            api._destroy, api._clone, api.hostops.local_vms, prev = saved
+            if prev is None:
+                os.environ.pop("RHUBARB_STATE_DIR", None)
+            else:
+                os.environ["RHUBARB_STATE_DIR"] = prev
 
 
 def test_rotation_script() -> None:
@@ -1230,7 +1263,10 @@ def test_ssh_client() -> None:
     refused = "ssh: connect to host 192.168.64.9 port 22: Connection refused"
     timeout = "ssh: connect to host 192.168.64.9 port 22: Operation timed out"
     check("boot-time errors keep waiting until ok", run_with([refused, timeout, None]) == ("ok", 3))
-    check("key rejection is final", run_with([refused, "admin@x: Permission denied (publickey)."])[0] == "denied")
+    deny = "admin@x: Permission denied (publickey)."
+    check("a key refusal is final only after 3 in a row (#88)", run_with([refused, deny, deny, deny]) == ("denied", 4))
+    check("a transient early-boot refusal recovers (#88)", run_with([refused, deny, None]) == ("ok", 3))
+    check("a refusal streak resets on a boot-time error", run_with([deny, refused, deny, deny, deny])[0] == "denied")
     try:
         run_with([refused, "Load key \"/k\": No such file\n$SSH_SK_PROVIDER did not resolve; disabling"])
         check("client-side ssh error fails fast", False)
@@ -1283,7 +1319,7 @@ if __name__ == "__main__":
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,
               test_sshd_T_normalization, test_kali_nopasswd_allowlist,
               test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
-              test_stacked_clones, test_github_release_resolver):
+              test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement):
         print(t.__name__)
         t()
     if FAILS:

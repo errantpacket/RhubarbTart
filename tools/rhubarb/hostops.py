@@ -217,6 +217,9 @@ def forget_host_key(name: str) -> None:
         subprocess.run(["ssh-keygen", "-R", name, "-f", str(KNOWN_HOSTS)], capture_output=True)
 
 
+DENIED_CONFIRMATIONS = 3      # consecutive key refusals before concluding the key is wrong (#88)
+
+
 def wait_for_ssh(name: str, username: str, ip: str, timeout: int | None = None,
                  progress=None) -> str:
     """'ok' | 'denied' (reachable, but our key isn't accepted: final) | 'unreachable'.
@@ -225,19 +228,32 @@ def wait_for_ssh(name: str, username: str, ip: str, timeout: int | None = None,
     SK provider, host key mismatch, config error): retrying can't fix those, and reporting
     them as 'unreachable' after the full wait sends the operator after a healthy guest. (#46)
 
+    A key refusal is only final after ``DENIED_CONFIRMATIONS`` in a row, a few seconds apart:
+    a freshly booted guest can refuse once while it's still coming up (seen on Kali, #88),
+    whereas a genuinely wrong key keeps being refused.
+
     ``progress`` (optional callable): emits a "waiting for SSH … Ns/Ms" line every ~20s so a
     long wait (a slow macOS first-boot clone) isn't a silent stall.
     """
     timeout = timeout or int(os.environ.get("RHUBARB_SSH_WAIT", "180"))
+    denied = 0
     start = time.time()
     deadline = start + timeout
     ticked = 0
-    while time.time() < deadline:
+    retry = float(os.environ.get("RHUBARB_SSH_DENIED_RETRY", "5"))
+    # Once a refusal has started, finish confirming it even past the deadline, so a wrong key is
+    # reported as 'denied', never as 'unreachable'.
+    while time.time() < deadline or 0 < denied < DENIED_CONFIRMATIONS:
         res = subprocess.run([*ssh_args(name, username, ip), "true"], capture_output=True, text=True)
         if res.returncode == 0:
             return "ok"
         if "Permission denied" in res.stderr:
-            return "denied"
+            denied += 1
+            if denied >= DENIED_CONFIRMATIONS:
+                return "denied"
+            time.sleep(retry)
+            continue
+        denied = 0
         if not any(t in res.stderr for t in _SSH_TRANSIENT):
             detail = res.stderr.strip().splitlines()[-1:] or [f"ssh exited {res.returncode}"]
             raise VerifyError(f"{name}: ssh failed on the host side, not waiting for it: {detail[0]}")

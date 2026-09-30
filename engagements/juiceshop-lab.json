@@ -1,0 +1,10 @@
+{
+  "id": "juiceshop-lab",
+  "label": "Juice Shop lab: Kali attacker against an OWASP Juice Shop target",
+  "operator": "errantpacket",
+  "authorization": "internal lab; the target is an intentionally vulnerable app we build and own (OWASP Juice Shop)",
+  "ranges": [
+    { "profile": "kali-research", "count": 1, "prefix": "jsl-attacker" },
+    { "profile": "juiceshop-target", "count": 1, "prefix": "jsl-target" }
+  ]
+}

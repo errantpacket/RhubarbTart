@@ -142,7 +142,7 @@ so it never holds either.
 | **Integrity** | SIP + Gatekeeper on | Signed binary cache only | Signed Kali archive only |
 | **VPN identity** | Wiped; enrolled per clone | Not created; enrolled per clone | Stopped + wiped; enrolled per clone |
 
-Every row is asserted during the build's seal step (or declared in `nix/`), and every observable
+Every row is asserted during the build's seal step (or declared in `guest/nixos/nix/`), and every observable
 row is re-checked from outside by `scripts/smoke-test.sh`.
 
 Where a tool forces a password onto a command line (Apple's provisioning API, the Kali

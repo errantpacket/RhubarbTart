@@ -76,7 +76,7 @@ provenance-pinned, disposable Linux clone. The package catalog has no container 
 add one, create a catalog entry in `config/packages/` with a `kali` (`distro`) or `nixos` (`nix`)
 variant, list it in a Linux profile, and rebuild (see [Define your own guest](profiles.md)). On
 NixOS, Docker and Podman are enabled through `virtualisation.*` options, which the package mapping
-in `nix/modules/packages.nix` does not cover yet, so that part is a build-code change.
+in `guest/nixos/nix/modules/packages.nix` does not cover yet, so that part is a build-code change.
 
 ### macOS guests: only with nested virtualization (M3 or newer)
 

@@ -126,7 +126,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `packer/macos/` · `packer/linux/` | Build templates per family |
 | `guest/macos/` · `guest/nixos/` · `guest/kali/` | In-guest verify/install (`install.sh`) and harden/seal (`finalize.sh`) scripts |
 | `guest/kali/preseed.cfg.tmpl` | Unattended Kali install (rendered per build, never committed rendered) |
-| `nix/` | The NixOS system definition (reads the staged profile) |
+| `guest/nixos/nix/` | The NixOS system definition (reads the staged profile), installed as `/etc/nixos` |
 | `scripts/` | `build.sh` · `smoke-test.sh` · `ssh.sh` · `enroll.sh` · `env.sh` · `registry.sh` (localhost OCI registry) · `signing-key.sh` (cosign key pair) · `publish.sh` (publish + verify signed images) · `vault.sh` (sign + verify a vault's root manifest) |
 | `docs/` | These pages; [`docs/README.md`](README.md) indexes guides, reference and design records, and `docs/images/` holds screenshots |
 | `LICENSE.md` · `THIRD-PARTY-NOTICES.md` | FSL-1.1-ALv2 licence · licences of the tools RhubarbTart runs and of Textual |

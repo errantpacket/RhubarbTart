@@ -103,7 +103,7 @@ check() {
   while IFS= read -r line; do echo "          $line"; done <<<"$hits"
 }
 
-BUILD_CODE=(packer guest scripts nix tools/bootstrap.sh tools/resolve.py tools/rhubarb)
+BUILD_CODE=(packer guest scripts tools/bootstrap.sh tools/resolve.py tools/rhubarb)
 
 check "no Homebrew in the toolchain path" \
   '(^|[;&|[:space:]])brew[[:space:]]' scripts tools/bootstrap.sh
@@ -114,11 +114,11 @@ check "no --from-ipsw=latest / from_ipsw = \"latest\"" \
 check "no default credentials in templates" \
   'default[[:space:]]*=[[:space:]]*"(admin|password|packer|kali|nixos)"' packer
 check "no NOPASSWD sudoers being written" \
-  'NOPASSWD[^#]*(tee|>)|visudo|wheelNeedsPassword[[:space:]]*=[[:space:]]*false' packer guest nix
+  'NOPASSWD[^#]*(tee|>)|visudo|wheelNeedsPassword[[:space:]]*=[[:space:]]*false' packer guest
 check "no auto-login configured (kcpassword/autoLoginUser writes)" \
-  '(^|[[:space:];&|])(xxd|install|cp|mv|tee)[[:space:]][^#]*kcpassword|defaults write[^#]*autoLoginUser|autoLogin\.enable[[:space:]]*=[[:space:]]*true|autologinUser[[:space:]]*=[[:space:]]*"|autologin-user=[^[:space:]]|logsInAutomatically=true' packer guest nix
+  '(^|[[:space:];&|])(xxd|install|cp|mv|tee)[[:space:]][^#]*kcpassword|defaults write[^#]*autoLoginUser|autoLogin\.enable[[:space:]]*=[[:space:]]*true|autologinUser[[:space:]]*=[[:space:]]*"|autologin-user=[^[:space:]]|logsInAutomatically=true' packer guest
 check "sshd never re-enables password/kbd-interactive auth" \
-  '(PasswordAuthentication|KbdInteractiveAuthentication)([[:space:]]+yes|[[:space:]]*=[[:space:]]*true)|PermitRootLogin[[:space:]]*=?[[:space:]]*"?yes' packer guest nix
+  '(PasswordAuthentication|KbdInteractiveAuthentication)([[:space:]]+yes|[[:space:]]*=[[:space:]]*true)|PermitRootLogin[[:space:]]*=?[[:space:]]*"?yes' packer guest
 check "Gatekeeper/SIP never disabled" \
   'spctl[[:space:]]+(--global-disable|--master-disable)|csrutil[[:space:]]+disable' packer guest scripts
 check "no log() helper shadowing macOS log(1) in guest scripts" \
@@ -131,9 +131,9 @@ check "bash 3.2 compatible (macOS /bin/bash: no assoc arrays, mapfile, \${x,,}, 
 check "preseed template carries no literal password (only @BOOTSTRAP@)" \
   'passwd/(user|root)-password(-again)?[[:space:]]+password[[:space:]]+[^@[:space:]]' guest/kali
 check "Linux guests never trust unsigned repos" \
-  'trusted=yes|allow-unauthenticated|AllowInsecureRepositories|require-sigs[[:space:]]*=[[:space:]]*false' guest nix
+  'trusted=yes|allow-unauthenticated|AllowInsecureRepositories|require-sigs[[:space:]]*=[[:space:]]*false' guest
 check "VPN secrets never baked (no auth keys / service tokens in build code)" \
-  'tskey-(auth|client)-[A-Za-z0-9]|auth_client_secret</key><string>[^$%<]' packer guest nix config
+  'tskey-(auth|client)-[A-Za-z0-9]|auth_client_secret</key><string>[^$%<]' packer guest config
 # Plain http is allowed only to loopback (the localhost-only registry, #32), never the network.
 hits="$(grep -rnE 'curl[^#]*http://' "${BUILD_CODE[@]}" 2>/dev/null \
   | grep -vE 'http://(127\.0\.0\.1|localhost)[:/"]' || true)"

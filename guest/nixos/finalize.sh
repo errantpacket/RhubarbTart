@@ -2,7 +2,7 @@
 # Runs as root in the live ISO after install.sh, as the LAST build step. Asserts the
 # posture of the *built* system (it has never booted), seals it, powers off.
 #
-# NixOS declares the posture (nix/modules/hardening.nix); these checks prove the
+# NixOS declares the posture (guest/nixos/nix/modules/hardening.nix); these checks prove the
 # declaration made it into the system that will boot.
 
 set -euo pipefail

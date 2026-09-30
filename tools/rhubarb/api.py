@@ -32,12 +32,16 @@ See docs/INTERFACE-PLAN.md, Stage A.
 import json
 import os
 import subprocess
+import tarfile
 import time
+import urllib.request
+from pathlib import PurePosixPath
 from collections.abc import Callable
 from dataclasses import dataclass
 
 from . import clones as _clones
 from . import engagements as _engagements
+from . import evidence as _evidence
 from . import hostops
 from .common import ROOT, VerifyError
 from .locks import image_name
@@ -289,6 +293,43 @@ class Tunnel:
     dst_ip: str
     ports: tuple[int, ...]
     argv: list[str]
+
+
+@dataclass(frozen=True)
+class ExecResult:
+    """The result of ``exec()``: one command run in a clone over its pinned SSH (#85).
+
+    exit_code:    the remote exit status (255: ssh itself failed; -1: timed out).
+    stdout/stderr: the full output, as bytes.
+    evidence_seq: the journal entry that recorded it, or ``None`` for an ad-hoc clone.
+    """
+
+    name: str
+    command: str
+    exit_code: int
+    stdout: bytes
+    stderr: bytes
+    timed_out: bool
+    evidence_seq: int | None
+
+
+@dataclass(frozen=True)
+class CollectResult:
+    """``collect()`` for one clone: artifacts pulled from its ``~/evidence``.
+
+    new:       paths recorded this time (new, or changed since the last collect).
+    unchanged: paths already recorded with the same content.
+    skipped:   entries refused, with why (not a regular file, unsafe path, too large).
+    note:      why nothing was pulled (not running, no ``~/evidence``), else ``None``.
+    ground_truth: the ground-truth snapshots taken (package ids), e.g. Juice Shop's challenges.
+    """
+
+    name: str
+    new: list[str]
+    unchanged: list[str]
+    skipped: list[str]
+    note: str | None = None
+    ground_truth: tuple[str, ...] = ()
 
 
 # ---- internal helpers ----------------------------------------------------------------------
@@ -881,10 +922,15 @@ def provision(engagement: str) -> ProvisionResult:
             continue
         created.append(new(name, image=img, engagement=eng.id))
         existing.add(name)
+    _evidence.append(eng.id, "lifecycle", {
+        "event": "provision", "skipped": skipped,
+        # which verified image each clone came from: the range's provenance (out/<image>.provenance.json)
+        "created": {c.name: c.image for c in created}})
     return ProvisionResult(engagement=eng.id, created=created, skipped=skipped)
 
 
-def teardown(engagement: str) -> list[str]:
+def teardown(engagement: str, collect_first: bool = True,
+             progress: ProgressFn | None = None) -> list[str]:
     """Tear down every clone tagged to ``engagement`` via ``rm`` (stop + delete + forget host
     key + drop any per-clone keychain entry, reaping strays so nothing is orphaned — #18).
 
@@ -892,10 +938,21 @@ def teardown(engagement: str) -> list[str]:
     engagements' clones and ad-hoc clones are untouched. Returns the removed names, in the
     order removed. Raises ``VerifyError`` / ``FileNotFoundError`` per the module docstring.
     """
+    doomed = engagement_clones(engagement)
+    if not doomed:
+        return []
+    # Evidence left in a clone dies with it: pull what we can first (#85). A stopped clone
+    # can't be reached, so it is noted in the journal rather than silently lost.
+    if collect_first:
+        for res in collect(engagement, progress=progress):
+            if res.note:
+                _emit(progress, f"{res.name}: not collected ({res.note})")
     removed: list[str] = []
-    for clone in engagement_clones(engagement):
+    for clone in doomed:
         rm(clone.name)
         removed.append(clone.name)
+    _evidence.append(engagement, "lifecycle", {"event": "teardown", "removed": removed,
+                                               "collected_first": collect_first})
     return removed
 
 
@@ -947,7 +1004,10 @@ def connect(engagement: str, progress: ProgressFn | None = None) -> None:
     is on stderr: e.g. the port is already bound on the source clone).
     """
     plan = connect_plan(engagement)
+    links = [{"src": t.src, "dst": t.dst, "dst_ip": t.dst_ip, "ports": list(t.ports)} for t in plan]
+    _evidence.append(engagement, "lifecycle", {"event": "connect", "links": links})
     procs: list[subprocess.Popen] = []
+    why = "interrupted"
     try:
         for t in plan:
             procs.append(subprocess.Popen(t.argv, stdin=subprocess.DEVNULL))
@@ -957,9 +1017,11 @@ def connect(engagement: str, progress: ProgressFn | None = None) -> None:
             for t, proc in zip(plan, procs, strict=True):
                 rc = proc.poll()
                 if rc is not None:
-                    raise VerifyError(f"link {t.src} -> {t.dst} closed (ssh exit {rc})")
+                    why = f"link {t.src} -> {t.dst} closed (ssh exit {rc})"
+                    raise VerifyError(why)
             time.sleep(1)
     finally:
+        _evidence.append(engagement, "lifecycle", {"event": "disconnect", "links": links, "why": why})
         for proc in procs:
             if proc.poll() is None:
                 proc.terminate()
@@ -968,3 +1030,172 @@ def connect(engagement: str, progress: ProgressFn | None = None) -> None:
                 proc.wait(timeout=10)
             except subprocess.TimeoutExpired:
                 proc.kill()
+
+
+# ---- evidence (#85) ------------------------------------------------------------------------
+# herdr's agents run on the host and act on clones only through here, so the record is kept on
+# the host where the guest can't touch it (evidence.py). Files a clone produces go in its
+# ~/evidence and are pulled, never pushed.
+
+EVIDENCE_DIR = "evidence"             # under the clone user's home
+MAX_ARTIFACT_BYTES = 512 * 1024 * 1024
+MAX_ARTIFACTS = 100_000
+
+
+def exec(name: str, command: str, timeout: float | None = None) -> ExecResult:  # noqa: A001
+    """Run ``command`` (a remote shell line, as with ``ssh host CMD``) in a running clone.
+
+    When the clone belongs to an engagement, the command, exit code, timing and full output
+    are journaled to that engagement's evidence *before* this returns. stdin is closed.
+    Raises ``VerifyError`` for an unknown/untrusted clone or one that isn't running.
+    """
+    rec = _clones.load(name)
+    ip = hostops.vm_ip(rec["name"], rec["family"], wait=30)
+    argv = [*hostops.ssh_args(rec["name"], rec["username"], ip), command]
+    started = _clones.now()
+    try:
+        res = subprocess.run(argv, stdin=subprocess.DEVNULL, capture_output=True, timeout=timeout)
+        out, err, rc, timed_out = res.stdout, res.stderr, res.returncode, False
+    except subprocess.TimeoutExpired as e:
+        out, err, rc, timed_out = e.stdout or b"", e.stderr or b"", -1, True
+    seq = None
+    if rec.get("engagement"):
+        entry = _evidence.append(rec["engagement"], "exec", {
+            "user": rec["username"], "command": command, "exit_code": rc, "timed_out": timed_out,
+            "started": started, "ended": _clones.now()}, clone=rec["name"],
+            blobs={"stdout": out, "stderr": err})
+        seq = entry["seq"]
+    return ExecResult(name=rec["name"], command=command, exit_code=rc, stdout=out, stderr=err,
+                      timed_out=timed_out, evidence_seq=seq)
+
+
+def _safe_member_path(name: str) -> str | None:
+    """A tar member name as a clean relative path, or ``None`` if it could escape or confuse
+    (absolute, ``..``, NUL, over-long). We never extract, but paths are recorded verbatim."""
+    if "\0" in name or len(name) > 1024:
+        return None
+    p = PurePosixPath(name)
+    if p.is_absolute() or ".." in p.parts:
+        return None
+    parts = [x for x in p.parts if x != "."]
+    return "/".join(parts) if parts else None
+
+
+def _collected(engagement: str, clone: str) -> dict[str, str]:
+    """path -> content sha256 of the latest artifact entry per path already journaled."""
+    seen: dict[str, str] = {}
+    for e in _evidence.entries(engagement):
+        if e.get("kind") == "artifact" and e.get("clone") == clone:
+            seen[e["data"]["path"]] = e["items"]["content"]
+    return seen
+
+
+def _ground_truth(engagement: str, rec: dict, ip: str) -> list[str]:
+    """Snapshot each package-declared ground-truth endpoint of the clone (host -> guest HTTP on
+    the vmnet address; e.g. Juice Shop's /api/Challenges/, which records what was solved)."""
+    taken = []
+    for pkg_id, variant in load_profile(rec["profile"])["packages"].items():
+        gt = variant.get("ground_truth")
+        if not gt:
+            continue
+        url = f"http://{ip}:{int(gt['port'])}{gt['path']}"
+        try:
+            with urllib.request.urlopen(url, timeout=15) as r:  # noqa: S310 (vmnet guest, http by design)
+                body, status = r.read(), r.status
+        except OSError as e:
+            _evidence.append(engagement, "ground_truth", {"package": pkg_id, "url": url,
+                                                          "error": str(e)}, clone=rec["name"])
+            continue
+        _evidence.append(engagement, "ground_truth", {"package": pkg_id, "url": url, "status": status},
+                         clone=rec["name"], blobs={"response": body})
+        taken.append(pkg_id)
+    return taken
+
+
+def _collect_clone(engagement: str, clone: Clone) -> CollectResult:
+    if clone.state != "running":
+        return CollectResult(name=clone.name, new=[], unchanged=[], skipped=[],
+                             note=f"{clone.state}, start it to collect")
+    rec = _clones.load(clone.name)
+    ip = hostops.vm_ip(rec["name"], rec["family"], wait=30)
+    # tar the folder on the guest and parse the stream here without extracting: the guest's
+    # bytes never become host paths. COPYFILE_DISABLE keeps macOS tar from adding ._ files.
+    remote = (f'[ -d "$HOME/{EVIDENCE_DIR}" ] || exit 0; '
+              f'COPYFILE_DISABLE=1 tar -cf - -C "$HOME/{EVIDENCE_DIR}" .')
+    argv = [*hostops.ssh_args(rec["name"], rec["username"], ip), remote]
+    proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE)
+    prior = _collected(engagement, rec["name"])
+    new, unchanged, skipped = [], [], []
+    count = 0
+    try:
+        head = proc.stdout.peek(1) if hasattr(proc.stdout, "peek") else b"x"
+        if head:
+            with tarfile.open(fileobj=proc.stdout, mode="r|") as tf:
+                for m in tf:
+                    count += 1
+                    if count > MAX_ARTIFACTS:
+                        skipped.append(f"(more than {MAX_ARTIFACTS} entries: stopped reading)")
+                        break
+                    path = _safe_member_path(m.name)
+                    if m.isdir() and path is not None or m.name in (".", "./"):
+                        continue
+                    if path is None:
+                        skipped.append(f"{m.name!r}: unsafe path")
+                        continue
+                    if not m.isreg():
+                        skipped.append(f"{path}: not a regular file")
+                        continue
+                    if m.size > MAX_ARTIFACT_BYTES:
+                        skipped.append(f"{path}: {m.size} bytes is over the {MAX_ARTIFACT_BYTES} limit")
+                        continue
+                    data = tf.extractfile(m).read()
+                    digest = _evidence.put_item(engagement, data)
+                    if prior.get(path) == digest:
+                        unchanged.append(path)
+                        continue
+                    _evidence.append(engagement, "artifact",
+                                     {"path": path, "size": len(data), "mtime": int(m.mtime)},
+                                     clone=rec["name"], blobs={"content": data})
+                    new.append(path)
+    except tarfile.TarError as e:
+        raise VerifyError(f"{rec['name']}: unreadable evidence stream ({e})") from None
+    finally:
+        proc.stdout.close()
+        err = proc.stderr.read().decode(errors="replace").strip()
+        rc = proc.wait()
+    if rc != 0:
+        raise VerifyError(f"{rec['name']}: collecting ~/{EVIDENCE_DIR} failed (exit {rc}): {err}")
+    note = None if count else f"no ~/{EVIDENCE_DIR} or it is empty"
+    truth = tuple(_ground_truth(engagement, rec, ip))
+    _evidence.append(engagement, "lifecycle", {"event": "collect", "new": len(new),
+                                               "unchanged": len(unchanged), "skipped": skipped},
+                     clone=rec["name"])
+    return CollectResult(name=rec["name"], new=new, unchanged=unchanged, skipped=skipped,
+                         note=note, ground_truth=truth)
+
+
+def collect(engagement: str, progress: ProgressFn | None = None) -> list[CollectResult]:
+    """Pull every engagement clone's ``~/evidence`` into the host evidence store, hashing each
+    file on arrival, and snapshot declared ground truth. Idempotent: unchanged files are not
+    journaled again. Stopped clones are reported (``note``), not started."""
+    _engagements.load_engagement(engagement)   # must be a defined engagement
+    results = []
+    for clone in engagement_clones(engagement):
+        res = _collect_clone(engagement, clone)
+        if not res.note or res.ground_truth:
+            _emit(progress, f"{res.name}: {len(res.new)} new, {len(res.unchanged)} unchanged, "
+                            f"{len(res.skipped)} skipped"
+                            + (f"; ground truth: {', '.join(res.ground_truth)}" if res.ground_truth else ""))
+        results.append(res)
+    return results
+
+
+def evidence_entries(engagement: str) -> list[dict]:
+    """The engagement's journal, oldest first. Read-only."""
+    return _evidence.entries(engagement)
+
+
+def verify_evidence(engagement: str) -> _evidence.VerifyReport:
+    """Recompute the engagement's evidence chain and item hashes. Read-only."""
+    return _evidence.verify(engagement)

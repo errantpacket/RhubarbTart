@@ -72,7 +72,7 @@ admin console):
 Add a function in `tools/rhubarb/packages.py` and register it in `RESOLVERS`. It returns
 `url, file, sha256` (None = TOFU), plus `version`, `size` and `hash_sources`. Follow `zap_mac`:
 discover the version from vendor metadata, locate the exact asset, and raise `VerifyError`
-instead of guessing. Any new crypto or parsing gets a case in `tools/test_rhubarb.py` that uses
+instead of guessing. Any new crypto or parsing gets a case in `tools/tests/test_verification.py` that uses
 reference-implementation values.
 
 ### 3. Guest side

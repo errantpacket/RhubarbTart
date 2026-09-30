@@ -63,7 +63,9 @@ rbt-<id>-<inputs12>-unverified ─▶ smoke-test.sh (throwaway clone) ─▶ tar
 | Vault root signing/verification (offline cosign) | `scripts/vault.sh` |
 | Regression guard | `tools/check.sh` |
 | Clone management CLI (thin adapter over the core) | `./rhubarb` → `tools/rhubarb_cli.py` → `tools/rhubarb/cli.py` → `tools/rhubarb/api.py` |
-| Typed core: the single import surface for every frontend. Clone and engagement orchestration (`new`/`run`/`ssh`/`exec`/`enroll`/`reset`/`rm`, `provision`/`connect`/`teardown`, `collect`, `seal_vault`), logs (`list_logs`/`read_log`/`tail_log`) | `tools/rhubarb/api.py` |
+| Typed core: the single import surface for every frontend. Clone and engagement orchestration (`new`/`run`/`ssh`/`exec`/`enroll`/`reset`/`rm`, `provision`/`connect`/`teardown`, `collect`, `seal_vault`). Re-exports the returned dataclasses and the logs API, so callers only import `api` | `tools/rhubarb/api.py` |
+| The frozen dataclasses every `api` function returns (`Image`, `CloneList`, `NewResult`, ...) | `tools/rhubarb/results.py` |
+| Logs for the TUI (`list_logs`/`read_log`/`tail_log`/`new_build_log`): regular files inside the state dir only, opened with `O_NOFOLLOW` | `tools/rhubarb/logs.py` |
 | Clone records (StrictModes-style store, `events.log` audit trail) | `tools/rhubarb/clones.py` |
 | tart / keychain / SSH / GUI-session ops, per-clone password rotation | `tools/rhubarb/hostops.py` (`ROTATE_SCRIPT`) |
 | Engagement manifests (load + strict validation, no tart/keychain/network) | `tools/rhubarb/engagements.py` |
@@ -133,7 +135,8 @@ success `password_account` becomes the clone's name. Every mutating command appe
 ## Control plane
 
 Engagements, evidence, the service and agents all live on the host and reach VMs only through
-`api.py`. Keep these properties; each has a test in `tools/test_rhubarb.py`.
+`api.py`. Keep these properties; each has a test in `tools/tests/` (`test_engagements`,
+`test_evidence`, `test_control_plane`).
 
 - **Engagement manifests** (`engagements/<id>.json`) are strictly validated like profiles: an
   unknown key or bad value is rejected. `provision` creates the ranges' clones (existing names
@@ -209,10 +212,17 @@ hash-locked in `tools/rhubarb_tui.py.lock` (check.sh verifies the pin and the lo
   `nix-prefetch-url --unpack <url>` followed by `nix hash convert --to sri`.
 - **Shell transports** (for example `enroll.sh`): run the embedded scripts with stub `sudo` and
   tool binaries on PATH, and assert what the stubs received and that temp secrets are gone.
-- **rhubarb CLI:** `tools/test_rhubarb.py` drives the real CLI against stand-in `tart`,
+- **Layout:** the self-tests live in `tools/tests/`, one module per area (`test_verification`,
+  `test_build`, `test_clones`, `test_engagements`, `test_evidence`, `test_control_plane`,
+  `test_logs`), with shared helpers in `tests/support.py`. `tools/test_rhubarb.py` is the one
+  runner: it runs them in a fixed order, each with a throwaway `RHUBARB_STATE_DIR`. Add a new
+  test to its area module and to the runner's `TESTS` list.
+- **rhubarb CLI:** `tests/test_clones.py` drives the real CLI against stand-in `tart`,
   `security` and `ssh` programs (`test_cli_lifecycle`), and the rotation script against a
-  simulated guest for all three OS paths (`test_rotation_script`). Both run in `check.sh`.
-- **Control plane:** the same file covers evidence (`test_evidence_store`,
+  simulated guest for all three OS paths (`test_rotation_script`, in `tests/test_build.py`).
+  Both run in `check.sh`.
+- **Control plane:** `tests/test_evidence.py`, `tests/test_control_plane.py` and
+  `tests/test_logs.py` cover evidence (`test_evidence_store`,
   `test_evidence_exec_collect`), vaults (`test_vault_seal_verify`, with a fake signer), the
   service and range client (`test_control_plane_service`, `test_scoped_range_client`), herdr and
   approvals (`test_herdr_arm`, `test_tiered_approvals`) and logs (`test_logs_api`).

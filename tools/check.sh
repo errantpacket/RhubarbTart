@@ -71,7 +71,7 @@ if command -v packer >/dev/null; then
 else skip "packer (run tools/bootstrap.sh)"; fi
 
 if command -v uv >/dev/null; then
-  if uv run --quiet --no-project python -m py_compile tools/*.py tools/rhubarb/*.py tools/rhubarb/tui/*.py tools/rhubarb/tui/actions/*.py
+  if uv run --quiet --no-project python -m py_compile tools/*.py tools/tests/*.py tools/rhubarb/*.py tools/rhubarb/tui/*.py tools/rhubarb/tui/actions/*.py
   then ok "python sources compile"; else bad "python syntax"; fi
   if uv run --quiet --no-project python tools/test_rhubarb.py >/dev/null
   then ok "self-tests (verification, clone records, CLI, core API, engagements, evidence, service)"

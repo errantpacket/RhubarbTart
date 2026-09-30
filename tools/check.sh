@@ -117,7 +117,7 @@ check "the host-only toolchain is not bypassed with 'source' of the pin file" \
 # The control-plane service (#104) must stay a thin client of the typed core: it may not reach
 # tart, the keychain (security) or ssh directly — only through api.py.
 check "control-plane service touches only the typed core (no direct tart/keychain/ssh)" \
-  '(^|[^a-zA-Z_.])(subprocess|hostops|os\.system|security |/usr/bin/security)' tools/rhubarb/service.py
+  '(^|[^a-zA-Z_.])(subprocess|hostops|os\.system|security |/usr/bin/security)' tools/rhubarb/service.py tools/rhubarb/agent.py
 
 # Evidence pulled from a guest is parsed, never unpacked onto the host (#85): the guest is under
 # test, and its archive could plant symlinks or ../ paths.

@@ -141,7 +141,7 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 |---|---|---|
 | `Kali needs RHUBARB_SSH_FROM to be the vmnet host IPv4` | Preseed server needs a concrete bind address | Set it to the vmnet host address (default `192.168.64.1`) |
 | `[serve-preseed] … never came up` | vmnet bridge didn't appear, or wrong address | Check `ifconfig bridge100`; match `RHUBARB_SSH_FROM` |
-| Installer stops at a question | Preseed didn't load (GRUB line mistyped) or a new question | Rebuild with `RHUBARB_HEADLESS=false` and read the question in the Tart window. Fix the key in `kali/preseed.cfg.tmpl` without adding secrets |
+| Installer stops at a question | Preseed didn't load (GRUB line mistyped) or a new question | Rebuild with `RHUBARB_HEADLESS=false` and read the question in the Tart window. Fix the key in `guest/kali/preseed.cfg.tmpl` without adding secrets |
 | `VM terminated with error: signal: trace/BPT trap` | A second VNC client was attached to the build's `vnc://127.0.0.1:…` URL; Tart's experimental VNC server asserts (#51) | Never attach a viewer to a running build; use `RHUBARB_HEADLESS=false` instead |
 | GRUB shows no prompt / boots the wrong entry | `c` pressed too early or late | Adjust `<wait10s>` in `packer/linux/kali.pkr.hcl` |
 | Packer times out after 120 min | Slow mirror or a stuck install | Retry; check the console |

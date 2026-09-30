@@ -247,7 +247,7 @@ def ssh_record(keys_file: str | None, ssh_from: str) -> dict:
 def cmd_provenance(args) -> None:
     prof = load_profile(args.profile)
     lock = load_lock(prof)
-    tracked = sorted(p for d in ("config", "profiles", "packer", "guest", "nix", "kali", "scripts", "tools")
+    tracked = sorted(p for d in ("config", "profiles", "packer", "guest", "scripts", "tools")
                      if (ROOT / d).exists() for p in (ROOT / d).rglob("*")
                      if p.is_file() and "__pycache__" not in p.parts)
     vm_info = subprocess.run(["tart", "get", args.vm, "--format", "json"], capture_output=True, text=True)

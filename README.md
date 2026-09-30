@@ -229,7 +229,8 @@ flowchart TD
 | **[Reference](docs/reference.md)** | Updating inputs, configuration variables, host requirements and the toolchain |
 | **[Development](docs/development.md)** | Changing the code safely: `check.sh`, testing without a Mac, the Claude Code skills |
 
-Roadmap: [`docs/PLAN.md`](docs/PLAN.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Roadmap: [`docs/PLAN.md`](docs/PLAN.md). All pages, including the design records:
+[`docs/README.md`](docs/README.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md).
 Reporting security issues: [`SECURITY.md`](SECURITY.md).
 
 ## Open issues

@@ -82,10 +82,10 @@ reference-implementation values.
   `SHA256SUMS` check only. Add a self-updater disable if the tool has one; see the WARP updater.
 - **Kali:** `guest/kali/install.sh` installs `deb` and `distro` kinds generically. If the `.deb`
   adds an apt source, neutralize that the way Chrome's is.
-- **NixOS:** usually nothing, since `nix/modules/packages.nix` maps `attr`/`module`. Check with
+- **NixOS:** usually nothing, since `guest/nixos/nix/modules/packages.nix` maps `attr`/`module`. Check with
   the Docker eval recipe in `rhubarb-dev`. A tool built from a staged file (like Juice Shop's
   release tarball) needs its own module that selects the variant by a `service` field; see
-  `nix/modules/juice-shop.nix`.
+  `guest/nixos/nix/modules/juice-shop.nix`.
 - **Services:** a variant's `ports` are checked from outside by the smoke test and are the only
   ports an engagement `link` may forward to. A lab target must have no egress (Juice Shop:
   systemd `IPAddressDeny`, checked by the smoke test).

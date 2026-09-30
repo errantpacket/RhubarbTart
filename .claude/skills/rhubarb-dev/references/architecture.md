@@ -29,7 +29,7 @@ resolve.py verify <id>: cache vs lock ─▶ cache/stage/<id>/ {artifacts, SHA25
       ▼
 build.sh <id>:
   macos  packer/macos/vanilla-{26,27} (reused per base+build) ─▶ packer/macos/apps ─▶ guest/macos/*
-  nixos  packer/linux/nixos ─▶ guest/nixos/install.sh (nixos-install from nix/) ─▶ finalize.sh
+  nixos  packer/linux/nixos ─▶ guest/nixos/install.sh (nixos-install from guest/nixos/nix/) ─▶ finalize.sh
   kali   serve_preseed.py + packer/linux/kali ─▶ guest/kali/install.sh ─▶ finalize.sh
       ▼
 rbt-<id>-<inputs12>-unverified ─▶ smoke-test.sh (throwaway clone) ─▶ tart rename ─▶ provenance
@@ -53,8 +53,8 @@ rbt-<id>-<inputs12>-unverified ─▶ smoke-test.sh (throwaway clone) ─▶ tar
 | Toolchain pins, preflight | `tools/rhubarb/toolchain.py` |
 | Resolver CLI: plan, resolve, verify/staging, provenance, preflight, toolchain-pin | `tools/resolve.py` |
 | Offline self-tests; headless TUI render test | `tools/test_rhubarb.py`; `tools/test_rhubarb_tui.py` |
-| NixOS system definition | `nix/configuration.nix`, `nix/modules/{tart-vm,hardening,packages,desktop,juice-shop}.nix` |
-| Kali unattended install | `kali/preseed.cfg.tmpl`, `tools/serve_preseed.py` |
+| NixOS system definition | `guest/nixos/nix/configuration.nix`, `guest/nixos/nix/modules/{tart-vm,hardening,packages,desktop,juice-shop}.nix` |
+| Kali unattended install | `guest/kali/preseed.cfg.tmpl`, `tools/serve_preseed.py` |
 | Toolchain install; toolchain PATH | `tools/bootstrap.sh`; `scripts/env.sh` |
 | Orchestration, passwords, naming | `scripts/build.sh` |
 | External proof | `scripts/smoke-test.sh` |
@@ -198,7 +198,7 @@ hash-locked in `tools/rhubarb_tui.py.lock` (check.sh verifies the pin and the lo
   ```sh
   N=nixos/nix@sha256:85169a7ff4ac6928b70b15ced20c74770e07e8fbc7f97e92f64c1fca47ea9486
   mkdir -p /tmp/np /tmp/cfg && tar -xzf cache/artifacts/*/nixpkgs-*.tar.gz -C /tmp/np --strip-components=1
-  cp -r nix/. /tmp/cfg/ && cp cache/stage/nixos-research/{profile.json,lock.json} /tmp/cfg/
+  cp -r guest/nixos/nix/. /tmp/cfg/ && cp cache/stage/nixos-research/{profile.json,lock.json} /tmp/cfg/
   echo '{"from":"192.168.64.1"}' > /tmp/cfg/ssh.json && cp ~/.ssh/id_ed25519.pub /tmp/cfg/authorized_keys
   mkdir -p /tmp/cfg/artifacts   # a profile whose module builds from a staged file (juice-shop) needs it here
   docker run --rm -v /tmp/np:/nixpkgs:ro -v /tmp/cfg:/cfg $N nix-instantiate \

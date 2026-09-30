@@ -244,7 +244,7 @@ Open work is tracked in the [issue tracker](https://github.com/errantpacket/Rhub
 | Enhancement | [#100](https://github.com/errantpacket/RhubarbTart/issues/100) Encrypting sealed evidence vaults at rest |
 | Enhancement | [#94](https://github.com/errantpacket/RhubarbTart/issues/94) Moving lab targets onto Tart's native host-only network once it ships |
 | On hold | [#28](https://github.com/errantpacket/RhubarbTart/issues/28) A standard (non-admin) account for daily use; the design options are in the issue |
-| Roadmap | [#33](https://github.com/errantpacket/RhubarbTart/issues/33) herdr agent platform: the service and integration shipped (#104, #108); budget enforcement, prompt capture and a per-engagement agent VM remain |
+| Roadmap | [#126](https://github.com/errantpacket/RhubarbTart/issues/126) herdr agent platform: budget enforcement, prompt capture and a per-engagement agent VM (the service and integration shipped in #104 and #108) |
 | Roadmap | [#37](https://github.com/errantpacket/RhubarbTart/issues/37) A published documentation site |
 
 ## License

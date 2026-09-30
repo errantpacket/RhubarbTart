@@ -4,7 +4,8 @@
 before any herdr code, per the build order on #33. It governs what herdr may and may not do. The
 build followed in two parts: the control-plane service (#104) and the herdr integration (#108).
 The "Decisions" section records each runtime decision and its rationale, and notes where the build
-differs. Umbrella issue #33 is still open.*
+differs. The remaining work (budget enforcement, prompt capture, a per-engagement agent VM) is
+tracked in #126.*
 
 ## Why this document exists
 

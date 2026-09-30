@@ -120,7 +120,7 @@ class LogsPane(Horizontal):
             if same_order and self._cols:
                 # Same logs, same order: only size/time moved. Update those cells in place so
                 # the table (and the cursor) stay put.
-                for (rid, label, _kind, size, when), old in zip(rows, self._rows):
+                for (rid, label, _kind, size, when), old in zip(rows, self._rows, strict=True):
                     if (size, when) != (old[3], old[4]):
                         dim = "dim" if label.endswith("(removed)") else ""
                         table.update_cell(rid, self._cols[2], Text(size, style=dim))

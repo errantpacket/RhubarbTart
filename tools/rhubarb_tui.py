@@ -7,8 +7,9 @@
 Launched by the ``./rhubarb-tui`` shim. This is a *thin client*: it renders what
 the typed core API (``tools/rhubarb/api.py``) returns and never touches ``tart``
 or the keychain directly, and never calls any mutating operation
-(``new``/``run``/``enroll``/``reset``/``rm``). It is strictly read-only —
-``api.images()``, ``api.clones()`` and ``api.provenance(vm)`` only.
+(``new``/``run``/``enroll``/``reset``/``rm``). Its panes are strictly read-only —
+``api.images()``, ``api.clones()``, ``api.provenance(vm)``, and ``api.list_logs()`` /
+``api.read_log()`` for the Logs tab (#120).
 
 Textual is this repo's first third-party Python dependency. It is pinned to an
 exact version and hash-verified via uv's script lockfile
@@ -36,14 +37,15 @@ from rhubarb.tui import actions  # noqa: E402
 from rhubarb.tui.clones_pane import ClonesPane  # noqa: E402
 from rhubarb.tui.confirm import ConfirmScreen  # noqa: E402
 from rhubarb.tui.images_pane import ImagesPane  # noqa: E402
+from rhubarb.tui.logs_pane import LogsPane  # noqa: E402
 from rhubarb.tui.prompt import InputScreen, SelectScreen  # noqa: E402
 from rhubarb.tui.provenance_pane import ProvenancePane  # noqa: E402
 
 
 class RhubarbTUI(App):
-    """A tabbed, keyboard-driven view of images, clones and provenance.
+    """A tabbed, keyboard-driven view of images, clones, provenance and logs.
 
-    The three panes are strictly read-only (Stage B). Operator *actions* (Stage C)
+    The four panes are strictly read-only (Stage B). Operator *actions* (Stage C)
     are dispatched by the shell — never by the panes — through the action modules in
     ``rhubarb.tui.actions``: each runs in a Textual worker off the UI thread, streams
     its progress into the action log, and destructive actions confirm first via
@@ -63,9 +65,14 @@ class RhubarbTUI(App):
     }
     """
 
-    # Seconds between automatic read-only refreshes of the VISIBLE pane (each refresh spawns a
-    # `tart list`/pgrep, so we refresh only what's on screen, not all three every tick).
-    REFRESH_INTERVAL = 8.0
+    # Polling (#120). Only the VISIBLE pane refreshes, and its blocking read runs in a worker
+    # thread so a slow `tart list` never freezes the UI. The Logs tab tails every tick (plain
+    # file reads); panes that run `tart list` poll every SLOW_EVERY ticks.
+    TICK = 2.0
+    SLOW_EVERY = 4
+    _tick_n = 0
+    _polling = False          # a background refresh is in flight: skip the next one
+    _action_running = False   # an action worker is running: leave `tart` alone meanwhile
 
     # The row whose provenance to show when the Provenance tab is visible: ("image"|"clone", name).
     # Resolved lazily (a clone -> its source image) so navigation never pays for the read.
@@ -77,6 +84,7 @@ class RhubarbTUI(App):
         Binding("1", "show_tab('images')", "Images"),
         Binding("2", "show_tab('clones')", "Clones"),
         Binding("3", "show_tab('provenance')", "Provenance"),
+        Binding("4", "show_tab('logs')", "Logs"),
         # Actions on the highlighted clone (dispatched by the shell, run in a worker;
         # destructive ones confirm first).
         Binding("b", "run_clone", "Run"),
@@ -101,29 +109,44 @@ class RhubarbTUI(App):
                 yield ClonesPane(id="clones-pane")
             with TabPane("Provenance", id="provenance"):
                 yield ProvenancePane(id="provenance-pane")
+            with TabPane("Logs", id="logs"):
+                yield LogsPane(id="logs-pane")
         yield RichLog(id="action-log", markup=False, wrap=True, highlight=False)
         yield Footer()
 
     def _panes(self):
-        """The three pane widgets, in tab order."""
+        """The pane widgets, in tab order."""
         return (
             self.query_one("#images-pane", ImagesPane),
             self.query_one("#clones-pane", ClonesPane),
             self.query_one("#provenance-pane", ProvenancePane),
+            self.query_one("#logs-pane", LogsPane),
         )
 
     def on_mount(self) -> None:
         self.action_refresh_all()
-        # Auto-refresh only the pane on screen — refreshing all three every tick on the UI thread
-        # spawned several subprocesses per tick and made the TUI feel laggy.
-        self.set_interval(self.REFRESH_INTERVAL, self._refresh_active)
+        self.set_interval(self.TICK, self._tick)
 
     def action_refresh_all(self) -> None:
         """Reload every pane from the core API (read-only). Used on `r` and after an action."""
         for pane in self._panes():
             pane.refresh_data()
+        self._stamp()
 
-    _PANE_IDS = {"images": "#images-pane", "clones": "#clones-pane", "provenance": "#provenance-pane"}
+    def _stamp(self) -> None:
+        """Show when the data on screen was last read."""
+        import time
+
+        self.sub_title = f"control plane · updated {time.strftime('%H:%M:%S')}"
+
+    def _tick(self) -> None:
+        """The timer: tail the Logs tab every tick; poll `tart`-backed panes every SLOW_EVERY."""
+        self._tick_n += 1
+        if self._active_pane_id() == "#logs-pane" or self._tick_n % self.SLOW_EVERY == 0:
+            self._refresh_active()
+
+    _PANE_IDS = {"images": "#images-pane", "clones": "#clones-pane",
+                 "provenance": "#provenance-pane", "logs": "#logs-pane"}
 
     def _active_pane_id(self) -> str | None:
         try:
@@ -132,16 +155,44 @@ class RhubarbTUI(App):
             return None
 
     def _refresh_active(self) -> None:
-        """Reload just the visible pane (the periodic timer)."""
-        if self._active_pane_id() == "#provenance-pane":
-            self._update_provenance()
-            return
+        """Reload just the visible pane, its blocking read in a worker (timer and tab switch)."""
         pane_id = self._active_pane_id()
-        if pane_id:
-            try:
-                self.query_one(pane_id).refresh_data()
-            except Exception:
-                pass
+        if pane_id == "#provenance-pane":
+            self._update_provenance()   # one small file read: fine on the UI thread
+            return
+        if not pane_id or self._polling:
+            return
+        # While an action runs (a build, a reset), leave `tart list` alone; logs are plain file
+        # reads, so keep tailing them, e.g. to watch that build.
+        if self._action_running and pane_id != "#logs-pane":
+            return
+        try:
+            pane = self.query_one(pane_id)
+        except Exception:
+            return
+        self._polling = True
+        if pane_id != "#logs-pane":
+            self.sub_title = "control plane · refreshing…"
+        self._poll(pane)
+
+    @work(thread=True, group="rhubarb-poll")
+    def _poll(self, pane) -> None:
+        """Run a pane's blocking ``fetch()`` off the UI thread, then render on it."""
+        try:
+            data = pane.fetch()
+        except Exception as e:  # fetch() doesn't raise, but a poll must never kill the app
+            data = {"error": f"refresh failed: {e}"}
+        try:
+            self.call_from_thread(self._finish_poll, pane, data)
+        except Exception:
+            self._polling = False  # the app is shutting down
+
+    def _finish_poll(self, pane, data: dict) -> None:
+        self._polling = False
+        try:
+            pane.render_data(data)
+        finally:
+            self._stamp()
 
     def action_show_tab(self, tab: str) -> None:
         self.query_one(TabbedContent).active = tab
@@ -357,17 +408,22 @@ class RhubarbTUI(App):
         """Run ``module.handle(ctx)`` off the UI thread; report the outcome.
 
         Runs in a Textual thread worker so the (blocking) core API never freezes the
-        UI. All UI updates are marshalled back with ``call_from_thread``.
+        UI. All UI updates are marshalled back with ``call_from_thread``. While it runs, the
+        poller leaves `tart`-backed panes alone (see ``_refresh_active``).
         """
+        self._action_running = True
         try:
-            outcome = module.handle(ctx)
-        except NotImplementedError as e:
-            self.call_from_thread(self._log_action, f"{module.LABEL}: {e}", False)
-            return
-        except Exception as e:  # a handler bug must not take the app down
-            self.call_from_thread(self._log_action,
-                                  f"{module.LABEL} FAILED: {type(e).__name__}: {e}", False)
-            return
+            try:
+                outcome = module.handle(ctx)
+            except NotImplementedError as e:
+                self.call_from_thread(self._log_action, f"{module.LABEL}: {e}", False)
+                return
+            except Exception as e:  # a handler bug must not take the app down
+                self.call_from_thread(self._log_action,
+                                      f"{module.LABEL} FAILED: {type(e).__name__}: {e}", False)
+                return
+        finally:
+            self._action_running = False
         self.call_from_thread(self._apply_outcome, outcome)
 
     def _apply_outcome(self, outcome: "actions.ActionOutcome") -> None:
@@ -431,8 +487,27 @@ class RhubarbTUI(App):
         return None
 
 
+def mouse_enabled(argv: list[str], env) -> bool:
+    """Whether the TUI should capture the mouse.
+
+    The TUI is fully keyboard-driven. Inside herdr (``HERDR_PANE_ID`` set) mouse capture is
+    off by default so herdr keeps its own mouse handling (pane focus, scrolling, selection).
+    ``--mouse`` / ``--no-mouse`` or ``RHUBARB_TUI_MOUSE=1|0`` override that.
+    """
+    if "--no-mouse" in argv:
+        return False
+    if "--mouse" in argv:
+        return True
+    value = env.get("RHUBARB_TUI_MOUSE")
+    if value is not None:
+        return value.strip().lower() not in ("0", "false", "no", "off")
+    return not env.get("HERDR_PANE_ID")
+
+
 def main() -> None:
-    RhubarbTUI().run()
+    import os
+
+    RhubarbTUI().run(mouse=mouse_enabled(sys.argv[1:], os.environ))
 
 
 if __name__ == "__main__":

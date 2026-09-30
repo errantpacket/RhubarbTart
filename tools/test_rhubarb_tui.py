@@ -130,11 +130,246 @@ def _mock_provenance(vm):
     return MOCK_PROVENANCE
 
 
+MOCK_LOGS = {
+    "logs/build-kali-research-20260930T120000Z.log": (
+        api.LogRef(id="logs/build-kali-research-20260930T120000Z.log",
+                   label="build kali-research-20260930T120000Z", kind="build",
+                   size=2048, mtime="2026-09-30T12:05:00+00:00"),
+        "[build] installing kali\n[smoke] PASSED\n[build] done: rbt-kali-research-cc4479ae7492"),
+    "logs/work-1.log": (
+        api.LogRef(id="logs/work-1.log", label="work-1", kind="clone",
+                   size=64, mtime="2026-09-30T11:00:00+00:00"),
+        "tart run work-1\nbooted"),
+}
+
+
+def _mock_list_logs():
+    return [ref for ref, _ in sorted(MOCK_LOGS.values(), key=lambda v: v[0].mtime, reverse=True)]
+
+
+def _mock_read_log(log_id, max_lines=2000):
+    return MOCK_LOGS[log_id][1]
+
+
+def _view_text(app) -> str:
+    """The plain text in the Logs tab's viewer."""
+    from textual.widgets import Log
+
+    return "\n".join(str(line) for line in app.query_one("#logs-view", Log).lines)
+
+
+async def _logs_tab() -> None:
+    """#120: the Logs tab lists build/clone logs newest first, shows the highlighted log,
+    follows the selection, tails a log that grew, and the header shows when data was read."""
+    from textual.widgets import DataTable
+
+    api.images = _mock_images
+    api.clones = _mock_clones
+    api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
+
+    from rhubarb_tui import RhubarbTUI
+
+    app = RhubarbTUI()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("4")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        table = app.query_one("#logs-table", DataTable)
+        check("logs tab: lists every log", table.row_count == 2)
+        check("logs tab: newest first (the build)",
+              "build kali-research" in _row_text(table.get_row_at(0)))
+        check("logs tab: shows the newest log", "[smoke] PASSED" in _view_text(app))
+        check("header: shows when data was last read", "updated" in app.sub_title)
+
+        table.focus()
+        await pilot.press("down")
+        await pilot.pause()
+        check("logs tab: follows the highlighted log", "booted" in _view_text(app)
+              and "[smoke] PASSED" not in _view_text(app))
+
+        # The clone log grows: a refresh tails the new content.
+        ref, _ = MOCK_LOGS["logs/work-1.log"]
+        MOCK_LOGS["logs/work-1.log"] = (
+            api.LogRef(id=ref.id, label=ref.label, kind=ref.kind, size=128,
+                       mtime="2026-09-30T13:00:00+00:00"),
+            "tart run work-1\nbooted\nshutting down")
+        await pilot.press("r")
+        await pilot.pause()
+        check("logs tab: tails a log that grew", "shutting down" in _view_text(app))
+
+
+async def _polling() -> None:
+    """#120: the poller reads tart-backed panes OFF the UI thread, skips while a poll is in
+    flight, and leaves `tart` alone while an action runs."""
+    import threading
+
+    api.images = _mock_images
+    api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
+    seen = []
+
+    def counting_clones():
+        seen.append(threading.current_thread() is threading.main_thread())
+        return MOCK_CLONES
+
+    api.clones = counting_clones
+    from rhubarb_tui import RhubarbTUI
+
+    app = RhubarbTUI()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        await pilot.press("2")                         # Clones tab: the switch polls it
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("poller: the tab switch read clones off the UI thread",
+              seen and seen[-1] is False)
+        base = len(seen)
+
+        app._action_running = True
+        app._refresh_active()
+        await app.workers.wait_for_complete()
+        check("poller: leaves `tart` alone while an action runs", len(seen) == base)
+
+        app._action_running = False
+        app._polling = True
+        app._refresh_active()
+        await app.workers.wait_for_complete()
+        check("poller: skips while a poll is in flight", len(seen) == base)
+
+        app._polling = False
+        app._refresh_active()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("poller: refreshes the visible pane in a worker and clears the flag",
+              len(seen) == base + 1 and seen[-1] is False and not app._polling)
+
+
+def _test_mouse() -> None:
+    """Inside herdr the TUI leaves the mouse to herdr; flags and env override."""
+    from rhubarb_tui import mouse_enabled
+
+    check("mouse: on in a plain terminal", mouse_enabled([], {}))
+    check("mouse: off inside herdr", not mouse_enabled([], {"HERDR_PANE_ID": "w1:p1"}))
+    check("mouse: --mouse forces it on inside herdr",
+          mouse_enabled(["--mouse"], {"HERDR_PANE_ID": "w1:p1"}))
+    check("mouse: --no-mouse forces it off", not mouse_enabled(["--no-mouse"], {}))
+    check("mouse: RHUBARB_TUI_MOUSE=1 turns it on inside herdr",
+          mouse_enabled([], {"HERDR_PANE_ID": "w1:p1", "RHUBARB_TUI_MOUSE": "1"}))
+    check("mouse: RHUBARB_TUI_MOUSE=0 turns it off", not mouse_enabled([], {"RHUBARB_TUI_MOUSE": "0"}))
+
+
+async def _selection_survives() -> None:
+    """The highlighted row stays put across refreshes — when nothing changed, when a row's
+    values changed, and (Logs) when the list reorders."""
+    import dataclasses
+
+    from textual.widgets import DataTable
+
+    images = list(MOCK_IMAGES)
+    clones = MOCK_CLONES
+    logs = {
+        "logs/build-a.log": (api.LogRef(id="logs/build-a.log", label="build a", kind="build",
+                                        size=10, mtime="2026-09-30T12:00:00+00:00"), "build a out"),
+        "logs/work-1.log": (api.LogRef(id="logs/work-1.log", label="work-1", kind="clone",
+                                       size=10, mtime="2026-09-30T11:00:00+00:00"), "work-1 out"),
+    }
+    api.images = lambda: images
+    api.clones = lambda: clones
+    api.provenance = _mock_provenance
+    api.list_logs = lambda: [r for r, _ in sorted(logs.values(), key=lambda v: v[0].mtime,
+                                                  reverse=True)]
+    api.read_log = lambda log_id, max_lines=2000: logs[log_id][1]
+
+    def key(app, table_id):
+        t = app.query_one(table_id, DataTable)
+        return t.coordinate_to_cell_key(t.cursor_coordinate).row_key.value
+
+    def at_cursor(app, table_id):
+        """The first cell of the row under the cursor (works whether or not rows have keys)."""
+        t = app.query_one(table_id, DataTable)
+        return _text(t.get_row_at(t.cursor_row)[0])
+
+    from rhubarb_tui import RhubarbTUI
+
+    app = RhubarbTUI()
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        # Images: pick the third row, refresh, change a row, refresh.
+        app.query_one("#images-table", DataTable).focus()
+        await pilot.press("down", "down")
+        await pilot.pause()
+        picked = at_cursor(app, "#images-table")
+        check("images: third row picked", picked == MOCK_IMAGES[2].name)
+        await pilot.press("r")
+        await pilot.pause()
+        check("images: selection kept across a refresh", at_cursor(app, "#images-table") == picked)
+        images[0] = dataclasses.replace(images[0], clones=7)
+        await pilot.press("r")
+        await pilot.pause()
+        check("images: selection kept when rows change", at_cursor(app, "#images-table") == picked)
+
+        # Clones: pick the second row, then its state changes.
+        await pilot.press("2")
+        await pilot.pause()
+        app.query_one("#clones-table", DataTable).focus()
+        await pilot.press("down")
+        await pilot.pause()
+        check("clones: second row picked", key(app, "#clones-table") == "work-2")
+        clones = api.CloneList(clones=[clones.clones[0],
+                                       dataclasses.replace(clones.clones[1], state="running")],
+                               problems=clones.problems)
+        await pilot.press("r")
+        await pilot.pause()
+        check("clones: selection kept when rows change", key(app, "#clones-table") == "work-2")
+
+        # Logs: pick work-1, then it becomes the newest (the list reorders), then grows in place.
+        await pilot.press("4")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        app.query_one("#logs-table", DataTable).focus()
+        await pilot.press("down")
+        await pilot.pause()
+        check("logs: work-1 picked", key(app, "#logs-table") == "logs/work-1.log")
+        # The newest log (the top row) keeps growing while an older one is being read: the
+        # reader must not be pulled back to the top.
+        ref, _ = logs["logs/build-a.log"]
+        logs["logs/build-a.log"] = (dataclasses.replace(ref, size=20,
+                                                        mtime="2026-09-30T12:30:00+00:00"),
+                                    "build a out\nstep 2")
+        await pilot.press("r")
+        await pilot.pause()
+        check("logs: reading an older log while the newest grows keeps the selection",
+              key(app, "#logs-table") == "logs/work-1.log" and "work-1 out" in _view_text(app))
+        ref, _ = logs["logs/work-1.log"]
+        logs["logs/work-1.log"] = (dataclasses.replace(ref, size=20,
+                                                       mtime="2026-09-30T13:00:00+00:00"),
+                                   "work-1 out\nmore")
+        await pilot.press("r")
+        await pilot.pause()
+        check("logs: selection follows the log when the list reorders",
+              key(app, "#logs-table") == "logs/work-1.log" and "more" in _view_text(app))
+        ref, _ = logs["logs/work-1.log"]
+        logs["logs/work-1.log"] = (dataclasses.replace(ref, size=30,
+                                                       mtime="2026-09-30T13:30:00+00:00"),
+                                   "work-1 out\nmore\nand more")
+        await pilot.press("r")
+        await pilot.pause()
+        check("logs: selection kept when a log grows in place",
+              key(app, "#logs-table") == "logs/work-1.log" and "and more" in _view_text(app))
+
+
 async def _render() -> None:
     # Mock the core API before the app mounts (each pane calls api.* in refresh_data).
     api.images = _mock_images
     api.clones = _mock_clones
     api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
 
     import rhubarb_tui
     from textual.widgets import DataTable, Static, TabbedContent
@@ -263,6 +498,8 @@ async def _actions() -> None:
     api.images = _mock_images
     api.clones = _mock_clones
     api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
     api.rm = lambda name: (rm_calls.append(name),
                            api.RemoveResult(name=name, image="rbt-kali-research-cc4479ae7492",
                                             keychain_deleted=True))[1]
@@ -472,6 +709,8 @@ async def _action_writes() -> None:
     api.images = _mock_images
     api.clones = _mock_clones
     api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
 
     def _fake_reset(name, same_image=False, rotate=True, progress=None):
         reset_calls.append((name, same_image, rotate))
@@ -557,6 +796,8 @@ async def _action_prompts() -> None:
     api.images = _mock_images
     api.clones = _mock_clones
     api.provenance = _mock_provenance
+    api.list_logs = _mock_list_logs
+    api.read_log = _mock_read_log
     api.list_profiles = lambda: ["kali-research", "nixos-research"]
 
     new_calls: list = []
@@ -724,12 +965,16 @@ async def _action_prompts() -> None:
 
 def main() -> None:
     asyncio.run(_render())
+    _test_mouse()
     _test_guard()
     _test_rm_handler()
     _test_action_handlers()
     asyncio.run(_actions())
     asyncio.run(_action_writes())
     asyncio.run(_action_prompts())
+    asyncio.run(_logs_tab())
+    asyncio.run(_polling())
+    asyncio.run(_selection_survives())
     if FAILS:
         sys.exit(f"{len(FAILS)} TUI render test(s) failed")
     print("all rhubarb TUI render tests passed")

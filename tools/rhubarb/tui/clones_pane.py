@@ -13,6 +13,8 @@ directly. The API is imported lazily inside ``refresh_data`` so that importing
 this package never requires ``tart`` to be installed (headless test / Linux dev).
 """
 
+from contextlib import nullcontext
+
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
@@ -32,6 +34,8 @@ _PW_STYLE = {"unique": "green", "inherited": "yellow"}
 
 class ClonesPane(VerticalScroll):
     """Every research clone: live state, staleness, password mode, enrollments."""
+
+    _sig = None   # last rendered rows, to skip no-op rebuilds
 
     BORDER_TITLE = "Clones"
 
@@ -57,32 +61,38 @@ class ClonesPane(VerticalScroll):
         required host tool such as ``tart`` is not installed) by showing the
         message rather than letting the app crash.
         """
+        self.render_data(self.fetch())
+
+    def fetch(self) -> dict:
+        """The blocking read (it runs ``tart list``), safe off the UI thread (#120).
+
+        Returns ``{"result": CloneList}`` or ``{"error": message}``; never raises.
+        """
         from rhubarb import api  # lazy: package imports without tart present
 
+        try:
+            return {"result": api.clones()}
+        except FileNotFoundError as e:
+            tool = getattr(e, "filename", None) or str(e)
+            return {"error": f"{tool}: required host tool not installed (run this on the build Mac)."}
+        except api.VerifyError as e:
+            return {"error": f"cannot read clones: {e}"}
+        except Exception as e:  # never let a pane refresh take down the app
+            return {"error": f"unexpected error reading clones: {e}"}
+
+    def render_data(self, data: dict) -> None:
+        """Apply a ``fetch()`` result (UI thread)."""
+        if not self.is_mounted:
+            return
         status = self.query_one("#clones-status", Static)
         table = self.query_one("#clones-table", DataTable)
         problems = self.query_one("#clones-problems", Static)
-
-        try:
-            result = api.clones()
-        except FileNotFoundError as e:
-            tool = getattr(e, "filename", None) or str(e)
+        if "error" in data:
             table.display = False
             problems.display = False
-            status.update(Text(f"{tool}: required host tool not installed "
-                               "(run this on the build Mac).", style="red bold"))
+            status.update(Text(data["error"], style="red bold"))
             return
-        except api.VerifyError as e:
-            table.display = False
-            problems.display = False
-            status.update(Text(f"cannot read clones: {e}", style="red bold"))
-            return
-        except Exception as e:  # never let a pane refresh take down the app
-            table.display = False
-            problems.display = False
-            status.update(Text(f"unexpected error reading clones: {e}", style="red bold"))
-            return
-
+        result = data["result"]
         self._render_clones(status, table, result.clones)
         self._render_problems(problems, result.problems)
 
@@ -97,14 +107,25 @@ class ClonesPane(VerticalScroll):
         except Exception:
             prev_key = None
 
-        table.clear()  # keeps columns
         if not clones:
+            table.clear()  # keeps columns
+            self._sig = None
             table.display = False
             status.update(Text("no clones yet (rhubarb new NAME --profile P).", style="dim"))
             return
 
         table.display = True
         status.update(Text(f"{len(clones)} clone(s).", style="dim"))
+        sig = [(c.name, c.profile, c.state, c.freshness, c.password_mode, tuple(c.enrollments))
+               for c in clones]
+        if sig == self._sig:
+            return   # nothing changed: leave the table (and the cursor) alone
+        self._sig = sig
+        with table.prevent(DataTable.RowHighlighted) if prev_key else nullcontext():
+            self._fill(table, clones, prev_key)
+
+    def _fill(self, table: DataTable, clones: list, prev_key) -> None:
+        table.clear()  # keeps columns
         for c in clones:
             enrolled = ", ".join(c.enrollments) if c.enrollments else "-"
             table.add_row(
@@ -119,7 +140,7 @@ class ClonesPane(VerticalScroll):
 
         if prev_key is not None:
             try:
-                table.move_cursor(row=table.get_row_index(prev_key))
+                table.move_cursor(row=table.get_row_index(prev_key), animate=False)
             except Exception:
                 pass
 

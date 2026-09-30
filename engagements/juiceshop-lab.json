@@ -6,5 +6,8 @@
   "ranges": [
     { "profile": "kali-research", "count": 1, "prefix": "jsl-attacker" },
     { "profile": "juiceshop-target", "count": 1, "prefix": "jsl-target" }
+  ],
+  "links": [
+    { "from": "jsl-attacker", "to": "jsl-target", "ports": [3000] }
   ]
 }

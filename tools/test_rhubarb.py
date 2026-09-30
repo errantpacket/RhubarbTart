@@ -1066,6 +1066,114 @@ def test_engagement_ops() -> None:
         api.clones, api.rm = orig2
 
 
+def test_engagement_links() -> None:
+    """#30: manifest links are range-relative, name declared ports only, and become one
+    `ssh -R 127.0.0.1:P:<target>:P` tunnel per source clone (tart/keychain/ssh mocked)."""
+    from rhubarb import api, engagements
+    from rhubarb.common import VerifyError
+
+    eng = engagements.load_engagement("juiceshop-lab")
+    check("juiceshop-lab links attacker -> target on 3000",
+          eng.links == (engagements.Link(src="jsl-attacker", dst="jsl-target", ports=(3000,)),))
+    check("demo (no links key) loads with no links", engagements.load_engagement("demo").links == ())
+
+    base = json.loads((engagements.ENGAGEMENTS / "juiceshop-lab.json").read_text())
+    saved = engagements.ENGAGEMENTS
+    try:
+        with tempfile.TemporaryDirectory() as tmp:
+            engagements.ENGAGEMENTS = Path(tmp)
+
+            def refused(label, eid, mutate):
+                man = json.loads(json.dumps(base))
+                man["id"] = eid
+                mutate(man)
+                (Path(tmp) / f"{eid}.json").write_text(json.dumps(man))
+                try:
+                    engagements.load_engagement(eid)
+                    check(f"links: rejects {label}", False)
+                except VerifyError:
+                    check(f"links: rejects {label}", True)
+
+            link = lambda m: m["links"][0]   # noqa: E731
+            refused("an unknown link key", "l-key", lambda m: link(m).update(proto="udp"))
+            refused("a link to no range", "l-dst", lambda m: link(m).update(to="nowhere"))
+            refused("a link from a range to itself", "l-self", lambda m: link(m).update(to="jsl-attacker"))
+            refused("a port the target profile doesn't declare", "l-undecl",
+                    lambda m: link(m).update(ports=[22]))
+            refused("an empty port list", "l-empty", lambda m: link(m).update(ports=[]))
+            refused("a non-integer port", "l-str", lambda m: link(m).update(ports=["3000"]))
+            refused("a duplicate port", "l-dup", lambda m: link(m).update(ports=[3000, 3000]))
+            refused("a target range of count > 1", "l-count",
+                    lambda m: m["ranges"][1].update(count=2))
+            refused("the same port linked twice onto one source", "l-twice",
+                    lambda m: m["links"].append(dict(link(m))))
+            refused("two ranges with the same clone-name stem", "l-stem",
+                    lambda m: m["ranges"][1].update(prefix="jsl-attacker"))
+    finally:
+        engagements.ENGAGEMENTS = saved
+
+    # connect_plan: needs both clones provisioned (tagged) and running (an IP).
+    def clone(name, profile, family, eng="juiceshop-lab"):
+        return api.Clone(name=name, profile=profile, family=family, image="rbt-x", state="running",
+                         freshness="current", password_mode="unique", password_account=name,
+                         enrollments=[], created_at="2026-01-02T00:00:00Z", engagement=eng)
+    recs = {"jsl-attacker": {"name": "jsl-attacker", "family": "kali", "username": "kaliresearcher"},
+            "jsl-target": {"name": "jsl-target", "family": "nixos", "username": "admin"}}
+    ips = {"jsl-attacker": "192.168.64.5", "jsl-target": "192.168.64.6"}
+    orig = (api.clones, api._clones.load, api.hostops.vm_ip)
+    try:
+        api._clones.load = lambda name: recs[name]
+        api.hostops.vm_ip = lambda name, family, wait=180: ips[name]
+        api.clones = lambda: api.CloneList(clones=[clone("jsl-attacker", "kali-research", "kali"),
+                                                   clone("jsl-target", "juiceshop-target", "nixos")],
+                                           problems=[])
+        plan = api.connect_plan("juiceshop-lab")
+        argv = plan[0].argv if plan else []
+        check("connect_plan: one tunnel into the attacker, to the target's address",
+              [(t.src, t.dst, t.dst_ip, t.ports) for t in plan]
+              == [("jsl-attacker", "jsl-target", "192.168.64.6", (3000,))])
+        check("connect_plan: remote-forwards to the attacker's loopback only",
+              "127.0.0.1:3000:192.168.64.6:3000" in argv
+              and argv[argv.index("127.0.0.1:3000:192.168.64.6:3000") - 1] == "-R")
+        check("connect_plan: no remote shell, fails if the port can't be bound, pinned host key",
+              "-N" in argv and "ExitOnForwardFailure=yes" in argv and "HostKeyAlias=jsl-attacker" in argv
+              and argv[-1] == "kaliresearcher@192.168.64.5")
+
+        api.clones = lambda: api.CloneList(clones=[clone("jsl-attacker", "kali-research", "kali")],
+                                           problems=[])
+        try:
+            api.connect_plan("juiceshop-lab")
+            check("connect_plan refuses an unprovisioned target", False)
+        except VerifyError:
+            check("connect_plan refuses an unprovisioned target", True)
+        try:
+            api.connect_plan("demo")
+            check("connect_plan refuses an engagement without links", False)
+        except VerifyError:
+            check("connect_plan refuses an engagement without links", True)
+    finally:
+        api.clones, api._clones.load, api.hostops.vm_ip = orig
+
+    # connect: when one tunnel drops, it reports it and closes the others (no orphaned ssh).
+    orig_plan = api.connect_plan
+    procs = []
+    real_popen = subprocess.Popen
+    try:
+        api.connect_plan = lambda e: [
+            api.Tunnel(src="a", dst="t", dst_ip="x", ports=(1,), argv=["sleep", "30"]),
+            api.Tunnel(src="b", dst="t", dst_ip="x", ports=(1,), argv=["false"])]
+        api.subprocess.Popen = lambda *a, **k: procs.append(real_popen(*a, **k)) or procs[-1]
+        try:
+            api.connect("juiceshop-lab")
+            check("connect reports a dropped tunnel", False)
+        except VerifyError as e:
+            check("connect reports a dropped tunnel", "b -> t closed" in str(e))
+        check("connect closes the remaining tunnels on the way out",
+              len(procs) == 2 and all(p.poll() is not None for p in procs))
+    finally:
+        api.connect_plan, api.subprocess.Popen = orig_plan, real_popen
+
+
 def test_cli_progress_stream() -> None:
     """#19: cli.py still streams the core's live milestones for `rhubarb new`/`reset` (it
     hands api a progress callback that prints each line), and api's default (no callback)
@@ -1341,7 +1449,7 @@ def test_ssh_provenance() -> None:
 
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
-              test_rotation_script, test_api_pure, test_engagements, test_engagement_ops,
+              test_rotation_script, test_api_pure, test_engagements, test_engagement_ops, test_engagement_links,
               test_cli_progress_stream, test_hostops_resilience, test_shutdown_reaps_boot_process,
               test_reap_run, test_fs_vms, test_ssh_client, test_ssh_provenance, test_confirm_prompt,
               test_pgp_ed25519, test_toolchain_gpg, test_profile_usernames, test_packages_tsv_readers,

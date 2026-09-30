@@ -94,8 +94,9 @@ clean state. Because the image's contents are recorded, anything you find that w
 image came from the sample, not from leftover tools.
 
 NixOS and Kali give you a fully pinned Linux machine for analysis. macOS guests let you study
-Mac malware on the platform it targets. Network isolation between clones is planned
-([#30](https://github.com/errantpacket/RhubarbTart/issues/30)).
+Mac malware on the platform it targets. Clones can't reach each other. An engagement can open an
+explicit link between two of them, and a lab target like Juice Shop has no route out
+([Engagements](docs/using.md#engagements)).
 
 </details>
 
@@ -211,7 +212,6 @@ Open work is tracked in the [issue tracker](https://github.com/errantpacket/Rhub
 | Type | Issue |
 |---|---|
 | Bug | [#63](https://github.com/errantpacket/RhubarbTart/issues/63) macOS 26 builds: the automated Setup Assistant step sometimes fails and the build times out; running it again usually works |
-| Enhancement | [#30](https://github.com/errantpacket/RhubarbTart/issues/30) Network isolation between clones (`--net-softnet`) |
 | Enhancement | [#74](https://github.com/errantpacket/RhubarbTart/issues/74) Publishing to remote registries that require a login |
 | On hold | [#28](https://github.com/errantpacket/RhubarbTart/issues/28) A standard (non-admin) account for daily use; the design options are in the issue |
 | Roadmap | [#33](https://github.com/errantpacket/RhubarbTart/issues/33) The `herdr` agent management service |

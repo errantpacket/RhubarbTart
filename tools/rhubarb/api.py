@@ -32,6 +32,7 @@ See docs/INTERFACE-PLAN.md, Stage A.
 import json
 import os
 import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -270,6 +271,24 @@ class ProvisionResult:
     engagement: str
     created: list[NewResult]
     skipped: list[str]
+
+
+@dataclass(frozen=True)
+class Tunnel:
+    """One manifest link, made concrete for one source clone by ``connect_plan()`` (#30).
+
+    src / dst: the clone that gets the ports on its loopback, and the clone serving them.
+    dst_ip:    the target clone's current vmnet address (the host connects to it).
+    ports:     the TCP ports forwarded (same number on both ends).
+    argv:      the ``ssh -N -R 127.0.0.1:P:dst_ip:P …`` invocation into ``src``, over the
+               clone's pinned host key and the operator's key, like ``rhubarb ssh``.
+    """
+
+    src: str
+    dst: str
+    dst_ip: str
+    ports: tuple[int, ...]
+    argv: list[str]
 
 
 # ---- internal helpers ----------------------------------------------------------------------
@@ -818,7 +837,7 @@ def _range_names(engagement: str, rng: _engagements.Range) -> list[str]:
     """The clone names a range stands up: its ``prefix`` (or ``<engagement>-<profile>``),
     bare when ``count == 1`` else suffixed ``-1``..``-count``. Each is validated as a clone
     name (never ``rbt-``); an over-long/invalid name raises ``VerifyError`` before any clone."""
-    base = rng.prefix or f"{engagement}-{rng.profile}"
+    base = _engagements.range_stem(engagement, rng)
     names = [base] if rng.count == 1 else [f"{base}-{i}" for i in range(1, rng.count + 1)]
     for name in names:
         _clones.check_clone_name(name)
@@ -878,3 +897,74 @@ def teardown(engagement: str) -> list[str]:
         rm(clone.name)
         removed.append(clone.name)
     return removed
+
+
+# ---- engagement links (#30) ----------------------------------------------------------------
+# Clones can't reach each other: Tart's vmnet bridge isolation drops VM-to-VM traffic. A
+# manifest's ``links`` are the only sanctioned path, and they run through the host: an SSH
+# remote forward into each source clone puts the target's declared ports on the source's own
+# loopback. Nothing else crosses, and the path exists only while ``connect`` runs.
+
+def connect_plan(engagement: str) -> list[Tunnel]:
+    """The tunnels ``connect`` would open: one per (link, source clone). Read-only.
+
+    Raises ``VerifyError`` when the manifest declares no links, or a linked clone isn't
+    provisioned (tagged to this engagement) or isn't running (no IP).
+    """
+    eng = _engagements.load_engagement(engagement)
+    if not eng.links:
+        raise VerifyError(f"engagement {eng.id} declares no links (add \"links\" to "
+                          f"engagements/{eng.id}.json)")
+    names = {_engagements.range_stem(eng.id, r): _range_names(eng.id, r) for r in eng.ranges}
+    tagged = {c.name for c in engagement_clones(eng.id)}
+
+    def running(name: str) -> tuple[dict, str]:
+        if name not in tagged:
+            raise VerifyError(f"{name} is not provisioned; run: rhubarb engagement provision {eng.id}")
+        rec = _clones.load(name)
+        return rec, hostops.vm_ip(name, rec["family"], wait=30)
+
+    plan: list[Tunnel] = []
+    for link in eng.links:
+        dst = names[link.dst][0]
+        _drec, dst_ip = running(dst)
+        forwards = [a for p in link.ports for a in ("-R", f"127.0.0.1:{p}:{dst_ip}:{p}")]
+        for src in names[link.src]:
+            srec, src_ip = running(src)
+            base = hostops.ssh_args(src, srec["username"], src_ip)
+            argv = [*base[:-1], "-N", "-o", "ExitOnForwardFailure=yes",
+                    "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3",
+                    *forwards, base[-1]]
+            plan.append(Tunnel(src=src, dst=dst, dst_ip=dst_ip, ports=link.ports, argv=argv))
+    return plan
+
+
+def connect(engagement: str, progress: ProgressFn | None = None) -> None:
+    """Open every link of the engagement and hold them until one drops or the caller
+    interrupts (KeyboardInterrupt propagates). Always closes all tunnels on the way out.
+
+    Raises ``VerifyError`` per ``connect_plan``, or when a tunnel closes (ssh's own error
+    is on stderr: e.g. the port is already bound on the source clone).
+    """
+    plan = connect_plan(engagement)
+    procs: list[subprocess.Popen] = []
+    try:
+        for t in plan:
+            procs.append(subprocess.Popen(t.argv, stdin=subprocess.DEVNULL))
+            ports = ", ".join(f"127.0.0.1:{p}" for p in t.ports)
+            _emit(progress, f"{t.src}: {ports} -> {t.dst} ({t.dst_ip})")
+        while True:
+            for t, proc in zip(plan, procs, strict=True):
+                rc = proc.poll()
+                if rc is not None:
+                    raise VerifyError(f"link {t.src} -> {t.dst} closed (ssh exit {rc})")
+            time.sleep(1)
+    finally:
+        for proc in procs:
+            if proc.poll() is None:
+                proc.terminate()
+        for proc in procs:
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()

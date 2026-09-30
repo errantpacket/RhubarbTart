@@ -48,7 +48,37 @@ engagement id.
 | `engagement define FILE\|ID` | Validate a manifest and acknowledge it (strict: unknown keys, bad ranges or a missing `authorization` are rejected) |
 | `engagement list` | Defined engagements and their live clone counts |
 | `engagement provision ID` | Clone each range from its **verified** image into engagement-tagged clones |
+| `engagement connect ID` | Open the manifest's `links` and hold them until Ctrl-C (both clones must be running) |
 | `engagement teardown ID [--yes]` | Remove exactly the clones tagged to that engagement (nothing else) |
+
+**Networking between clones.** Clones can't reach each other: Tart's default network drops
+traffic between VMs. A manifest's `links` are the only path, and they go through your Mac:
+
+```json
+"links": [ { "from": "jsl-attacker", "to": "jsl-target", "ports": [3000] } ]
+```
+
+`from` and `to` name ranges by their clone-name stem (the `prefix`, or `<engagement>-<profile>`).
+`to` must be a range of one clone, and each port must be one its profile declares (a package's
+`"ports"`). `connect` opens an SSH remote forward into every `from` clone, so the target's port
+shows up on that clone's own loopback: in the Juice Shop lab, Kali browses
+`http://127.0.0.1:3000`. Nothing else crosses, and the path closes with `connect`.
+
+A lab target also has no egress of its own. The Juice Shop service may only talk to loopback and
+the Mac (systemd `IPAddressDeny=any`), and a firewall rule rejects any new outbound connection it
+makes, so an exploited app can't reach your LAN, the internet, or services on your Mac. The build
+asserts both, and the smoke test checks the service's filter.
+
+<details>
+<summary><b>Why not Softnet?</b></summary>
+
+Tart's `--net-softnet` gives each VM its own network and an egress policy, but in September 2026
+its release binary is unsigned and not notarized, it must run as root (SUID or passwordless
+sudo), and it moves each VM onto a random subnet, which breaks the images' pinned SSH source
+address. The evaluation is in [#30](https://github.com/errantpacket/RhubarbTart/issues/30). When
+Tart ships its native host-only network (no root helper), lab targets can move onto it.
+
+</details>
 
 <details>
 <summary><b>Where clone records live, and why</b></summary>

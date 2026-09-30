@@ -31,6 +31,13 @@ let
   };
 
   appDir = "/var/lib/juice-shop/app";
+
+  # The Tart host: the only peer the app may talk to (the smoke test and `rhubarb engagement
+  # connect` reach port 3000 from there). It is the SSH from= pin when that's a single IPv4,
+  # else Tart's default vmnet gateway.
+  sshFrom = (lib.importJSON ./../ssh.json).from or "";
+  hostAddr = if builtins.match "[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+" sshFrom != null
+             then sshFrom else "192.168.64.1";
 in
 lib.mkIf (variant != null) {
   users.users.juiceshop = { isSystemUser = true; group = "juiceshop"; home = "/var/lib/juice-shop"; };
@@ -67,8 +74,28 @@ lib.mkIf (variant != null) {
       CapabilityBoundingSet = "";
       AmbientCapabilities = "";
       RestrictAddressFamilies = [ "AF_INET" "AF_INET6" "AF_UNIX" ];
+      # No egress (#30): an exploited app (SSRF, RCE as juiceshop) must not reach the LAN or
+      # the internet. Enforced by systemd's cgroup BPF filter, outside the service's control.
+      IPAddressDeny = "any";
+      IPAddressAllow = [ "localhost" hostAddr ];
     };
   };
 
   networking.firewall.allowedTCPPorts = variant.ports or [ ];
+  # And it may not *initiate* anything off-box, not even to the host: replies to inbound
+  # connections pass, new outbound connections by the juiceshop user are rejected. Loopback
+  # stays open (Juice Shop's own SSRF challenge targets localhost).
+  networking.firewall.extraCommands = ''
+    ip46tables -N rbt-juiceshop-out 2>/dev/null || true
+    ip46tables -F rbt-juiceshop-out
+    ip46tables -A rbt-juiceshop-out -o lo -j RETURN
+    ip46tables -A rbt-juiceshop-out -m conntrack --ctstate NEW -j REJECT
+    ip46tables -D OUTPUT -m owner --uid-owner juiceshop -j rbt-juiceshop-out 2>/dev/null || true
+    ip46tables -A OUTPUT -m owner --uid-owner juiceshop -j rbt-juiceshop-out
+  '';
+  networking.firewall.extraStopCommands = ''
+    ip46tables -D OUTPUT -m owner --uid-owner juiceshop -j rbt-juiceshop-out 2>/dev/null || true
+    ip46tables -F rbt-juiceshop-out 2>/dev/null || true
+    ip46tables -X rbt-juiceshop-out 2>/dev/null || true
+  '';
 }

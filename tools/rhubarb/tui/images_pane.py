@@ -49,7 +49,7 @@ class ImagesPane(VerticalScroll):
     )
 
     def compose(self) -> ComposeResult:
-        yield Static("", id="images-status")
+        yield Static("Loading images…", id="images-status")
         table = DataTable(id="images-table", zebra_stripes=True, cursor_type="row")
         table.add_columns(*(label for label, _ in self._COLUMNS))
         yield table

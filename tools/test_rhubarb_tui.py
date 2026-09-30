@@ -147,8 +147,24 @@ def _mock_list_logs():
     return [ref for ref, _ in sorted(MOCK_LOGS.values(), key=lambda v: v[0].mtime, reverse=True)]
 
 
-def _mock_read_log(log_id, max_lines=2000):
-    return MOCK_LOGS[log_id][1]
+def _tail(text_for):
+    """A ``tail_log`` stand-in over mock log texts, with the core's semantics: the cursor
+    remembers how much was read, a later call returns only what was appended (re-sending an
+    unfinished last line), and a log that no longer continues the old text resets."""
+    def tail_log(log_id, cursor=None, max_lines=2000):
+        text = text_for(log_id)
+        start = 0
+        if cursor and cursor[0] == log_id and text.startswith(cursor[2]):
+            start = len(cursor[2])
+        new = text[start:]
+        done = new.rfind("\n") + 1
+        return api.LogTail(text="\n".join(new.splitlines()),
+                           cursor=(log_id, 0, text[:start + done]),
+                           reset=start == 0, partial=done < len(new))
+    return tail_log
+
+
+_mock_tail_log = _tail(lambda log_id: MOCK_LOGS[log_id][1])
 
 
 def _view_text(app) -> str:
@@ -167,7 +183,7 @@ async def _logs_tab() -> None:
     api.clones = _mock_clones
     api.provenance = _mock_provenance
     api.list_logs = _mock_list_logs
-    api.read_log = _mock_read_log
+    api.tail_log = _mock_tail_log
 
     from rhubarb_tui import RhubarbTUI
 
@@ -197,8 +213,93 @@ async def _logs_tab() -> None:
                        mtime="2026-09-30T13:00:00+00:00"),
             "tart run work-1\nbooted\nshutting down")
         await pilot.press("r")
+        await app.workers.wait_for_complete()
         await pilot.pause()
         check("logs tab: tails a log that grew", "shutting down" in _view_text(app))
+
+
+async def _follow_log() -> None:
+    """#122: the viewer appends only what a log wrote (no duplicates, an unfinished line is
+    completed in place), follows the end only while you are there, and a refresh that was in
+    flight when you moved the highlight doesn't snap it back."""
+    import threading
+
+    from textual.widgets import DataTable, Log
+
+    body = {"logs/build-x.log": "".join(f"line {i}\n" for i in range(200)),
+            "logs/work-1.log": "tart run work-1\nbooted\n"}
+    n = [0]
+
+    def refs():
+        n[0] += 1                                   # a new mtime every listing: always "changed"
+        return [api.LogRef(id="logs/build-x.log", label="build x", kind="build",
+                           size=len(body["logs/build-x.log"]), mtime=f"2026-09-30T12:{n[0] % 60:02d}:00+00:00"),
+                api.LogRef(id="logs/work-1.log", label="work-1", kind="clone",
+                           size=len(body["logs/work-1.log"]), mtime="2026-09-30T11:00:00+00:00")]
+
+    ui_reads = []
+
+    def images():
+        ui_reads.append(threading.current_thread() is threading.main_thread())
+        return MOCK_IMAGES
+
+    api.images = images
+    api.clones = _mock_clones
+    api.provenance = _mock_provenance
+    api.list_logs = refs
+    api.tail_log = _tail(lambda log_id: body[log_id])
+    from rhubarb_tui import RhubarbTUI
+
+    app = RhubarbTUI()
+    async with app.run_test() as pilot:
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("startup: reads `tart` panes off the UI thread",
+              ui_reads and not any(ui_reads))
+        await pilot.press("4")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        view = app.query_one("#logs-view", Log)
+        check("follow: the whole log is shown, at its end",
+              view.line_count == 200 and view.is_vertical_scroll_end)
+
+        async def grow(text: str) -> None:
+            body["logs/build-x.log"] += text
+            app._refresh_active()
+            await app.workers.wait_for_complete()
+            await pilot.pause()
+            await pilot.wait_for_scheduled_animations()
+            await pilot.pause()      # let any scroll the write requested land before checking
+
+        await grow("".join(f"line {i}\n" for i in range(200, 205)))
+        check("follow: appends only the new lines",
+              view.line_count == 205 and _view_text(app).count("line 200") == 1)
+        check("follow: stays at the end while you are there", view.is_vertical_scroll_end)
+
+        view.scroll_home(animate=False, immediate=True)
+        await pilot.pause()
+        await grow("line 205\n")
+        check("follow: scrolled back, new lines don't pull you to the end",
+              view.line_count == 206 and view.scroll_y == 0)
+
+        await grow("half")
+        await grow(" done\nnext\n")
+        check("follow: an unfinished line is completed in place",
+              _view_text(app).endswith("line 205\nhalf done\nnext") and view.scroll_y == 0)
+
+        # A refresh reads the build log; before it lands, the operator highlights work-1.
+        pane = app.query_one("#logs-pane")
+        body["logs/build-x.log"] += "late line\n"
+        in_flight = pane.fetch()
+        table = app.query_one("#logs-table", DataTable)
+        table.focus()
+        table.move_cursor(row=1, animate=False)
+        await pilot.pause()
+        pane.render_data(in_flight)
+        await pilot.pause()
+        check("follow: a refresh in flight doesn't snap the highlight back",
+              pane._selected == "logs/work-1.log" and table.cursor_row == 1
+              and "booted" in _view_text(app) and "late line" not in _view_text(app))
 
 
 async def _polling() -> None:
@@ -209,7 +310,7 @@ async def _polling() -> None:
     api.images = _mock_images
     api.provenance = _mock_provenance
     api.list_logs = _mock_list_logs
-    api.read_log = _mock_read_log
+    api.tail_log = _mock_tail_log
     seen = []
 
     def counting_clones():
@@ -282,7 +383,7 @@ async def _selection_survives() -> None:
     api.provenance = _mock_provenance
     api.list_logs = lambda: [r for r, _ in sorted(logs.values(), key=lambda v: v[0].mtime,
                                                   reverse=True)]
-    api.read_log = lambda log_id, max_lines=2000: logs[log_id][1]
+    api.tail_log = _tail(lambda log_id: logs[log_id][1])
 
     def key(app, table_id):
         t = app.query_one(table_id, DataTable)
@@ -369,7 +470,7 @@ async def _render() -> None:
     api.clones = _mock_clones
     api.provenance = _mock_provenance
     api.list_logs = _mock_list_logs
-    api.read_log = _mock_read_log
+    api.tail_log = _mock_tail_log
 
     import rhubarb_tui
     from textual.widgets import DataTable, Static, TabbedContent
@@ -499,7 +600,7 @@ async def _actions() -> None:
     api.clones = _mock_clones
     api.provenance = _mock_provenance
     api.list_logs = _mock_list_logs
-    api.read_log = _mock_read_log
+    api.tail_log = _mock_tail_log
     api.rm = lambda name: (rm_calls.append(name),
                            api.RemoveResult(name=name, image="rbt-kali-research-cc4479ae7492",
                                             keychain_deleted=True))[1]
@@ -710,7 +811,7 @@ async def _action_writes() -> None:
     api.clones = _mock_clones
     api.provenance = _mock_provenance
     api.list_logs = _mock_list_logs
-    api.read_log = _mock_read_log
+    api.tail_log = _mock_tail_log
 
     def _fake_reset(name, same_image=False, rotate=True, progress=None):
         reset_calls.append((name, same_image, rotate))
@@ -797,7 +898,7 @@ async def _action_prompts() -> None:
     api.clones = _mock_clones
     api.provenance = _mock_provenance
     api.list_logs = _mock_list_logs
-    api.read_log = _mock_read_log
+    api.tail_log = _mock_tail_log
     api.list_profiles = lambda: ["kali-research", "nixos-research"]
 
     new_calls: list = []
@@ -973,6 +1074,7 @@ def main() -> None:
     asyncio.run(_action_writes())
     asyncio.run(_action_prompts())
     asyncio.run(_logs_tab())
+    asyncio.run(_follow_log())
     asyncio.run(_polling())
     asyncio.run(_selection_survives())
     if FAILS:

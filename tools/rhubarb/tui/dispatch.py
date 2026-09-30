@@ -262,13 +262,14 @@ class ActionDispatch:
             return None
 
     def _lookup_clone(self, name: str):
-        """Find the ``api.Clone`` row for ``name`` (for prompts/messages); best-effort."""
-        try:
-            from rhubarb import api
+        """The ``api.Clone`` row for ``name`` from the Clones pane's last refresh, or ``None``.
 
-            for c in api.clones().clones:
-                if c.name == name:
-                    return c
+        Deliberately no ``api.clones()`` here: that runs ``tart list``, and this is called on the
+        UI thread (dispatching an action, following a highlight to provenance).
+        """
+        try:
+            from .clones_pane import ClonesPane
+
+            return self.query_one("#clones-pane", ClonesPane).by_name.get(name)
         except Exception:
-            pass
-        return None
+            return None

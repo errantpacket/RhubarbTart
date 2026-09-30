@@ -37,11 +37,16 @@ class ClonesPane(VerticalScroll):
 
     _sig = None   # last rendered rows, to skip no-op rebuilds
 
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        # The last clones read, by name: lets the app resolve a clone without a `tart` call.
+        self.by_name: dict = {}
+
     BORDER_TITLE = "Clones"
 
     def compose(self) -> ComposeResult:
         # A one-line status/empty/error banner above the table.
-        yield Static("", id="clones-status")
+        yield Static(Text("Loading clones…", style="dim"), id="clones-status")
         table: DataTable = DataTable(id="clones-table", zebra_stripes=True)
         table.cursor_type = "row"
         yield table
@@ -93,6 +98,7 @@ class ClonesPane(VerticalScroll):
             status.update(Text(data["error"], style="red bold"))
             return
         result = data["result"]
+        self.by_name = {c.name: c for c in result.clones}
         self._render_clones(status, table, result.clones)
         self._render_problems(problems, result.problems)
 

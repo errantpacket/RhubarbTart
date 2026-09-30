@@ -107,10 +107,10 @@ class ImagesPane(VerticalScroll):
         status = self.query_one("#images-status", Static)
         status.remove_class("-error")
         if not rows:
-            status.update("No images built on this host yet.")
+            status.update("No images built on this host yet. Press B to build one.")
         else:
             n = len(rows)
-            status.update(f"{n} image{'s' if n != 1 else ''}")
+            status.update(f"{n} image{'s' if n != 1 else ''} · Enter shows provenance")
 
     def _show_error(self, message: str) -> None:
         """Surface an error/empty condition in the status line and clear the table."""

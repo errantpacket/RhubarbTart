@@ -159,6 +159,9 @@ class ActionDispatch:
         built image (``rbt-*``) or a ``*-vanilla``/``*-unverified`` precursor is never
         a target — the core enforces this too, this is the friendly UI-side gate.
         """
+        if self._action_running:
+            self._log_action(f"{module.LABEL}: wait for {self._action_label} to finish")
+            return
         if module.REQUIRES_CLONE:
             if name is None:
                 name = self._selected_clone_name()
@@ -181,14 +184,26 @@ class ActionDispatch:
         if module.DESTRUCTIVE or getattr(module, "REQUIRES_ACK", False):
             def on_confirm(confirmed: bool | None) -> None:
                 if confirmed:
-                    self._run_action(module, ctx)
+                    self._start_action(module, ctx)
                 else:
                     self._log_action(f"{module.LABEL}: cancelled")
 
             self.push_screen(ConfirmScreen(module.confirm_prompt(ctx),
                                            action_label=module.LABEL), on_confirm)
         else:
-            self._run_action(module, ctx)
+            self._start_action(module, ctx)
+
+    def _start_action(self, module, ctx: "actions.ActionContext") -> None:
+        """Mark the action running (UI thread, so a second key press sees it), then run it."""
+        if self._action_running:
+            self._log_action(f"{module.LABEL}: wait for {self._action_label} to finish")
+            return
+        self._action_running = True
+        self._action_label = f"{module.LABEL} {ctx.name}".strip()
+        self._log_action(f"▶ {self._action_label}")
+        self.refresh_bindings()
+        self._stamp()
+        self._run_action(module, ctx)
 
     @work(thread=True, group="rhubarb-action")
     def _run_action(self, module, ctx: "actions.ActionContext") -> None:
@@ -196,22 +211,30 @@ class ActionDispatch:
 
         Runs in a Textual thread worker so the (blocking) core API never freezes the
         UI. All UI updates are marshalled back with ``call_from_thread``. While it runs, the
-        poller leaves `tart`-backed panes alone (see ``_refresh_active``).
+        poller leaves `tart`-backed panes alone (see ``_refresh_active``) and the write keys
+        are disabled (see ``check_action``).
         """
-        self._action_running = True
+        outcome = None
         try:
-            try:
-                outcome = module.handle(ctx)
-            except NotImplementedError as e:
-                self.call_from_thread(self._log_action, f"{module.LABEL}: {e}", False)
-                return
-            except Exception as e:  # a handler bug must not take the app down
-                self.call_from_thread(self._log_action,
-                                      f"{module.LABEL} FAILED: {type(e).__name__}: {e}", False)
-                return
-        finally:
-            self._action_running = False
-        self.call_from_thread(self._apply_outcome, outcome)
+            outcome = module.handle(ctx)
+        except NotImplementedError as e:
+            self.call_from_thread(self._log_action, f"{module.LABEL}: {e}", False)
+        except Exception as e:  # a handler bug must not take the app down
+            self.call_from_thread(self._log_action,
+                                  f"{module.LABEL} FAILED: {type(e).__name__}: {e}", False)
+        try:
+            self.call_from_thread(self._finish_action, outcome)
+        except Exception:
+            self._action_running = False   # the app is shutting down
+
+    def _finish_action(self, outcome: "actions.ActionOutcome | None") -> None:
+        """Back on the UI thread: clear the running state, then apply the outcome."""
+        self._action_running = False
+        self._action_label = None
+        self.refresh_bindings()
+        self._stamp()
+        if outcome is not None:
+            self._apply_outcome(outcome)
 
     def _apply_outcome(self, outcome: "actions.ActionOutcome") -> None:
         """Apply an action's result on the UI thread: log it; hand off an interactive
@@ -241,10 +264,13 @@ class ActionDispatch:
         self.call_from_thread(self._log_action, msg)
 
     def _log_action(self, msg: str, ok: bool | None = None) -> None:
-        """Write one line to the action log (UI thread). ``ok`` colours the line."""
+        """Write one line to the action log (UI thread), timestamped. ``ok`` colours the line."""
+        import time
+
         style = "" if ok is None else ("green" if ok else "red bold")
         try:
-            self.query_one("#action-log", RichLog).write(Text(msg, style=style))
+            self.query_one("#action-log", RichLog).write(
+                Text.assemble((time.strftime("%H:%M:%S "), "dim"), (msg, style)))
         except Exception:
             pass
 

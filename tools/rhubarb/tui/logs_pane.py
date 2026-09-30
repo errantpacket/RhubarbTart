@@ -54,7 +54,8 @@ class LogsPane(Horizontal):
     LogsPane #logs-side { width: 58; }
     LogsPane #logs-status { padding: 0 1; color: $text-muted; }
     LogsPane #logs-status.-error { color: $error; }
-    LogsPane #logs-view { width: 1fr; border-left: solid $panel; }
+    LogsPane #logs-main { width: 1fr; border-left: solid $panel; }
+    LogsPane #logs-title { padding: 0 1; color: $text-muted; }
     """
 
     def __init__(self, *args, **kwargs) -> None:
@@ -72,7 +73,9 @@ class LogsPane(Horizontal):
             yield Static("Loading logs…", id="logs-status")
             table: DataTable = DataTable(id="logs-table", zebra_stripes=True, cursor_type="row")
             yield table
-        yield Log(id="logs-view", highlight=False, auto_scroll=True, max_lines=MAX_LINES)
+        with Vertical(id="logs-main"):
+            yield Static("", id="logs-title")
+            yield Log(id="logs-view", highlight=False, auto_scroll=True, max_lines=MAX_LINES)
 
     def on_mount(self) -> None:
         table = self.query_one("#logs-table", DataTable)
@@ -124,12 +127,14 @@ class LogsPane(Horizontal):
             view.clear()
             self._lines.clear()
             self._shown = self._cursor = None
+            self.query_one("#logs-title", Static).update("")
             return
         # The highlight moved while this was being read: keep the operator's choice and let
         # the next read (already requested by the highlight) fill the viewer.
         stale = data["asked"] != self._selected
         selected = self._selected if stale else data["selected"]
-        status.update(f"{len(logs)} log(s) — newest first")
+        n = len(logs)
+        status.update(f"{n} log{'s' if n != 1 else ''} · newest first")
 
         # Rebuild the list only when its contents changed, so the cursor doesn't jump.
         rows = [(r.id, r.label, r.kind, _size(r.size), _when(r.mtime)) for r in logs]
@@ -161,6 +166,9 @@ class LogsPane(Horizontal):
             return
         self._selected = selected
         ref, tail = data["ref"], data["tail"]
+        if ref is not None:
+            self.query_one("#logs-title", Static).update(
+                f"{ref.label} · {ref.kind} log · {_size(ref.size)} · updated {_when(ref.mtime)}")
         if tail is not None and ref is not None:
             self._show(view, tail, new_log=self._shown is None or self._shown[0] != ref.id)
             self._shown = (ref.id, ref.size, ref.mtime)

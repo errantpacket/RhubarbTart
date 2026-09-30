@@ -51,24 +51,29 @@ class RhubarbTUI(ActionDispatch, App):
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("r", "refresh_all", "Refresh"),
-        Binding("1", "show_tab('images')", "Images"),
-        Binding("2", "show_tab('clones')", "Clones"),
-        Binding("3", "show_tab('provenance')", "Provenance"),
-        Binding("4", "show_tab('logs')", "Logs"),
-        # Actions on the highlighted clone (dispatched by the shell, run in a worker;
-        # destructive ones confirm first).
+        Binding("question_mark", "toggle_help", "Keys", key_display="?"),
+        # The tab labels show these number keys, so they stay out of the footer.
+        Binding("1", "show_tab('images')", "Images tab", show=False),
+        Binding("2", "show_tab('clones')", "Clones tab", show=False),
+        Binding("3", "show_tab('provenance')", "Provenance tab", show=False),
+        Binding("4", "show_tab('logs')", "Logs tab", show=False),
+        # Actions on the highlighted clone: offered only on the Clones tab, so a key can never
+        # act on a clone you can't see (see check_action). Destructive ones confirm first.
         Binding("b", "run_clone", "Run"),
         Binding("s", "ssh_clone", "SSH"),
-        Binding("x", "reset_clone", "Reset"),
-        Binding("d", "delete_clone", "Remove clone"),
-        # Input-driven write actions: they gather a profile/service/name via the
-        # prompt modals (rhubarb.tui.prompt) before dispatch. new/build target a
-        # profile (not a clone); enroll acts on the highlighted clone.
-        Binding("n", "new_clone", "New"),
         Binding("e", "enroll_clone", "Enroll"),
+        Binding("x", "reset_clone", "Reset"),
+        Binding("d", "delete_clone", "Remove"),
+        # Profile-driven write actions, from any tab: they gather a profile/name via the
+        # prompt modals (rhubarb.tui.prompt) before dispatch.
+        Binding("n", "new_clone", "New clone"),
         Binding("B", "build", "Build"),
-        # left/right arrows and tab already move between panes via TabbedContent.
     ]
+
+    # Actions that act on the highlighted clone, and every action that writes (one at a time).
+    CLONE_ACTIONS = frozenset({"run_clone", "ssh_clone", "enroll_clone", "reset_clone",
+                               "delete_clone"})
+    WRITE_ACTIONS = CLONE_ACTIONS | {"new_clone", "build"}
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
@@ -76,6 +81,7 @@ class RhubarbTUI(ActionDispatch, App):
         self._polling = False          # a background refresh is in flight: skip the next one
         self._refreshing = False       # a full refresh (start-up, `r`, after an action) is running
         self._action_running = False   # an action worker is running: leave `tart` alone meanwhile
+        self._action_label: str | None = None   # ... and which one, for the header
         # The row whose provenance to show when the Provenance tab is visible:
         # ("image"|"clone", name). Resolved lazily (a clone -> its source image).
         self._prov_source: tuple[str, str] | None = None
@@ -83,13 +89,14 @@ class RhubarbTUI(ActionDispatch, App):
     def compose(self) -> ComposeResult:
         yield Header()
         with TabbedContent(initial="images"):
-            with TabPane("Images", id="images"):
+            # The number in each label is the key that opens the tab.
+            with TabPane("1 Images", id="images"):
                 yield ImagesPane(id="images-pane")
-            with TabPane("Clones", id="clones"):
+            with TabPane("2 Clones", id="clones"):
                 yield ClonesPane(id="clones-pane")
-            with TabPane("Provenance", id="provenance"):
+            with TabPane("3 Provenance", id="provenance"):
                 yield ProvenancePane(id="provenance-pane")
-            with TabPane("Logs", id="logs"):
+            with TabPane("4 Logs", id="logs"):
                 yield LogsPane(id="logs-pane")
         yield RichLog(id="action-log", markup=False, wrap=True, highlight=False)
         yield Footer()
@@ -105,6 +112,8 @@ class RhubarbTUI(ActionDispatch, App):
 
     def on_mount(self) -> None:
         self.sub_title = "control plane · loading…"
+        self._log_action("Ready. Press ? for every key. Action output appears here; a build's "
+                         "full output is also in the Logs tab (4).")
         self.action_refresh_all()
         self.set_interval(self.TICK, self._tick)
 
@@ -133,10 +142,32 @@ class RhubarbTUI(ActionDispatch, App):
             self._refreshing = False
 
     def _stamp(self) -> None:
-        """Show when the data on screen was last read."""
+        """Show when the data on screen was last read, and any action still running."""
         import time
 
-        self.sub_title = f"control plane · updated {time.strftime('%H:%M:%S')}"
+        running = f" · running: {self._action_label}…" if self._action_label else ""
+        self.sub_title = f"control plane · updated {time.strftime('%H:%M:%S')}{running}"
+
+    def check_action(self, action: str, parameters: tuple) -> bool | None:
+        """Offer only the keys that make sense now (the footer follows this).
+
+        Clone actions exist only on the Clones tab (hidden elsewhere), and while an action is
+        running every write action is shown disabled, so actions never overlap.
+        """
+        if action in self.CLONE_ACTIONS and self._active_tab() != "clones":
+            return False
+        if action in self.WRITE_ACTIONS and self._action_running:
+            return None
+        return True
+
+    def action_toggle_help(self) -> None:
+        """Show or hide the panel listing every key for the focused widget and the app."""
+        from textual.widgets import HelpPanel
+
+        if self.screen.query(HelpPanel):
+            self.action_hide_help_panel()
+        else:
+            self.action_show_help_panel()
 
     def _tick(self) -> None:
         """The timer: tail the Logs tab every tick; poll `tart`-backed panes every SLOW_EVERY."""
@@ -146,12 +177,18 @@ class RhubarbTUI(ActionDispatch, App):
 
     _PANE_IDS = {"images": "#images-pane", "clones": "#clones-pane",
                  "provenance": "#provenance-pane", "logs": "#logs-pane"}
+    # What gets the keyboard when a tab opens, so arrows and Enter work straight away.
+    _FOCUS_IDS = {"images": "#images-table", "clones": "#clones-table",
+                  "provenance": "#provenance-pane", "logs": "#logs-table"}
 
-    def _active_pane_id(self) -> str | None:
+    def _active_tab(self) -> str | None:
         try:
-            return self._PANE_IDS.get(self.query_one(TabbedContent).active)
+            return self.query_one(TabbedContent).active
         except Exception:
             return None
+
+    def _active_pane_id(self) -> str | None:
+        return self._PANE_IDS.get(self._active_tab())
 
     def _refresh_active(self) -> None:
         """Reload just the visible pane, its blocking read in a worker (timer and tab switch)."""
@@ -167,9 +204,9 @@ class RhubarbTUI(ActionDispatch, App):
         except Exception:
             return
         if pane_id == "#provenance-pane":
-            vm = self._provenance_vm()
+            vm, via = self._provenance_vm()
             if vm:
-                pane.select(vm)   # follow the last highlighted image/clone (no read here)
+                pane.select(vm, via)   # follow the last highlighted image/clone (no read here)
         self._polling = True
         if pane_id != "#logs-pane":
             self.sub_title = "control plane · refreshing…"
@@ -215,28 +252,40 @@ class RhubarbTUI(ActionDispatch, App):
         if self._active_pane_id() == "#provenance-pane":
             self._update_provenance()
 
-    def _provenance_vm(self) -> str | None:
-        """The VM whose provenance to show: the highlighted image, or a clone's source image
-        (resolved from the Clones pane's cache, so no `tart` call)."""
+    def _provenance_vm(self) -> tuple[str | None, str | None]:
+        """``(vm, via)``: the VM whose provenance to show — the highlighted image, or a clone's
+        source image (resolved from the Clones pane's cache, so no `tart` call) — and the clone
+        it was reached from, if any."""
         if not self._prov_source:
-            return None
+            return None, None
         kind, ref = self._prov_source
         if kind == "clone":
             clone = self._lookup_clone(ref)
-            return clone.image if clone is not None else None
-        return ref
+            return (clone.image, ref) if clone is not None else (None, None)
+        return ref, None
 
     def _update_provenance(self) -> None:
         """Show the highlighted row's provenance now (one small file read)."""
-        vm = self._provenance_vm()
+        vm, via = self._provenance_vm()
         if vm:
             try:
-                self.query_one("#provenance-pane", ProvenancePane).show(vm)
+                self.query_one("#provenance-pane", ProvenancePane).show(vm, via)
             except Exception:
                 pass
 
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        """Enter on an image or a clone opens its provenance (a clone shows its image's)."""
+        if event.data_table.id in ("images-table", "clones-table"):
+            self.action_show_tab("provenance")
+
     def on_tabbed_content_tab_activated(self, event: TabbedContent.TabActivated) -> None:
-        """Refresh the pane that just became visible (so switching tabs shows fresh data at once)."""
+        """Refresh the pane that just became visible (so switching tabs shows fresh data at
+        once), hand it the keyboard, and update the footer to that tab's keys."""
+        try:
+            self.query_one(self._FOCUS_IDS[event.pane.id]).focus()
+        except Exception:
+            pass
+        self.refresh_bindings()
         self._refresh_active()
 
 

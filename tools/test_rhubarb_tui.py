@@ -198,6 +198,8 @@ async def _logs_tab() -> None:
         check("logs tab: newest first (the build)",
               "build kali-research" in _row_text(table.get_row_at(0)))
         check("logs tab: shows the newest log", "[smoke] PASSED" in _view_text(app))
+        check("logs tab: the viewer says which log it shows",
+              _static_text(app.query_one("#logs-title")).startswith("build kali-research"))
         check("header: shows when data was last read", "updated" in app.sub_title)
 
         table.focus()
@@ -347,6 +349,91 @@ async def _polling() -> None:
         await pilot.pause()
         check("poller: refreshes the visible pane in a worker and clears the flag",
               len(seen) == base + 1 and seen[-1] is False and not app._polling)
+
+
+async def _keys() -> None:
+    """#122: the footer offers only what applies — clone actions on the Clones tab only, write
+    actions disabled while one runs (and a second one refused) — `?` shows every key, and Enter
+    on a clone opens its image's provenance (not a record for the clone's own name)."""
+    import threading
+    import types
+
+    from textual.widgets import DataTable, HelpPanel
+
+    from rhubarb.tui.confirm import ConfirmScreen
+
+    api.images = _mock_images
+    api.clones = _mock_clones
+    api.list_logs = _mock_list_logs
+    api.tail_log = _mock_tail_log
+    asked = []
+    api.provenance = lambda vm: (asked.append(vm), MOCK_PROVENANCE)[1]
+    from rhubarb_tui import RhubarbTUI
+
+    def footer_keys(app) -> set:
+        return {b.key for _, b, enabled, _ in app.screen.active_bindings.values()
+                if b.show and enabled}
+
+    app = RhubarbTUI()
+    async with app.run_test() as pilot:
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("keys: clone actions are not offered on the Images tab",
+              not {"b", "s", "e", "x", "d"} & footer_keys(app))
+        await pilot.press("d")
+        await pilot.pause()
+        check("keys: `d` on the Images tab does nothing", not isinstance(app.screen, ConfirmScreen))
+
+        await pilot.press("2")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("keys: the Clones tab offers the clone actions",
+              {"b", "s", "e", "x", "d"} <= footer_keys(app))
+
+        await pilot.press("question_mark")
+        await pilot.pause()
+        check("keys: ? shows the key panel", bool(app.screen.query(HelpPanel)))
+        await pilot.press("question_mark")
+        await pilot.pause()
+        check("keys: ? again hides it", not app.screen.query(HelpPanel))
+
+        # A slow action: while it runs, write keys are disabled and a second one is refused.
+        release = threading.Event()
+        slow = types.SimpleNamespace(
+            ID="slow", LABEL="Slow thing", DESTRUCTIVE=False, REQUIRES_CLONE=False,
+            handle=lambda ctx: (release.wait(10), actions_mod.ActionOutcome(
+                ok=True, summary="slow done", needs_refresh=False))[1])
+        from rhubarb.tui import actions as actions_mod
+        app.dispatch_action(slow, name="demo")
+        await pilot.pause()
+        check("keys: a running action shows in the header", "running: Slow thing" in app.sub_title)
+        check("keys: write keys are disabled while it runs",
+              not {"d", "n", "B"} & footer_keys(app) and app.check_action("build", ()) is None)
+        app.dispatch_action(slow, name="again")
+        await pilot.pause()
+        check("keys: a second action is refused meanwhile",
+              "wait for Slow thing demo to finish" in _log_text(app))
+        release.set()
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("keys: the write keys come back when it finishes",
+              {"d", "n", "B"} <= footer_keys(app) and "running" not in app.sub_title
+              and "slow done" in _log_text(app))
+
+        await pilot.press("1")
+        await pilot.press("2")          # no manual focus: the tab key alone must reach the table
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("keys: opening a tab puts the keyboard in its table",
+              app.focused is app.query_one("#clones-table", DataTable))
+        await pilot.press("enter")
+        await app.workers.wait_for_complete()
+        await pilot.pause()
+        check("keys: Enter on a clone opens its image's provenance",
+              app.query_one("TabbedContent").active == "provenance"
+              and asked and asked[-1] == "rbt-kali-research-cc4479ae7492" and "work-1" not in asked)
+        check("keys: ...and says which clone it came from",
+              "(image of clone work-1)" in _static_text(app.query_one("#provenance-body")))
 
 
 def _test_mouse() -> None:
@@ -1075,6 +1162,7 @@ def main() -> None:
     asyncio.run(_action_prompts())
     asyncio.run(_logs_tab())
     asyncio.run(_follow_log())
+    asyncio.run(_keys())
     asyncio.run(_polling())
     asyncio.run(_selection_survives())
     if FAILS:

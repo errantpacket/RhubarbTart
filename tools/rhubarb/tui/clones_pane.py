@@ -4,8 +4,8 @@ Renders one row per ``api.Clone`` (name, profile, live state, freshness, passwor
 mode, enrollments) in a ``DataTable``, and surfaces ``CloneList.problems`` (the
 ``IGNORED ...`` records that failed the StrictModes trust rules) below it.
 
-Selecting a clone row points the provenance pane at that clone's VM (via
-``ProvenancePane.show``) and switches to the Provenance tab.
+Highlighting a clone points the Provenance tab at the image it was cloned from, and Enter
+opens that tab; the app does that routing (``rhubarb.tui.app``), not this pane.
 
 Strictly **read-only**: the only core call is ``rhubarb.api.clones()`` — never
 ``new``/``run``/``enroll``/``reset``/``rm``, and never ``tart`` or the keychain
@@ -16,14 +16,14 @@ this package never requires ``tart`` to be installed (headless test / Linux dev)
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import VerticalScroll
-from textual.widgets import DataTable, Static, TabbedContent
+from textual.widgets import DataTable, Static
 
 from .tables import rebuilding
 
 # Column headers, in order. "FRESHNESS" is the image-staleness verdict
 # (current / outdated / image-deleted); "PASSWORD" is the keychain mode
 # (unique / inherited).
-_COLUMNS = ("CLONE", "PROFILE", "STATE", "FRESHNESS", "PASSWORD", "ENROLLED")
+_COLUMNS = ("Clone", "Profile", "State", "Freshness", "Password", "Enrolled")
 
 # Colour cues for at-a-glance status. Anything not listed renders plain.
 _STATE_STYLE = {"running": "green", "MISSING": "red bold"}
@@ -44,9 +44,15 @@ class ClonesPane(VerticalScroll):
 
     BORDER_TITLE = "Clones"
 
+    DEFAULT_CSS = """
+    ClonesPane #clones-status { padding: 0 1; color: $text-muted; }
+    ClonesPane #clones-status.-error { color: $error; }
+    ClonesPane #clones-problems { padding: 1 1 0 1; }
+    """
+
     def compose(self) -> ComposeResult:
         # A one-line status/empty/error banner above the table.
-        yield Static(Text("Loading clones…", style="dim"), id="clones-status")
+        yield Static("Loading clones…", id="clones-status")
         table: DataTable = DataTable(id="clones-table", zebra_stripes=True)
         table.cursor_type = "row"
         yield table
@@ -95,8 +101,10 @@ class ClonesPane(VerticalScroll):
         if "error" in data:
             table.display = False
             problems.display = False
-            status.update(Text(data["error"], style="red bold"))
+            status.add_class("-error")
+            status.update(data["error"])
             return
+        status.remove_class("-error")
         result = data["result"]
         self.by_name = {c.name: c for c in result.clones}
         self._render_clones(status, table, result.clones)
@@ -109,11 +117,12 @@ class ClonesPane(VerticalScroll):
             table.clear()  # keeps columns
             self._sig = None
             table.display = False
-            status.update(Text("no clones yet (rhubarb new NAME --profile P).", style="dim"))
+            status.update("No clones yet. Press n to make one from an image.")
             return
 
         table.display = True
-        status.update(Text(f"{len(clones)} clone(s).", style="dim"))
+        n = len(clones)
+        status.update(f"{n} clone{'s' if n != 1 else ''} · Enter shows provenance")
         sig = [(c.name, c.profile, c.state, c.freshness, c.password_mode, tuple(c.enrollments))
                for c in clones]
         if sig == self._sig:
@@ -149,25 +158,3 @@ class ClonesPane(VerticalScroll):
             if i != len(records) - 1:
                 text.append("\n")
         problems.update(text)
-
-    # -- selection → provenance ----------------------------------------------
-
-    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
-        """Point the provenance pane at the selected clone and reveal it.
-
-        Read-only: ``ProvenancePane.show`` only calls ``api.provenance(vm)``.
-        """
-        vm = event.row_key.value
-        if not vm:
-            return
-        try:
-            from rhubarb.tui.provenance_pane import ProvenancePane
-
-            pane = self.app.query_one("#provenance-pane", ProvenancePane)
-            # Reveal the pane first, then hand it the VM: the provenance pane owns
-            # its own read/error handling, so navigation stays reliable regardless.
-            self.app.query_one(TabbedContent).active = "provenance"
-            pane.show(vm)
-        except Exception:
-            # Wiring is best-effort; a missing pane must not break the clones view.
-            pass

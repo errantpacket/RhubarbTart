@@ -32,6 +32,7 @@ class ProvenancePane(VerticalScroll):
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._vm: str | None = None
+        self._via: str | None = None   # the clone the VM was reached from, if any
         # Set before the body widget is mounted (the shell may refresh_data on
         # mount before compose has run); applied in on_mount.
         self._pending: RenderableType | None = None
@@ -44,13 +45,14 @@ class ProvenancePane(VerticalScroll):
             self._write(self._pending)
             self._pending = None
 
-    def select(self, vm: str) -> None:
-        """Make ``vm`` the VM to show, without reading it (the next refresh reads it)."""
-        self._vm = vm
+    def select(self, vm: str, via: str | None = None) -> None:
+        """Make ``vm`` the VM to show, without reading it (the next refresh reads it). ``via``
+        names the clone it was reached from, so the view can say whose image this is."""
+        self._vm, self._via = vm, via
 
-    def show(self, vm: str) -> None:
+    def show(self, vm: str, via: str | None = None) -> None:
         """Point the pane at ``vm`` (e.g. from a clones-pane selection) and reload."""
-        self._vm = vm
+        self.select(vm, via)
         self.refresh_data()
 
     def refresh_data(self) -> None:
@@ -110,7 +112,10 @@ class ProvenancePane(VerticalScroll):
 
         title = Table.grid(padding=(0, 1))
         title.add_column()
-        title.add_row(Text(rec.vm, style="bold"))
+        heading = Text(rec.vm, style="bold")
+        if self._via:
+            heading.append(f"  (image of clone {self._via})", style="dim")
+        title.add_row(heading)
         parts.append(title)
 
         # Identity / build summary.

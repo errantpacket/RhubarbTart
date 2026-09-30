@@ -2,7 +2,8 @@
 
 *Status: draft for owner review. This is the agreed boundary for herdr (#33), written before any
 herdr code, per the build order on #33. It governs what herdr may and may not do; the phased
-build follows only once it is accepted. Open decisions for the owner are marked **[DECISION]**.*
+build follows only once it is accepted. The runtime decisions it once left open are now resolved
+inline (the "Decisions" section records each and its rationale).*
 
 ## Why this document exists
 
@@ -166,25 +167,32 @@ before herdr. As of this draft:
 | Vault + custody / seal (Phase 4) | done (#86) |
 | Typed core the frontend imports | done (`tools/rhubarb/api.py`) |
 
-So herdr is **unblocked** on the safety prerequisites. What remains before code is this charter's
-acceptance and the **[DECISION]** points below.
+So herdr is **unblocked** on the safety prerequisites, and the runtime decisions below are
+resolved. What remains before code is this charter's acceptance and then the control-plane service
+(PLAN Phase 5, step 3: the localhost service over the typed core) that herdr sits on.
 
-## Decisions for the owner
+## Decisions
 
-Each of these changes the implementation; none should be guessed.
+Each of these shapes the implementation. All are now resolved; the rationale is kept for the
+record.
 
 - **Agent runtime — DECIDED: herdr.dev, integration model A now + C later.** See
   "Using herdr.dev as the runtime" above. We adopt herdr.dev unmodified; the agent reaches a range
   only through a `rhubarb exec` control-plane session (A), with the per-engagement driver VM (C) as
   a later manifest-selectable option and herdr's direct-SSH-into-clone path (B) excluded as an
   action path.
-- **[DECISION] Service shape.** Confirm herdr is a localhost-bound, authenticated FastAPI service
-  over the typed core (per PLAN Phase 5), never binding a network interface by default. Auth
-  mechanism for the local operator to settle (token file in the keychain vs OS-user trust).
-- **[DECISION] AI gateway.** Route model calls through a gateway (Cloudflare AI Gateway, AWS
-  Bedrock AgentCore) for one place to hold provider keys, cap spend, and log every prompt/response
-  into evidence — or start with direct provider access (the plan's default) and add a gateway
-  later. Pluggable per engagement in the manifest either way.
+- **Service shape — DECIDED: Unix domain socket, 0600.** A FastAPI/ASGI service over the typed
+  core, bound to a Unix domain socket at 0600 owned by the operator — no open TCP port and no token
+  to manage; filesystem permissions are the boundary, matching the StrictModes clone-record model.
+  It never binds a network interface by default. Remote access (TCP + token) is a later,
+  separately-reviewed step (#74-shaped), not part of this phase.
+- **AI gateway — DECIDED: direct Claude-subscription access now; gateway support planned.** Model
+  access is a Claude subscription (OAuth), so the agent CLI authenticates itself and there is no
+  metered provider key for a gateway (Cloudflare AI Gateway, Bedrock AgentCore) to front. Spend is
+  covered by the plan, so `max_spend_usd` is advisory; **wall-clock and kill-time budgets are still
+  enforced by herdr**. Prompt/response logging goes through the **evidence pipeline** (herdr socket
+  events), not a gateway. The manifest keeps a pluggable, default-off gateway field, and
+  **Cloudflare / Bedrock support is planned** for a future API-key setup (tracked in #103).
 - **Approval UX — DECIDED: through herdr's socket API.** Read agent state for the sidebar, pause a
   pane for a tiered-action approval, inject the approved command, and subscribe to events into
   evidence; each approval is itself an evidence entry. (What remains is the wording of the approval
@@ -193,9 +201,15 @@ Each of these changes the implementation; none should be guessed.
   agent on the host (model A), and add the per-engagement driver VM as a manifest-selectable option
   afterwards. The remaining detail is the driver VM's own profile and how it reaches the range,
   settled when C is built.
-- **[DECISION] Manifest additions.** The manifest already carries `agent_budget` and (validated)
-  scope. Confirm the per-agent **capability grant** and **tiered-action** markings live in the
-  manifest (reviewable, committed) rather than in herdr configuration.
+- **Capability grants & tiered-action markings — DECIDED: herdr configuration.** The per-agent
+  **capability grant** and which actions are **tiered** (approval-gated) live in herdr's config,
+  not the engagement manifest. The manifest stays authoritative for the hard boundary — targets,
+  ranges and `agent_budget` (validated by `engagements.py`, enforced below the guest by #30) — and
+  herdr config governs agent policy on top of it. Trade-off to keep in view: because this policy is
+  outside the committed, signed manifest, it is not part of the engagement's reviewable scope
+  record, so **herdr config should itself be version-controlled and its effective policy captured
+  as an evidence entry at arm time** — so a sealed vault still shows what the agent was permitted to
+  do.
 
 ## Non-goals
 

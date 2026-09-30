@@ -3,9 +3,13 @@
 Built images are templates: you work in disposable **clones** of them (see
 [Key concepts](concepts.md#what-you-work-in)). Clones are managed by the `rhubarb` CLI, or by the
 `./rhubarb-tui` Textual dashboard, which drives the same actions over the same audited core:
-browse images, clones and provenance; run, ssh, enroll, reset, rm, new and build, with a
+browse images, clones, provenance and logs; run, ssh, enroll, reset, rm, new and build, with a
 confirmation before anything destructive. For stacked macOS clones from a registry, see
 [Publishing and stacked clones](publishing.md).
+
+The dashboard is keyboard-driven (`1`–`4` switch tabs, `r` refreshes, `q` quits). Inside herdr it
+leaves the mouse to herdr; use `./rhubarb-tui --mouse` (or `RHUBARB_TUI_MOUSE=1`) to capture it
+anyway, or `--no-mouse` to turn it off elsewhere.
 
 ```sh
 ./rhubarb images                              # built images; which one is current per profile

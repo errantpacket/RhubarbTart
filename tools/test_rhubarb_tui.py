@@ -248,6 +248,20 @@ async def _polling() -> None:
               len(seen) == base + 1 and seen[-1] is False and not app._polling)
 
 
+def _test_mouse() -> None:
+    """Inside herdr the TUI leaves the mouse to herdr; flags and env override."""
+    from rhubarb_tui import mouse_enabled
+
+    check("mouse: on in a plain terminal", mouse_enabled([], {}))
+    check("mouse: off inside herdr", not mouse_enabled([], {"HERDR_PANE_ID": "w1:p1"}))
+    check("mouse: --mouse forces it on inside herdr",
+          mouse_enabled(["--mouse"], {"HERDR_PANE_ID": "w1:p1"}))
+    check("mouse: --no-mouse forces it off", not mouse_enabled(["--no-mouse"], {}))
+    check("mouse: RHUBARB_TUI_MOUSE=1 turns it on inside herdr",
+          mouse_enabled([], {"HERDR_PANE_ID": "w1:p1", "RHUBARB_TUI_MOUSE": "1"}))
+    check("mouse: RHUBARB_TUI_MOUSE=0 turns it off", not mouse_enabled([], {"RHUBARB_TUI_MOUSE": "0"}))
+
+
 async def _render() -> None:
     # Mock the core API before the app mounts (each pane calls api.* in refresh_data).
     api.images = _mock_images
@@ -850,6 +864,7 @@ async def _action_prompts() -> None:
 
 def main() -> None:
     asyncio.run(_render())
+    _test_mouse()
     _test_guard()
     _test_rm_handler()
     _test_action_handlers()

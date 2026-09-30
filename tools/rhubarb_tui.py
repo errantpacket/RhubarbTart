@@ -487,8 +487,27 @@ class RhubarbTUI(App):
         return None
 
 
+def mouse_enabled(argv: list[str], env) -> bool:
+    """Whether the TUI should capture the mouse.
+
+    The TUI is fully keyboard-driven. Inside herdr (``HERDR_PANE_ID`` set) mouse capture is
+    off by default so herdr keeps its own mouse handling (pane focus, scrolling, selection).
+    ``--mouse`` / ``--no-mouse`` or ``RHUBARB_TUI_MOUSE=1|0`` override that.
+    """
+    if "--no-mouse" in argv:
+        return False
+    if "--mouse" in argv:
+        return True
+    value = env.get("RHUBARB_TUI_MOUSE")
+    if value is not None:
+        return value.strip().lower() not in ("0", "false", "no", "off")
+    return not env.get("HERDR_PANE_ID")
+
+
 def main() -> None:
-    RhubarbTUI().run()
+    import os
+
+    RhubarbTUI().run(mouse=mouse_enabled(sys.argv[1:], os.environ))
 
 
 if __name__ == "__main__":

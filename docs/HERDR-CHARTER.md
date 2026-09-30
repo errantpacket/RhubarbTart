@@ -201,15 +201,17 @@ record.
   agent on the host (model A), and add the per-engagement driver VM as a manifest-selectable option
   afterwards. The remaining detail is the driver VM's own profile and how it reaches the range,
   settled when C is built.
-- **Capability grants & tiered-action markings — DECIDED: herdr configuration.** The per-agent
-  **capability grant** and which actions are **tiered** (approval-gated) live in herdr's config,
-  not the engagement manifest. The manifest stays authoritative for the hard boundary — targets,
-  ranges and `agent_budget` (validated by `engagements.py`, enforced below the guest by #30) — and
-  herdr config governs agent policy on top of it. Trade-off to keep in view: because this policy is
-  outside the committed, signed manifest, it is not part of the engagement's reviewable scope
-  record, so **herdr config should itself be version-controlled and its effective policy captured
-  as an evidence entry at arm time** — so a sealed vault still shows what the agent was permitted to
-  do.
+- **Capability grants & tiered-action markings — DECIDED: herdr configuration (host model), with
+  the manifest as the home under the driver-VM model.** In the host-based default (model A) the
+  per-agent **capability grant** and which actions are **tiered** (approval-gated) live in herdr's
+  config, not the engagement manifest. The intent is **flexibility**: agent policy can be tuned
+  without re-signing the engagement, while the manifest stays authoritative for the hard boundary —
+  targets, ranges and `agent_budget` (validated by `engagements.py`, enforced below the guest by
+  #30). To keep this auditable, **herdr config is version-controlled and its effective policy is
+  captured as an evidence entry at arm time**, so a sealed vault still shows what the agent was
+  permitted to do. Under the future isolated driver-VM design (model C), where herdr itself runs
+  inside a per-engagement VM, that policy **moves into the manifest** — the natural place once the
+  agent's own runtime is part of the engagement's sealed scope.
 
 ## Non-goals
 

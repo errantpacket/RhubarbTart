@@ -32,6 +32,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `RHUBARB_NO_COLOR` / `NO_COLOR` | unset | Build: set either to disable Packer's color (Nix writes progress to stderr, which the colored UI paints red) |
 | `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` | Where `rhubarb` keeps clone records and `events.log` |
 | `RHUBARB_SSH_WAIT` | `180` | Seconds each rotation (`new`/`reset`/`engagement provision`) waits for a clone's SSH **per boot attempt** (the boot is retried twice) before keeping the inherited password |
+| `RHUBARB_SSH_DENIED_RETRY` | `5` | Seconds between the 3 key-refusal checks before rotation concludes the key is wrong (a new guest can refuse once while booting, #88) |
 | `RHUBARB_CACHE` | `./cache` | Downloads, content-addressed as `artifacts/<sha256>/<file>` so builds of the same file name never collide, and per-profile guest stage dirs (`stage/`) |
 | `RHUBARB_REGISTRY` | `127.0.0.1:5780` | `publish.sh`: registry to publish to and verify from. Localhost is plain HTTP; anything else is HTTPS |
 | `RHUBARB_REGISTRY_PORT` | `5780` | `registry.sh`: port of the local zot registry (5000 is macOS's AirPlay Receiver) |

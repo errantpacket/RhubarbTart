@@ -766,7 +766,9 @@ def reset(name: str, same_image: bool = False, rotate: bool = True,
     _clones.delete(rec["name"])
     _clones.log_event("reset", rec["name"], img)
     _emit(progress, f"{rec['name']}: destroyed (enrollment and identity are gone); re-cloning from {img}")
-    rotated, note = _clone(rec["name"], img, prof, rotate, progress, from_registry=stacked)
+    # Keep the engagement tag: a reset clone is still part of its engagement (#89).
+    rotated, note = _clone(rec["name"], img, prof, rotate, progress, engagement=rec.get("engagement"),
+                           from_registry=stacked)
     return NewResult(name=rec["name"], image=img, profile=prof["id"], rotated=rotated,
                      password_mode="unique" if rotated else "inherited", note=note)
 

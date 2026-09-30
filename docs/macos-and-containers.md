@@ -1,8 +1,8 @@
 # macOS guests and containers
 
 Two questions come up often: can a macOS guest be "containerized", and can a guest run containers
-or devcontainers. The short answers are no and yes, and the reasons are worth knowing because they
-follow from how Apple silicon virtualization works, not from a RhubarbTart choice.
+or devcontainers. The short answers are no and yes. Both follow from how Apple silicon
+virtualization works, not from a RhubarbTart choice.
 
 | Question | Answer |
 |---|---|
@@ -34,17 +34,19 @@ the two sections below. The one thing that is not possible is a shared-kernel ma
 
 ### Images are OCI artifacts (packaged and signed like container images)
 
-Tart stores a VM image as an [OCI](https://opencontainers.org/) artifact, the same object format a
-container registry holds, and can push and pull it to and from any OCI registry. A macOS image is
-therefore distributed exactly like a container image: a content-addressed artifact you can host,
+Tart can push a VM image to any OCI registry as an [OCI](https://opencontainers.org/) artifact,
+the same object format a container registry holds, and pull it back. A macOS image is therefore
+distributed like a container image: a content-addressed artifact you can host,
 mirror, and pull by name. It is booted as a VM rather than `docker run`, but the packaging and
 supply chain are the container-registry ones.
 
 RhubarbTart wraps this so the supply chain is verifiable:
 
-- `scripts/publish.sh publish` pushes a built image to a registry (a local
-  [zot](https://zotregistry.dev/) by default) and signs it with [cosign](https://docs.sigstore.dev/).
-- `scripts/publish.sh verify` (and `rhubarb new --from-registry`) check that signature before use.
+- `scripts/publish.sh publish` pushes a smoke-passed image to a registry (a local
+  [zot](https://zotregistry.dev/) by default), then signs it and its provenance record with
+  [cosign](https://docs.sigstore.dev/), offline.
+- `scripts/publish.sh verify` (and, for macOS, `rhubarb new --from-registry`) checks that signature
+  before use.
 
 See [Publishing and stacked clones](publishing.md) for the full flow.
 
@@ -54,25 +56,27 @@ You never boot the sealed image. `rhubarb new` makes an **APFS clone**: a copy-o
 is near-instant and takes almost no extra disk until it is written to. You work in the clone and
 delete it when done, and `rhubarb reset` swaps in a fresh one from the image.
 
-This is the container-like part of the experience, fast to create, isolated, and throwaway, applied
-to full VMs. It is how RhubarbTart keeps the "spin up, use, discard" model for macOS guests without
+This is the container-like part: fast to create, isolated and throwaway, but for full VMs. It is how RhubarbTart keeps the "spin up, use, discard" model for macOS guests without
 any container runtime. See [Key concepts](concepts.md) (clone) and [Using your VMs](using.md).
 
 ## Running containers inside a guest
 
 A different question: not containerizing the guest, but running containers (including
-[devcontainers](https://containers.dev/)) inside one. This depends entirely on **where the
+[devcontainers](https://containers.dev/)) inside one. This depends on **where the
 container's kernel comes from**.
 
 ### Linux guests: native, on any Apple silicon
 
-A Linux container needs a Linux kernel, and a Linux guest already is one. Install a runtime
-(`docker`, `podman`) in a Linux profile and containers run directly in that guest's kernel, with no
+A Linux container needs a Linux kernel, and a Linux guest already has one. With a runtime
+(`docker`, `podman`) in a Linux guest, containers run directly on that guest's kernel, with no
 extra virtualization. This works on any Apple silicon Mac, including M1 and M2.
 
 This is the natural home for devcontainers in RhubarbTart: the container runs inside a hardened,
-provenance-pinned, disposable Linux clone. To add it, put the runtime in a Linux profile's package
-list and rebuild (see [Define your own guest](profiles.md)).
+provenance-pinned, disposable Linux clone. The package catalog has no container runtime today. To
+add one, create a catalog entry in `config/packages/` with a `kali` (`distro`) or `nixos` (`nix`)
+variant, list it in a Linux profile, and rebuild (see [Define your own guest](profiles.md)). On
+NixOS, Docker and Podman are enabled through `virtualisation.*` options, which the package mapping
+in `nix/modules/packages.nix` does not cover yet, so that part is a build-code change.
 
 ### macOS guests: only with nested virtualization (M3 or newer)
 
@@ -90,8 +94,8 @@ Consequences:
   ("enable nested virtualization if possible"). Two things are still needed:
   1. `rhubarb run` does not pass `--nested` today, so a profile option to request it would have to
      be added and recorded in the clone's lineage.
-  2. A container runtime must be present in the macOS image. Apple's native `container` tool
-     (macOS 26+) is the lightweight, licence-free choice over Docker Desktop.
+  2. A container runtime must be in the macOS image, which means a new catalog entry. Apple's
+     `container` tool (macOS 26+) is open source and has no Docker Desktop subscription terms.
 
 <details>
 <summary><b>Rule of thumb</b></summary>

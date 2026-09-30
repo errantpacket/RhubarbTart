@@ -39,7 +39,7 @@ is wrong for a new macOS build, fix it with the same strictness (see the `rhubar
 | Message | Cause | Fix |
 |---|---|---|
 | `resolve.py list` shows `INVALID: …` | Profile schema violation (unknown key/option, wrong family, bad value, duplicate, missing variant) | Fix the profile as reported (`rhubarb-profiles` skill has the schema) |
-| `locks/<profile>.lock.json missing; run resolve <profile> first` | New profile or lock not committed | Resolve on the right host, review, commit |
+| ``locks/<profile>.lock.json missing; run `resolve <profile>` first`` | New profile or lock not committed | Resolve on the right host, review, commit |
 | `profiles/<id>.json changed since <lock> was written; re-resolve` | Profile edited after resolving (its hash is part of the image identity) | Re-resolve and review; don't revert the check |
 | `unsupported lock schema; re-resolve` | Lock written by an older resolver | Re-resolve |
 
@@ -72,7 +72,7 @@ Stage 1 runs with a visible VNC window (not headless), so ask the user what scre
   changed the security posture. Investigate; don't remove the assertion.
 
 ### macOS 27 (provisioning API)
-- `--provisioning-opts requires the host to be running macOS 27` / build.sh `needs a macOS 27 host`:
+- Tart's `--provisioning-opts requires the host to be running macOS 27` / build.sh `<base> needs a macOS 27 host`:
   the host is older, and there's no workaround. Use a `macos-26` profile or upgrade the host.
 - SSH never comes up: the provisioning API didn't create the account. Check `tart run` output in
   the Packer log; confirm Tart ≥ 2.33 (`tart --version`).
@@ -99,13 +99,14 @@ The smoke test runs on a throwaway clone (`<vm>-smoke-<pid>`), which is deleted 
 
 | Message | Cause | Fix |
 |---|---|---|
-| `no IP within 300s` | Guest didn't boot, or slow DHCP | Retry; `tart run` the `-unverified` image manually. Linux smoke tests already use `--resolver arp` |
+| `no IP within 300s` | Guest didn't boot, or slow DHCP | Retry; `tart run` the `-unverified` image manually. The smoke test already falls back to `--resolver arp` |
 | `SSH port not reachable` | sshd not starting (e.g. host keys not regenerated), or firewall blocking it | Log in via GUI: `sudo launchctl print system/com.openssh.sshd`, `ls /etc/ssh/ssh_host_*` |
 | `no ed25519 host key offered (host keys not regenerated?)` | macOS didn't recreate the host keys deleted at seal time | Code change: regenerate them at first boot (e.g. `ssh-keygen -A` via a launchd job). Never ship shared keys |
 | `unexpected auth methods: …` | Server still offers password/keyboard-interactive | The drop-in isn't effective. See `sshd -T` above |
 | `key login failed (key in agent? RHUBARB_SSH_FROM correct?)` | Key not in agent, or the host's vmnet address ≠ `from=` | `ssh-add -l`; on the host `ifconfig bridge100` shows the vmnet address. Set `RHUBARB_SSH_FROM` and rebuild |
-| `in-guest posture checks failed` | macOS: passwordless sudo, auto-login, SIP/Gatekeeper/firewall/stealth off, missing `/Library/RhubarbTart` records. Linux: passwordless sudo, LightDM auto-login, firewall inactive (`nftables` on Kali, `firewall` on NixOS), empty `/etc/machine-id`, missing `/var/lib/rhubarbtart/installed.txt`, missing Rosetta binfmt | Run the matching heredoc lines from `scripts/smoke-test.sh` one by one over SSH |
+| `in-guest posture checks failed` | macOS: passwordless sudo, auto-login, SIP/Gatekeeper/firewall/stealth off, missing `/Library/RhubarbTart` records. Linux: passwordless sudo, LightDM auto-login, firewall inactive (`nftables` on Kali, `firewall` on NixOS), empty `/etc/machine-id`, missing `/var/lib/rhubarbtart/installed.txt`, missing Rosetta binfmt, or (lab target) `juice-shop egress not denied` | Run the matching heredoc lines from `scripts/smoke-test.sh` one by one over SSH |
 | `SSH reachable but should be disabled` | `launchctl disable system/com.openssh.sshd` didn't persist | Code change in finalize.sh |
+| `declared service port <p> not reachable` | A package's service (e.g. Juice Shop on 3000) didn't come up within about 3 minutes | Log in and check `systemctl status <service>` |
 | `Screen Sharing (5900) reachable` | Screen Sharing still enabled | Same |
 
 ## Inspecting
@@ -132,7 +133,7 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 | `nixos-install` evaluation error | Profile/config mismatch (option or package name changed in this nixpkgs) | Reproduce off-Mac with the Docker eval recipe in the `rhubarb-dev` skill |
 | Download/signature errors during install | cache.nixos.org unreachable or a path not signed | Retry. Never set `require-sigs = false` or add substituters |
 | Clone hangs at boot | Rosetta mount without the share | The mount is `nofail`; if it still hangs, start with `--rosetta=rosetta` and report it |
-| `tart ip` finds nothing | DHCP client-id | networkd is set to `ClientIdentifier=mac`; the smoke test uses `--resolver arp`, and `ssh.sh`/`enroll.sh` fall back to it |
+| `tart ip` finds nothing | DHCP client-id | networkd is set to `ClientIdentifier=mac`; the smoke test, `ssh.sh` and `enroll.sh` fall back to `--resolver arp` |
 
 ## Kali
 
@@ -171,7 +172,11 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 | `name … does not match its file` / `unexpected keys` / `invalid …` | Corrupted or hand-edited record | Delete the record (`rm ~/Library/Application Support/RhubarbTart/clones/NAME.json`) and the VM; re-create |
 | `SSH refused our key …; keeping the image's password` | Key not loaded in `ssh-agent`, or the image was built for other keys | `ssh-add`, then `rhubarb reset NAME --same-image` |
 | `SSH not reachable after 2 boots …; keeping the image's password` | The clone's first boot was slow, or an image with no recorded SSH mode has sshd off | Raise `RHUBARB_SSH_WAIT` and `rhubarb reset NAME --same-image`; if the image has no SSH keys, rebuild with `RHUBARB_SSH_PUBKEYS` |
-| `image … was built with SSH disabled (RHUBARB_SSH_PUBKEYS unset) …` | The image's provenance records no authorized keys, so sshd is off — rotation is refused up front (no boot) | Rebuild the image with `RHUBARB_SSH_PUBKEYS=<pubkey file>`; a retry can't help |
-| `… ssh failed on the host side, not waiting for it: …` | A client-side ssh problem (bad `RHUBARB_SSH_IDENTITY`, a broken `-sk`/`SecurityKeyProvider`, or a host-key mismatch) — not the guest still booting | Fix the reported ssh issue; `rhubarb` surfaces it immediately instead of waiting out the full timeout |
+| `image … was built with SSH disabled (RHUBARB_SSH_PUBKEYS unset) …` | The image's provenance records no authorized keys, so sshd is off. Rotation is refused up front (no boot) | Rebuild the image with `RHUBARB_SSH_PUBKEYS=<pubkey file>`; a retry can't help |
+| `… ssh failed on the host side, not waiting for it: …` | A client-side ssh problem (bad `RHUBARB_SSH_IDENTITY`, a broken `-sk`/`SecurityKeyProvider`, or a host-key mismatch), not the guest still booting | Fix the reported ssh issue; `rhubarb` surfaces it immediately instead of waiting out the full timeout |
 | `password rotation failed: …` | Rotation script error in the guest (see the message) | The clone keeps its old password and the new keychain entry is removed. Retry with `reset NAME --same-image` |
 | `a VM named … already exists` | Name collision with any Tart VM | Pick another name |
+| `engagement … has no clones; run: rhubarb engagement provision …` (`herdr arm`) | Agents need provisioned clones | Provision first |
+| `control-plane service not running at …; start it: rhubarb serve` | `herdr arm` needs the service socket | Run `./rhubarb serve` in another terminal (same `--socket` if you passed one) |
+| `socket path is too long …` / `… exists and is not a socket; refusing to replace it` | `--socket` path over ~100 bytes, or a file already sits at that path | Pass a shorter `--socket`; investigate the existing file before removing it |
+| `… evidence does not verify …` (`evidence verify`, `vault seal`) | The journal or an item changed after it was written (edit, reorder, deletion) | Treat as tampering or corruption. Don't rewrite the journal; report the listed problems |

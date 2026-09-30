@@ -13,8 +13,11 @@ was cloned from); `r` refreshes, `?` lists every key and `q` quits. The footer s
 that apply: clone actions (`b` run, `s` ssh, `e` enroll, `x` reset, `d` remove) are on the Clones
 tab, while `n` (new clone) and `B` (build) work anywhere. Actions run one at a time; the header
 shows the one in progress. Data refreshes in the background, so a slow `tart list` never freezes
-the screen. The Logs tab follows a growing log while you're at its end, and holds still while you
-scroll back.
+the screen. The Logs tab lists each clone's run log, the build logs written by `B`
+(`logs/build-<profile>-<UTC time>.log` in the state directory, mode 0600, with the VNC password
+redacted) and `events.log`. It follows a growing log while you're at its end, and holds still
+while you scroll back. `B` runs `scripts/build.sh`, so like any build it needs the Mac's GUI login
+session; it refuses to start over SSH.
 
 Inside herdr it leaves the mouse to herdr; use `./rhubarb-tui --mouse` (or `RHUBARB_TUI_MOUSE=1`)
 to capture it anyway, or `--no-mouse` to turn it off elsewhere.
@@ -38,8 +41,9 @@ to capture it anyway, or `--no-mouse` to turn it off elsewhere.
 | `stop NAME` | Stops a running clone (the VM and its records stay) |
 | `ssh NAME [-- CMD]` | Connects as the profile's user, host key pinned per clone name |
 | `enroll NAME tailscale\|warp [--org TEAM]` | Runtime VPN/ZTNA enrollment (see below) |
-| `list` · `images` | Flags clones whose image is **outdated** (the profile's lock changed) or **deleted**, and shows each clone's password mode and enrollments |
-| `reset NAME [--same-image]` | Throws the clone away (identity, enrollment and all) and re-clones, from the current image by default |
+| `images` | Lists built images and which one is current for each profile |
+| `list` | Lists clones and flags those whose image is **outdated** (the profile's lock changed) or **deleted**, and shows each clone's password mode and enrollments |
+| `reset NAME [--same-image] [--no-rotate]` | Throws the clone away (identity, enrollment and all) and re-clones, from the current image by default. A stacked clone stays stacked |
 | `rm NAME [--yes]` | Stops and deletes the clone, its keychain entry (only if it had a unique/rotated password) and its pinned host key |
 
 > [!NOTE]
@@ -47,13 +51,15 @@ to capture it anyway, or `--no-mouse` to turn it off elsewhere.
 > made some other way, and clone names can't start with `rbt-`. Per-clone rotation needs key
 > SSH (images built with `RHUBARB_SSH_PUBKEYS`, with the key in `ssh-agent` or `RHUBARB_SSH_IDENTITY`
 > pointing at it). Without it the clone keeps the image's password, and `rhubarb list` says
-> `inherited` — an image built with SSH disabled is refused up front with a rebuild hint.
+> `inherited`. For an image built with SSH disabled, `new` skips the rotation without booting the
+> clone and prints a hint to rebuild with `RHUBARB_SSH_PUBKEYS`.
 
 ### Engagements
 
 An **engagement** is a committed scope manifest (`engagements/<id>.json`) naming a set of ranges
 (profile + count) that build and tear down as one unit; clones it provisions are tagged with the
-engagement id.
+engagement id. Committed examples: `demo.json`, `lab.json` and `juiceshop-lab.json` (a Kali
+attacker linked to a Juice Shop target).
 
 | Command | What it does |
 |---|---|
@@ -79,53 +85,62 @@ engagement id.
 - **Ground truth.** A package can declare an endpoint that says what really happened. For Juice
   Shop, `collect` saves `/api/Challenges/`, which lists the challenges actually solved, to check
   claimed findings against.
+- **Approvals.** Each step of a tiered action (request, grant, use) is an entry
+  (see **Tiered actions** below).
 - **Lifecycle.** Provision (with the image each clone came from), connect and disconnect,
-  collect and teardown are recorded too.
+  collect, `herdr arm`, seal and teardown are recorded too.
 
 Every entry is one line of `journal.jsonl` and includes the hash of the entry before it, and
 outputs and files are stored by their sha256. `evidence verify` recomputes all of it and reports
 an edited, reordered or deleted entry or an altered file.
 
 **Control-plane service.** `rhubarb serve` runs a small HTTP service over a **Unix domain socket**
-(0600, under the state dir by default, or `--socket PATH`) — the surface the herdr interface will
-sit on ([charter](HERDR-CHARTER.md)). There is no TCP port and no token: filesystem permissions on
-the socket are the boundary, like the clone records. Every endpoint is a call into the same
+(0600, `service.sock` in the state directory by default, or `--socket PATH`). herdr agents reach
+their range through it ([charter](HERDR-CHARTER.md)). There is no TCP port and no token: filesystem
+permissions on the socket are the boundary, like the clone records. Every endpoint is a call into the same
 audited core; the service never touches `tart` or the keychain itself.
 
-- **GET** (read-only, the TUI's views): `/images`, `/clones`, `/engagements`,
-  `/engagements/<id>/evidence`, `/provenance/<vm>`.
+- **GET** (read-only, the same data the TUI shows): `/health`, `/images`, `/clones`,
+  `/engagements`, `/engagements/<id>/evidence`, `/engagements/<id>/evidence/verify`,
+  `/provenance/<vm>`.
 - **POST** (guarded actions, each one core call that already journals evidence):
   `/engagements/<id>/provision|collect|seal|teardown`, and `/clones/<name>/exec` (run a command;
-  its output round-trips losslessly as base64). Bad input is 400; the wrong method on a known
-  route is 405.
+  its output is base64 in the JSON, so any bytes come back unchanged). Bad input is 400, an
+  unknown route or id is 404, and the wrong method on a known route is 405.
 
 - **Event stream:** `GET /engagements/<id>/events` tails that engagement's evidence journal as
-  NDJSON — `?from=<seq>` to resume after an entry, `?follow=false` to replay and stop. This is
-  the control plane's live record of what happened, and the feed for herdr's sidebar.
+  NDJSON. Add `?from=<seq>` to resume after an entry, or `?follow=false` to replay and stop. This
+  is the control plane's live record of what happened, and the feed for herdr's sidebar.
 
 **Scoped range client (for agents).** When herdr runs an agent against an engagement, the agent's
-only tool for acting in its range is `rbt-range` — it runs a command in the *one* clone assigned
-to it (via `RBT_RANGE_CLONE` and the service socket), so every command is journaled as evidence
-and the clone is fixed, not chosen per call. It mirrors `ssh host <cmd>` semantics. This is the
-sanctioned, recorded path; hard isolation of an agent from other clones on the same host is the
-per-engagement driver VM ([charter](HERDR-CHARTER.md) model C), and reach to targets is enforced
-by the network (#30).
+only tool for acting in its range is `rbt-range`. It runs a command in the one clone assigned to
+it (`RBT_RANGE_CLONE`, through the service socket in `RBT_SERVICE_SOCKET`), so every command is
+journaled as evidence and the clone is fixed, not chosen per call. Arguments are joined into one
+command line, as with `ssh host <cmd>`, and its output and exit code are the remote command's.
+This is the sanctioned, recorded path, not a sandbox: an agent on the host runs as you. Hard
+isolation of an agent from other clones on the same host is the per-engagement driver VM
+([charter](HERDR-CHARTER.md) model C), and the network limits what each clone can reach (#30).
 
 **Arming agents (`rhubarb herdr arm ID`).** With an engagement provisioned and `rhubarb serve`
 running, `arm` launches its configured agents under [herdr](https://herdr.dev): it creates a herdr
 workspace, gives each agent its own pane pinned to one range clone (`RBT_RANGE_CLONE`) and the
 control-plane socket, puts the repo on the pane's `PATH` so `rbt-range` resolves, and starts the
-agent CLI there. Which agents run, of what kind, against which clone is committed, reviewable herdr
-config at `engagements/<id>.herdr.json`; `arm` records that config's hash and the agents it started
-as an `arm` evidence entry, so a sealed vault shows what each agent was permitted to do.
+agent CLI there. Which agents run, of what kind, against which clone is set in committed herdr
+config at `engagements/<id>.herdr.json`. Each agent has a `name`, a herdr `kind` (for example
+`claude`), a `clone` and an optional `model`; the file may also hold `tiered` patterns (below). See
+`engagements/juiceshop-lab.herdr.json`. `arm` records that config's hash and the agents it started
+as an `arm` lifecycle entry in the evidence, so a sealed vault shows what each agent was permitted
+to do.
 
 **Tiered actions (approvals).** The herdr config may mark commands **tiered** with a list of
-regexes (`"tiered": ["curl\\s.*://…", "rm\\s+-rf"]`). When an agent runs a matching command through
-`rbt-range`, it is **held**: the command does not run, a request lands in the engagement's
-evidence, and `rbt-range` waits. The operator sees it with `rhubarb herdr pending <id>` and
-releases one run with `rhubarb herdr approve <id> <request>`; the agent's command then proceeds.
-Each grant is single-use, and the whole exchange (request, grant, consume, run) is evidence, so a
-sealed vault shows exactly which sensitive actions were permitted. This is a workflow guardrail on
+regexes (`"tiered": ["curl\\s.*://…", "rm\\s+-rf"]`). When a matching command is run in one of
+the engagement's clones, it is **held**: the command does not run, a request lands in the
+engagement's evidence, and the call returns exit code 126 (`approval_required`). `rbt-range`
+prints the request id and retries until the command is approved, for up to 10 minutes by default
+(`RBT_APPROVAL_WAIT`, in seconds). The operator sees held commands with `rhubarb herdr pending <id>`
+and releases one run with `rhubarb herdr approve <id> <request>`; the agent's command then
+proceeds. Each grant is single-use, and the whole exchange (request, grant, use, run) is evidence,
+so a sealed vault shows which sensitive actions were permitted. This is a workflow guardrail on
 the sanctioned `rbt-range` path, not a kernel boundary (charter model A).
 
 **Sealing a vault.** `rhubarb vault seal ID` turns the evidence store into a signed, sealed,
@@ -133,16 +148,18 @@ portable bundle you can hand off:
 
 | Command | What it does |
 |---|---|
-| `vault seal ID [--out DIR]` | Verify the chain, then write a read-only `<id>-<time>.vault/` (default under `./vaults`) |
-| `vault verify DIR [--pub KEY]` | Check the vault's signature and every hash, offline, anywhere |
+| `vault seal ID [--out DIR]` | Verify the chain, then write a read-only `<id>-<time>.vault/` (default: `vaults/` in the repository) |
+| `vault verify DIR [--pub KEY]` | Check the vault's signature and every hash, offline, on any machine |
 
 The bundle holds `root.json` (the engagement scope, the chain head, and the sha256 of the
-journal and of every item), the journal and items themselves, each range's build provenance
-(which verified image produced the evidence), and `cosign.pub`. `root.json` is signed with the
-same offline cosign key that signs published images ([publishing](publishing.md)), so one
-signature over it anchors the whole set: `vault verify` checks the signature, then re-derives
-every hash. The tree is made read-only on seal, and a copy carried to another machine verifies
-with nothing but the bundle. Confidentiality at rest currently rests on the host disk
+journal and of every item), its signature `root.bundle.json`, the journal and items themselves,
+each range's build provenance (which verified image produced the evidence), and `cosign.pub`.
+`root.json` is signed (`cosign sign-blob`, through `scripts/vault.sh`) with the same offline
+cosign key that signs published images ([publishing](publishing.md)), so one signature over it
+anchors the whole set: `vault verify` checks the signature, then re-derives every hash. The tree
+is made read-only on seal. On another machine the bundle verifies on its own, with cosign.
+`vault verify` uses the bundled `cosign.pub` unless you pass `--pub`; pass the publisher's
+committed key (`config/keys/rhubarb-cosign.pub`) to also check who signed it. Confidentiality at rest currently rests on the host disk
 (FileVault); per-engagement encryption is a follow-up. Sealing is repeatable: more evidence, then
 seal again for a new timestamped bundle.
 
@@ -170,7 +187,7 @@ asserts both, and the smoke test checks the service's filter.
 Tart's `--net-softnet` gives each VM its own network and an egress policy, but in September 2026
 its release binary is unsigned and not notarized, it must run as root (SUID or passwordless
 sudo), and it moves each VM onto a random subnet, which breaks the images' pinned SSH source
-address. The evaluation is in [#30](https://github.com/errantpacket/RhubarbTart/issues/30). When
+address (`from="192.168.64.1"`). The evaluation is in [#30](https://github.com/errantpacket/RhubarbTart/issues/30). When
 Tart ships its native host-only network (no root helper), lab targets can move onto it.
 
 </details>

@@ -30,14 +30,18 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `REBUILD_VANILLA` | `0` | macOS: `1` reinstalls the vanilla VM from the IPSW and **rotates its password**. New macOS builds get a new vanilla VM automatically |
 | `RHUBARB_HEADLESS` | `true` | Build: `false` shows the VM window instead of running headless (watch a build) |
 | `RHUBARB_NO_COLOR` / `NO_COLOR` | unset | Build: set either to disable Packer's color (Nix writes progress to stderr, which the colored UI paints red) |
-| `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` | Where `rhubarb` keeps clone records and `events.log` |
-| `RHUBARB_SSH_WAIT` | `180` | Seconds each rotation (`new`/`reset`/`engagement provision`) waits for a clone's SSH **per boot attempt** (the boot is retried twice) before keeping the inherited password |
+| `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` (elsewhere `$XDG_STATE_HOME/rhubarbtart`) | Where `rhubarb` keeps clone records, `events.log`, run and build logs (`logs/`), the evidence store (`evidence/`) and the control-plane socket (`service.sock`) |
+| `RHUBARB_SSH_WAIT` | `180` | Seconds each rotation (`new`/`reset`/`engagement provision`) waits for a clone's SSH **per boot attempt** (up to two boots) before keeping the inherited password |
 | `RHUBARB_SSH_DENIED_RETRY` | `5` | Seconds between the 3 key-refusal checks before rotation concludes the key is wrong (a new guest can refuse once while booting, #88) |
 | `RHUBARB_CACHE` | `./cache` | Downloads, content-addressed as `artifacts/<sha256>/<file>` so builds of the same file name never collide, and per-profile guest stage dirs (`stage/`) |
 | `RHUBARB_REGISTRY` | `127.0.0.1:5780` | `publish.sh`: registry to publish to and verify from. Localhost is plain HTTP; anything else is HTTPS |
 | `RHUBARB_REGISTRY_PORT` | `5780` | `registry.sh`: port of the local zot registry (5000 is macOS's AirPlay Receiver) |
 | `RHUBARB_COSIGN_PUB` | `config/keys/rhubarb-cosign.pub` | `publish.sh verify`: public key to verify against (another publisher's) |
 | `GITHUB_TOKEN` | unset | Optional; avoids GitHub API rate limits while resolving |
+| `RHUBARB_TUI_MOUSE` | on (off inside herdr) | `./rhubarb-tui`: `1`/`0` turns mouse capture on or off; `--mouse` / `--no-mouse` override it |
+| `RBT_SERVICE_SOCKET` · `RBT_RANGE_CLONE` | set by `herdr arm` | `rbt-range`: the control-plane socket and the one clone this agent may drive |
+| `RBT_APPROVAL_WAIT` · `RBT_APPROVAL_POLL` | `600` · `5` | `rbt-range`: seconds to wait for an operator approval of a tiered command, and between checks (`0` disables waiting) |
+| `RBT_HERDR` | unset | `herdr arm`: path to the `herdr` binary if it is not on `PATH` or in a default install location |
 
 ### Requirements
 
@@ -47,8 +51,9 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 - An Apple silicon Mac on macOS 26 or later. macOS 27 guests need a **macOS 27 host**.
 - About 100–150 GB free per built profile: OS images are 3–20 GB and VM disks 60–80 GB (sparse).
 - `gpg` on whichever machine resolves NixOS/Kali profiles or runs `toolchain-pin`. Any OS works.
-- Licensing: Tart 2.38.0 is FSL-1.1-ALv2 (© OpenAI), so check your use is a "Permitted Purpose".
-  Chrome and WARP are proprietary; NixOS allows them only by name.
+- Licensing: RhubarbTart is FSL-1.1-ALv2 ([LICENSE.md](../LICENSE.md)). Tart 2.38.0 is also
+  FSL-1.1-ALv2 (© OpenAI), so check your use is a "Permitted Purpose". Chrome and WARP are
+  proprietary; NixOS allows them only by name. See [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md).
 
 </details>
 
@@ -66,19 +71,23 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | Packer | `releases.hashicorp.com` | `SHA256SUMS` GPG-verified against HashiCorp key `C874 011F … 72D7 468F` | sha256, Team ID if signed and pinned |
 | packer-plugin-tart | `github.com/cirruslabs/packer-plugin-tart` | `SHA256SUMS` == GitHub asset digest | sha256; `packer plugins install --path` (never `packer init`) |
 | uv | `github.com/astral-sh/uv` | `.sha256` == GitHub asset digest | sha256 |
+| GnuPG (+ its libraries) | `gnupg.org` source tarballs | Detached signature by a pinned GnuPG release key (checked in pure Python) and the sha256 in gnupg.org's signed `swdb.lst` agree | sha256; built from source; may link only macOS system libraries; version check |
+| zot · cosign | `github.com/project-zot/zot` · `github.com/sigstore/cosign` | Release checksums file == GitHub asset digest | sha256; version check |
 | Textual (TUI only) | PyPI (`files.pythonhosted.org`) | `uv lock --script` → `tools/rhubarb_tui.py.lock` | per-file sha256, verified by uv at `uv run --script` |
 
 - `scripts/env.sh` puts `.toolchain/bin` first on PATH, sets `PACKER_PLUGIN_PATH`, sets
-  `CHECKPOINT_DISABLE=1` (no Packer phone-home), and pins uv to its own Python 3.13.
+  `CHECKPOINT_DISABLE=1` (no Packer phone-home), and pins uv to its own managed Python 3.13.
 - `preflight` fails if a tool resolves outside `.toolchain/`, a version is off, or the pins
   changed since the last bootstrap.
 - `toolchain-pin --latest` re-derives every hash and only accepts it when two upstream views
   agree.
-- **Textual** — the TUI's only third-party dependency, and the repo's *first* — is not
-  a bootstrap binary. It is pinned to an exact version in `tools/rhubarb_tui.py`'s PEP 723 header
+- **Textual** is the TUI's only third-party dependency and the repo's first. It is not a
+  bootstrap binary. It is pinned to an exact version in `tools/rhubarb_tui.py`'s PEP 723 header
   and hash-locked in `tools/rhubarb_tui.py.lock` (`uv lock --script`); `./rhubarb-tui` runs under
   `uv run --script`, which installs it from that lock and verifies every file's sha256 (the
-  `--require-hashes` equivalent). `check.sh` asserts the pin and the lock stay consistent.
+  `--require-hashes` equivalent). The headless render test `tools/test_rhubarb_tui.py` pins the
+  same version in its own `tools/test_rhubarb_tui.py.lock`. `check.sh` asserts the pins and both
+  locks stay consistent.
 
 </details>
 
@@ -91,19 +100,35 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 |---|---|
 | `profiles/*.json` | What to build, one file per guest |
 | `config/bases/*.json` · `config/packages/*.json` | OS installers and tools: where each comes from and how it is verified |
-| `config/keys/` | Pinned vendor keys (HashiCorp, Google, Cloudflare, Tailscale, Kali) |
+| `config/keys/` | Pinned keys: vendor keys (HashiCorp, Google, Cloudflare, Tailscale, Kali, GnuPG) and the publisher's `rhubarb-cosign.pub` |
+| `config/cosign/signing-config-offline.json` | cosign signing config that names no CA, OIDC, transparency-log or timestamp service |
 | `config/toolchain.env` | Host toolchain pins |
 | `locks/*.lock.json` | Resolved inputs per profile (generated, reviewed, committed) |
-| `tools/resolve.py` · `tools/rhubarb/` | `list` · `plan` · `resolve` · `verify` · `provenance` · `preflight` · `toolchain-pin` |
-| `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb/tui/` · `tools/rhubarb_tui.py.lock` | Textual TUI over `rhubarb/api.py` (read-only panes + confirm-gated write actions): launcher shim + launcher (carries the pinned Textual), app (`tui/app.py`), action dispatch (`tui/dispatch.py`), pane widgets, action modules, and the hashed Textual lockfile |
-| `tools/bootstrap.sh` · `tools/check.sh` · `tools/test_rhubarb.py` | Toolchain install · static checks · offline crypto/parsing self-tests |
+| `engagements/<id>.json` · `engagements/<id>.herdr.json` | Engagement scope manifests, and the optional herdr config (agents, tiered commands) |
+| `vendor/` | Locally supplied installers for tools with no public URL (never committed; see `vendor/README.md`) |
+| `tools/resolve.py` | `list` · `plan` · `resolve` · `verify` · `provenance` · `preflight` · `toolchain-pin` |
+| `tools/rhubarb/{bases,packages,profiles,locks,toolchain}.py` | Base and package resolvers, profile loading, lock files and image identity, toolchain pins and preflight |
+| `tools/rhubarb/{apt,gpg,pgp_ed25519,distsign,nar,macos,common}.py` | Verification: signed apt repos, pinned-key OpenPGP (via the toolchain gpg), a minimal Ed25519 OpenPGP verifier for GnuPG's own tarballs, Tailscale distsign, Nix NAR hashes, macOS signature checks, shared helpers |
+| `rhubarb` · `tools/rhubarb_cli.py` · `tools/rhubarb/cli.py` | Clone management CLI (launcher shim, entry point, commands) |
+| `tools/rhubarb/api.py` | Typed core API: the one import surface for the CLI, TUI and service |
+| `tools/rhubarb/{clones,hostops}.py` | Clone record store (StrictModes rules) · tart, keychain, SSH and password rotation |
+| `tools/rhubarb/engagements.py` | Engagement manifest loading and strict validation |
+| `tools/rhubarb/evidence.py` · `tools/rhubarb/vault.py` | Hash-chained evidence journal with content-addressed items · signed, sealed evidence vaults |
+| `tools/rhubarb/service.py` | Control-plane service: HTTP over a 0600 Unix socket (`rhubarb serve`) |
+| `rbt-range` · `tools/rhubarb_agent.py` · `tools/rhubarb/agent.py` | Scoped range client an agent uses to run commands in its one assigned clone |
+| `tools/rhubarb/{herdr,approvals}.py` | `rhubarb herdr arm` (launch an engagement's agents) · tiered-command approvals, ledgered in the evidence journal |
+| `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb_tui.py.lock` | TUI launcher shim, launcher (carries the pinned Textual) and its hashed lockfile |
+| `tools/rhubarb/tui/` | Textual TUI over `api.py`: app shell (`app.py`), action dispatch (`dispatch.py`), read-only panes (`images_pane`, `clones_pane`, `provenance_pane`, `logs_pane`), table helpers (`tables.py`), modals (`confirm.py`, `prompt.py`), and one module per action in `actions/` (`build`, `enroll`, `new`, `reset`, `rm`, `run`, `ssh`) |
+| `tools/bootstrap.sh` · `tools/check.sh` | Toolchain install · static checks and tests |
+| `tools/test_rhubarb.py` · `tools/testdata/` | Offline self-tests and their fixtures |
+| `tools/test_rhubarb_tui.py` (+ `.lock`) | Headless TUI render test (mocked core API) |
 | `tools/serve_preseed.py` | One-shot preseed server bound only to Tart's host address |
 | `packer/macos/` · `packer/linux/` | Build templates per family |
-| `guest/macos/` · `guest/nixos/` · `guest/kali/` | In-guest verify/install and harden/seal scripts |
+| `guest/macos/` · `guest/nixos/` · `guest/kali/` | In-guest verify/install (`install.sh`) and harden/seal (`finalize.sh`) scripts |
 | `nix/` | The NixOS system definition (reads the staged profile) |
 | `kali/preseed.cfg.tmpl` | Unattended Kali install (rendered per build, never committed rendered) |
-| `rhubarb` · `tools/rhubarb_cli.py` · `tools/rhubarb/{cli,clones,hostops}.py` | Clone management CLI, record store, tart/keychain/SSH operations |
-| `scripts/` | `build.sh` · `smoke-test.sh` · `ssh.sh` · `enroll.sh` · `env.sh` · `registry.sh` (localhost OCI registry) · `signing-key.sh` (cosign key pair) · `publish.sh` (publish + verify signed images) |
+| `scripts/` | `build.sh` · `smoke-test.sh` · `ssh.sh` · `enroll.sh` · `env.sh` · `registry.sh` (localhost OCI registry) · `signing-key.sh` (cosign key pair) · `publish.sh` (publish + verify signed images) · `vault.sh` (sign + verify a vault's root manifest) |
+| `LICENSE.md` · `THIRD-PARTY-NOTICES.md` | FSL-1.1-ALv2 licence · licences of the tools RhubarbTart runs and of Textual |
 | `.claude/skills/` | Guides for Claude Code sessions (see [Development](development.md)) |
 
 </details>

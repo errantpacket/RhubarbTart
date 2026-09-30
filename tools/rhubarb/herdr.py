@@ -28,7 +28,9 @@ from . import evidence as _evidence
 from .common import ROOT, VerifyError, sha256_file
 from .service import default_socket_path
 
-AGENT_KEYS = {"name", "kind", "clone"}
+AGENT_REQUIRED = {"name", "kind", "clone"}
+AGENT_OPTIONAL = {"model"}   # optional: pin the agent CLI's model (passed as `-- --model <model>`)
+AGENT_KEYS = AGENT_REQUIRED | AGENT_OPTIONAL
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,39}$")
 # herdr's supported agent kinds (herdr 0.9 `agent start --kind`); kept as a sanity check only.
 KINDS = {"pi", "claude", "codex", "gemini", "cursor", "devin", "agy", "cline", "omp", "mastracode",
@@ -122,8 +124,11 @@ def load_config(engagement: str) -> list[dict]:
     seen: set[str] = set()
     for i, a in enumerate(agents):
         at = f"{disp}: agents[{i}]"
-        if not isinstance(a, dict) or set(a) - AGENT_KEYS or not AGENT_KEYS <= set(a):
-            raise VerifyError(f"{at}: each agent needs exactly {sorted(AGENT_KEYS)}")
+        if not isinstance(a, dict) or set(a) - AGENT_KEYS or not AGENT_REQUIRED <= set(a):
+            raise VerifyError(f"{at}: agent needs {sorted(AGENT_REQUIRED)} "
+                              f"(optional: {sorted(AGENT_OPTIONAL)})")
+        if "model" in a and (not isinstance(a["model"], str) or not a["model"].strip()):
+            raise VerifyError(f"{at}: model must be a non-empty string when present")
         if not isinstance(a["name"], str) or not NAME_RE.match(a["name"]):
             raise VerifyError(f"{at}: name must match {NAME_RE.pattern}")
         if a["name"] in seen:
@@ -179,8 +184,10 @@ def arm(engagement: str, socket_path: str | None = None, progress=None) -> ArmRe
         # Put the repo on PATH additively (in the pane's own shell) so `rbt-range` resolves,
         # without clobbering the agent's PATH.
         _herdr("pane", "run", pane, f'export PATH="{ROOT}:$PATH"')
-        started = _herdr("agent", "start", a["name"], "--kind", a["kind"], "--pane", pane,
-                         check=False)
+        start = ["agent", "start", a["name"], "--kind", a["kind"], "--pane", pane]
+        if a.get("model"):   # native agent args go after `--`
+            start += ["--", "--model", a["model"]]
+        started = _herdr(*start, check=False)
         note = started.get("_error")   # e.g. agent_not_ready: pane is armed, agent still coming up
         armed.append(ArmedAgent(name=a["name"], kind=a["kind"], clone=clone, pane=pane, note=note))
         if progress:

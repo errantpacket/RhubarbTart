@@ -12,3 +12,9 @@ __pycache__/
 
 # Sealed evidence vaults (exported, never committed)
 vaults/
+
+# Local demo / presentation material (kept out of the repo; see demo/)
+demo/
+profiles/nixos-demo.json
+locks/nixos-demo.lock.json
+engagements/nixos-demo-build.json

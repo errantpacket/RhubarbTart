@@ -196,6 +196,9 @@ reopening of it.
 
 ## Agent orchestration
 
+> The boundary herdr must respect is fixed in the **[herdr charter](HERDR-CHARTER.md)** (#33),
+> written before any herdr code. This section is the background it draws on.
+
 herdr is the reference management interface: it already runs several agents in parallel, each in
 a real PTY, with a persistent server you can detach and reattach over SSH and a sidebar showing
 which agents are working, blocked, or idle. RhubarbTart supplies what herdr doesn't: the isolated

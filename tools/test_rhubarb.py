@@ -1814,6 +1814,69 @@ def test_control_plane_service() -> None:
      api.provision, api.teardown, api.exec, api.evidence_entries) = saved
 
 
+def test_scoped_range_client() -> None:
+    """#108 slice 1: the agent's range client runs a command in its one assigned clone via the
+    service, decodes output, and pins the clone from the environment (not the command)."""
+    import base64
+    import io
+
+    from rhubarb import agent, service
+    from rhubarb.common import VerifyError
+
+    seen = {}
+
+    def fake_post(sock, path, body=None, timeout=300):
+        seen["sock"], seen["path"], seen["body"] = sock, path, body
+        return {"exit_code": 0, "stdout": base64.b64encode(b"uid=1000\n").decode(),
+                "stderr": base64.b64encode(b"").decode(), "evidence_seq": 5}
+
+    saved = service.post_json
+    try:
+        service.post_json = fake_post
+        code, out, err = agent.range_exec("/s.sock", "jsl-attacker", "id")
+        check("range_exec runs in the named clone via the service exec endpoint",
+              seen["path"] == "/clones/jsl-attacker/exec" and seen["body"]["command"] == "id")
+        check("range_exec decodes the base64 output and returns the exit code",
+              code == 0 and out == b"uid=1000\n" and err == b"")
+
+        def reject(sock, path, body=None, timeout=300):
+            raise VerifyError("jsl-attacker: no IP (is it running?)")
+        service.post_json = reject
+        check("range_exec surfaces a service rejection",
+              _raises(lambda: agent.range_exec("/s.sock", "jsl-attacker", "id"), VerifyError))
+
+        # main(): the clone is fixed by the environment; the command cannot change it.
+        service.post_json = fake_post
+        os.environ["RBT_SERVICE_SOCKET"] = "/s.sock"
+        os.environ["RBT_RANGE_CLONE"] = "jsl-attacker"
+        try:
+            buf = io.BytesIO()
+            real = sys.stdout
+            class _B:  # capture sys.stdout.buffer.write
+                buffer = buf
+                def flush(self): pass
+            sys.stdout = _B()
+            try:
+                agent.main(["--", "curl", "http://other-clone/"])
+                rc = 0
+            except SystemExit as e:
+                rc = e.code
+            finally:
+                sys.stdout = real
+            check("main targets only the env-assigned clone, whatever the command says",
+                  seen["path"] == "/clones/jsl-attacker/exec"
+                  and seen["body"]["command"] == "curl http://other-clone/")
+            check("main exits with the remote code and writes stdout", rc == 0 and buf.getvalue() == b"uid=1000\n")
+        finally:
+            os.environ.pop("RBT_SERVICE_SOCKET", None)
+            os.environ.pop("RBT_RANGE_CLONE", None)
+
+        check("main without the armed environment refuses",
+              _raises(lambda: agent.main(["--", "id"]), SystemExit))
+    finally:
+        service.post_json = saved
+
+
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops, test_engagement_links,
@@ -1824,7 +1887,7 @@ if __name__ == "__main__":
               test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
               test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement, test_guest_sync,
               test_evidence_store, test_evidence_exec_collect, test_vault_seal_verify,
-              test_control_plane_service):
+              test_control_plane_service, test_scoped_range_client):
         print(t.__name__)
         # Each test gets a throwaway state dir, so nothing (records, evidence) can reach the
         # operator's real one; tests that manage RHUBARB_STATE_DIR themselves still may.

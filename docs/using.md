@@ -91,6 +91,14 @@ audited core; the service never touches `tart` or the keychain itself.
   NDJSON — `?from=<seq>` to resume after an entry, `?follow=false` to replay and stop. This is
   the control plane's live record of what happened, and the feed for herdr's sidebar.
 
+**Scoped range client (for agents).** When herdr runs an agent against an engagement, the agent's
+only tool for acting in its range is `rbt-range` — it runs a command in the *one* clone assigned
+to it (via `RBT_RANGE_CLONE` and the service socket), so every command is journaled as evidence
+and the clone is fixed, not chosen per call. It mirrors `ssh host <cmd>` semantics. This is the
+sanctioned, recorded path; hard isolation of an agent from other clones on the same host is the
+per-engagement driver VM ([charter](HERDR-CHARTER.md) model C), and reach to targets is enforced
+by the network (#30).
+
 **Sealing a vault.** `rhubarb vault seal ID` turns the evidence store into a signed, sealed,
 portable bundle you can hand off:
 

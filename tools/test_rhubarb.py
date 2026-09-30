@@ -1833,11 +1833,12 @@ def test_scoped_range_client() -> None:
     saved = service.post_json
     try:
         service.post_json = fake_post
-        code, out, err = agent.range_exec("/s.sock", "jsl-attacker", "id")
+        r = agent.range_exec("/s.sock", "jsl-attacker", "id")
         check("range_exec runs in the named clone via the service exec endpoint",
               seen["path"] == "/clones/jsl-attacker/exec" and seen["body"]["command"] == "id")
         check("range_exec decodes the base64 output and returns the exit code",
-              code == 0 and out == b"uid=1000\n" and err == b"")
+              r["exit_code"] == 0 and r["stdout"] == b"uid=1000\n" and r["stderr"] == b""
+              and r["approval_required"] is False)
 
         def reject(sock, path, body=None, timeout=300):
             raise VerifyError("jsl-attacker: no IP (is it running?)")
@@ -1983,6 +1984,131 @@ def test_herdr_arm() -> None:
             (herdr._herdr, herdr.herdr_bin, herdr.config_path, api.engagement_clones) = saved
 
 
+def test_tiered_approvals() -> None:
+    """#108 slice 3: tiered commands are held for approval, granted single-use, and the whole
+    exchange is evidence. approvals ledger + api.exec gating + api.approve/pending (core mocked)."""
+    import json as _json
+    from pathlib import Path
+
+    from rhubarb import api, approvals, evidence
+    from rhubarb.common import VerifyError
+
+    saved_cfg = approvals._config_path
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Path(tmp) / "e.herdr.json"
+        cfg.write_text(_json.dumps({"agents": [{"name": "a", "kind": "claude", "clone": "c1"}],
+                                    "tiered": ["curl ", "^rm "]}))
+        approvals._config_path = lambda eid: cfg
+
+        check("needs_approval matches a tiered pattern",
+              approvals.needs_approval("eng", "curl http://x") and not approvals.needs_approval("eng", "id"))
+        rid = approvals.request_id("c1", "curl http://x")
+        check("request_id is stable per (clone, command)",
+              rid == approvals.request_id("c1", "curl http://x")
+              and rid != approvals.request_id("c2", "curl http://x"))
+
+        # request -> pending; not approved yet
+        approvals.record_request("eng", "c1", "curl http://x")
+        approvals.record_request("eng", "c1", "curl http://x")   # idempotent while pending
+        pend = approvals.pending("eng")
+        check("a held command shows once in pending",
+              [p["request_id"] for p in pend] == [rid]
+              and sum(1 for x in evidence.entries("eng")
+                      if x["kind"] == "approval" and x["data"]["state"] == "requested") == 1)
+        check("not approved before a grant",
+              not approvals.is_approved_and_consume("eng", "c1", "curl http://x"))
+
+        # grant -> single-use consume
+        approvals.grant("eng", rid)
+        check("granted request is consumable exactly once",
+              approvals.is_approved_and_consume("eng", "c1", "curl http://x")
+              and not approvals.is_approved_and_consume("eng", "c1", "curl http://x"))
+        check("after consume it is no longer pending", approvals.pending("eng") == [])
+
+    approvals._config_path = saved_cfg
+
+    # api.exec gating (mock the clone record + ssh; use the temp tiered config)
+    with tempfile.TemporaryDirectory() as tmp:
+        cfg = Path(tmp) / "e2.herdr.json"
+        cfg.write_text(_json.dumps({"agents": [{"name": "a", "kind": "claude", "clone": "c1"}],
+                                    "tiered": ["curl "]}))
+        approvals._config_path = lambda eid: cfg
+        ran = []
+        orig = (api._clones.load, api.hostops.vm_ip, api.subprocess.run)
+        try:
+            api._clones.load = lambda n: {"name": "c1", "family": "kali", "username": "kr",
+                                          "profile": "kali-research", "engagement": "juiceshop-lab"}
+            api.hostops.vm_ip = lambda n, f, wait=180: "10.0.0.2"
+            api.subprocess.run = lambda argv, **k: (ran.append(argv) or
+                types.SimpleNamespace(stdout=b"ok\n", stderr=b"", returncode=0))
+
+            r = api.exec("c1", "curl http://x")
+            check("exec holds a tiered command instead of running it",
+                  r.approval_required and r.exit_code == 126 and not ran and r.request_id)
+            check("holding a tiered command records a request",
+                  api.pending_approvals("juiceshop-lab") and api.pending_approvals("juiceshop-lab")[0]["command"] == "curl http://x")
+
+            check("approve rejects an unknown request",
+                  _raises(lambda: api.approve("juiceshop-lab", "deadbeef"), VerifyError))
+            api.approve("juiceshop-lab", r.request_id)
+            r2 = api.exec("c1", "curl http://x")
+            check("after approval the command runs (grant consumed)",
+                  not r2.approval_required and r2.exit_code == 0 and len(ran) == 1)
+            r3 = api.exec("c1", "curl http://x")
+            check("a second run needs a fresh approval (single-use)",
+                  r3.approval_required and len(ran) == 1)
+
+            ran.clear()
+            r4 = api.exec("c1", "id")
+            check("a non-tiered command runs without approval", not r4.approval_required and len(ran) == 1)
+        finally:
+            (api._clones.load, api.hostops.vm_ip, api.subprocess.run) = orig
+    approvals._config_path = saved_cfg
+
+
+def test_range_client_waits_for_approval() -> None:
+    """#108 slice 3: rbt-range holds a tiered command until it is approved, then runs it."""
+    import base64
+
+    from rhubarb import agent, service
+
+    os.environ["RBT_SERVICE_SOCKET"] = "/s.sock"
+    os.environ["RBT_RANGE_CLONE"] = "c1"
+    os.environ["RBT_APPROVAL_POLL"] = "0"
+    calls = {"n": 0}
+
+    def fake_post(sock, path, body=None, timeout=300):
+        calls["n"] += 1
+        if calls["n"] < 3:   # held twice, then approved
+            return {"exit_code": 126, "approval_required": True, "request_id": "r1",
+                    "stdout": base64.b64encode(b"").decode(), "stderr": base64.b64encode(b"").decode()}
+        return {"exit_code": 0, "approval_required": False,
+                "stdout": base64.b64encode(b"done\n").decode(), "stderr": base64.b64encode(b"").decode()}
+
+    saved = service.post_json
+    real_out = sys.stdout
+    buf = __import__("io").BytesIO()
+    class _B:
+        buffer = buf
+        def flush(self): pass
+    try:
+        service.post_json = fake_post
+        sys.stdout = _B()
+        try:
+            agent.main(["--", "curl", "http://x"])
+            rc = 0
+        except SystemExit as e:
+            rc = e.code
+        finally:
+            sys.stdout = real_out
+        check("rbt-range polls until approved, then runs and exits 0",
+              rc == 0 and calls["n"] == 3 and buf.getvalue() == b"done\n")
+    finally:
+        service.post_json = saved
+        for k in ("RBT_SERVICE_SOCKET", "RBT_RANGE_CLONE", "RBT_APPROVAL_POLL"):
+            os.environ.pop(k, None)
+
+
 if __name__ == "__main__":
     for t in (test_ed25519, test_nar, test_dpkg, test_records, test_cli_lifecycle,
               test_rotation_script, test_api_pure, test_engagements, test_engagement_ops, test_engagement_links,
@@ -1993,7 +2119,8 @@ if __name__ == "__main__":
               test_build_cleanup_trap, test_content_addressed_cache, test_chrome_update_policy, test_publish_offline_signing,
               test_stacked_clones, test_github_release_resolver, test_reset_keeps_engagement, test_guest_sync,
               test_evidence_store, test_evidence_exec_collect, test_vault_seal_verify,
-              test_control_plane_service, test_scoped_range_client, test_herdr_arm):
+              test_control_plane_service, test_scoped_range_client, test_herdr_arm,
+              test_tiered_approvals, test_range_client_waits_for_approval):
         print(t.__name__)
         # Each test gets a throwaway state dir, so nothing (records, evidence) can reach the
         # operator's real one; tests that manage RHUBARB_STATE_DIR themselves still may.

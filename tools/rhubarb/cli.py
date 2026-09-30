@@ -12,6 +12,8 @@
   rhubarb rm NAME [--yes]
   rhubarb serve [--socket PATH]                     control-plane service on a 0600 Unix socket
   rhubarb herdr arm ID [--socket PATH]              launch the engagement's agents under herdr (charter model A)
+  rhubarb herdr pending ID                          tiered commands awaiting approval
+  rhubarb herdr approve ID REQUEST                  grant one single-use approval
   rhubarb engagement define FILE|ID                 validate + acknowledge a scope manifest
   rhubarb engagement list                           defined engagements and their clone counts
   rhubarb engagement provision ID                   stand up its ranges from verified images
@@ -266,6 +268,8 @@ def _evidence_what(kind: str | None, d: dict) -> str:
         return f"{d.get('path')}  ({d.get('size')} bytes)"
     if kind == "ground_truth":
         return f"{d.get('package')} {d.get('status', d.get('error'))}"
+    if kind == "approval":
+        return f"{d.get('state')} {d.get('request_id')}" + (f"  {d['command']}" if d.get("command") else "")
     return str(d.get("event", ""))
 
 
@@ -315,6 +319,21 @@ def cmd_herdr_arm(a) -> None:
         say(f"{ag.name} ({ag.kind}) -> clone {ag.clone}, pane {ag.pane}"
             + (f"  [{ag.note}]" if ag.note else ""))
     say(f"engagement {res.engagement}: armed {len(res.agents)} agent(s) in workspace {res.workspace}")
+
+
+def cmd_herdr_pending(a) -> None:
+    eid = _engagement_id(a.engagement)
+    rows = [[p["request_id"], p["clone"] or "-", p["command"]] for p in api.pending_approvals(eid)]
+    if rows:
+        table(rows, ["REQUEST", "CLONE", "COMMAND"])
+    else:
+        say(f"engagement {eid}: no approvals pending")
+
+
+def cmd_herdr_approve(a) -> None:
+    eid = _engagement_id(a.engagement)
+    api.approve(eid, a.request)
+    say(f"engagement {eid}: approved {a.request} (single use)")
 
 
 def cmd_serve(a) -> None:
@@ -404,6 +423,13 @@ def main(argv: list[str] | None = None) -> None:
     ha.add_argument("engagement", metavar="ID")
     ha.add_argument("--socket", metavar="PATH", help="control-plane socket (default: <state>/service.sock)")
     ha.set_defaults(fn=cmd_herdr_arm)
+    hp = hdsub.add_parser("pending", help="tiered commands awaiting operator approval")
+    hp.add_argument("engagement", metavar="ID")
+    hp.set_defaults(fn=cmd_herdr_pending)
+    hap = hdsub.add_parser("approve", help="grant one single-use approval for a pending request")
+    hap.add_argument("engagement", metavar="ID")
+    hap.add_argument("request", metavar="REQUEST")
+    hap.set_defaults(fn=cmd_herdr_approve)
     vt = sub.add_parser("vault", help="seal / verify a signed evidence bundle")
     vtsub = vt.add_subparsers(dest="vault_cmd", required=True)
     vs = vtsub.add_parser("seal", help="write a signed, sealed, portable evidence bundle")

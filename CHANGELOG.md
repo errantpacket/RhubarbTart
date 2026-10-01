@@ -12,6 +12,20 @@ release that built it (`rhubarbtart_version`).
 
 ## [Unreleased]
 
+### Fixed
+- Kali (and other Linux) smoke test: wait for logins to be allowed before the login checks on
+  both boots. On a fast boot sshd listened before `/run/nologin` was removed, so `pam_nologin`
+  rejected the login and the second-boot check failed (#158, #160). Diagnosis, reproduction and
+  patch by **Gemini 3.8 Flash**; commit `612d21f` lists only Claude and is corrected here.
+- Profiles that use Rosetta now check for it before a build or a clone starts, and stop with the
+  install command instead of a smoke-test timeout on a Mac without Rosetta (#158, #160).
+
+### Changed
+- `kali-research`: Chrome 154.0.8037.57 to 154.0.8037.92, validated on hardware as
+  `rbt-kali-research-30560117767a` (#159, #161).
+- README Quick start: refreshing inputs (resolve) is optional, `rhubarbtart run --detach` is
+  mentioned, and downloads show a progress bar only on a terminal (#154, #155).
+
 ## [0.1.0] - 2026-09-30
 
 The first versioned release.

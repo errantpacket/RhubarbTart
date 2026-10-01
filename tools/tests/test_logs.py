@@ -68,9 +68,22 @@ def test_logs_api() -> None:
     check("tail_log: a truncated log resets", api.tail_log("logs/grow.log", t3.cursor).reset)
     t4 = api.tail_log("logs/grow.log")
     grow.unlink()
-    grow.write_text("fresh\nreplacement is longer\n")        # a new file under the same name
+    grow.write_text("other\nreplacement is longer\n")        # a new file under the same name
     t5 = api.tail_log("logs/grow.log", t4.cursor)
-    check("tail_log: a replaced log resets", t5.reset and t5.text.startswith("fresh"))
+    check("tail_log: a replaced log resets (even when Linux reuses the inode)",
+          t5.reset and t5.text.startswith("other"))
+    t6 = api.tail_log("logs/grow.log")
+    with open(grow, "r+") as f:                              # same inode: truncate, rewrite longer
+        f.truncate(0)
+        f.write("rewritten in place\nand now longer than before\n")
+    t7 = api.tail_log("logs/grow.log", t6.cursor)
+    check("tail_log: a log truncated and rewritten longer (same inode) resets",
+          t7.reset and t7.text.startswith("rewritten"))
+    with open(grow, "a") as f:
+        f.write("appended\n")
+    t8 = api.tail_log("logs/grow.log", t7.cursor)
+    check("tail_log: a plain append after that still continues",
+          not t8.reset and t8.text == "appended")
     check("tail_log: a large log resets to the tail, not a cut first line",
           api.tail_log("logs/big.log", max_lines=5).text == "last-but-one\nlast")
     check("tail_log refuses unsafe ids like read_log",

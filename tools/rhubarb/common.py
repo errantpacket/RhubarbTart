@@ -60,9 +60,11 @@ def download(url: str, dest: Path) -> None:
     dest.parent.mkdir(parents=True, exist_ok=True)
     part = dest.with_suffix(dest.suffix + ".part")
     log(f"downloading {url}")
+    # A one-line progress bar for someone watching a terminal; in logs and CI, errors only.
+    progress = ["--progress-bar"] if sys.stderr.isatty() else ["--silent", "--show-error"]
     subprocess.run(
         ["curl", "--fail", "--location", "--proto", "=https", "--proto-redir", "=https",
-         "--tlsv1.2", "--retry", "5", "--continue-at", "-", "--output", str(part), url],
+         "--tlsv1.2", "--retry", "5", "--continue-at", "-", *progress, "--output", str(part), url],
         check=True,
     )
     part.rename(dest)

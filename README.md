@@ -144,8 +144,9 @@ Rosetta; if it isn't installed, run `softwareupdate --install-rosetta --agree-to
 # 1. Install the pinned tools into ./.toolchain (no Homebrew, no sudo)
 ./tools/bootstrap.sh && source scripts/env.sh && uv run tools/resolve.py preflight
 
-# 2. Resolve a guest's inputs into its lock file, then review the changes
-uv run tools/resolve.py resolve kali-research && git diff locks/
+# 2. Optional: refresh the guest's inputs to their newest versions, then review the changes.
+#    Skip this to build exactly what the repository pins.
+# uv run tools/resolve.py resolve kali-research && git diff locks/
 
 # 3. Create an SSH key for your VMs (first time only; set a passphrase when asked),
 #    keep its passphrase in your keychain, then build and test the image
@@ -164,9 +165,11 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/rhubarbtart_ed25519.pub ./scripts/build.sh kali-resea
    from source. Each is checked against a pinned hash and installed into the repository's own
    `.toolchain/` folder. `preflight` then confirms that these are the versions on your `PATH`.
    Building GnuPG needs the Xcode Command Line Tools.
-2. **Resolve** looks up the newest versions of the profile's inputs, verifies them, and writes
-   `locks/kali-research.lock.json`. The included profiles already have committed locks, so you
-   only need this step when you want newer versions.
+2. **Resolve** is optional. The included profiles have committed locks, and the build downloads
+   and verifies exactly those versions. Resolve looks up the newest versions instead, verifies
+   them and rewrites `locks/kali-research.lock.json`, which changes the image's name and leaves
+   your checkout modified. Run it when you want newer versions, or when the build reports that a
+   pinned download is gone (vendors such as Google keep only recent releases).
 3. **Your SSH key** gets you into your VMs. Use a key only for them, not the one you use for
    GitHub or servers. The first line creates it only if it doesn't exist yet. `ssh-add
    --apple-use-keychain` loads it and stores its passphrase in your macOS keychain; after a
@@ -181,8 +184,9 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/rhubarbtart_ed25519.pub ./scripts/build.sh kali-resea
    A build is a full OS install and can take 15 to 45 minutes, so run it in a separate terminal.
    `./scripts/build.sh --list` lists the available profiles.
 4. **`rhubarbtart new`** creates a clone and gives it its own password, stored in your keychain.
-   `rhubarbtart run` starts it. [Using your VMs](docs/using.md) covers `ssh`, `enroll`, `reset`,
-   `rm`, engagements and the dashboard.
+   `rhubarbtart run` starts it in a window and keeps the terminal until the VM shuts down; add
+   `--detach` to get the terminal back. [Using your VMs](docs/using.md) covers `ssh`, `enroll`,
+   `reset`, `rm`, engagements and the dashboard.
 
 </details>
 

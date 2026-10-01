@@ -22,6 +22,9 @@ CTFs, with each command they run recorded as evidence on the host (early stage).
 ![Toolchain](https://img.shields.io/badge/toolchain-no%20Homebrew-2b2d42)
 ![Provenance](https://img.shields.io/badge/inputs-pinned%20%2B%20verified-2b2d42)
 
+![The rhubarb-tui dashboard listing built images with their profile, status and clone count](docs/images/tui-images.webp)
+<br/><sub>The <code>./rhubarb-tui</code> dashboard, here running inside herdr.</sub>
+
 </div>
 
 ---
@@ -167,9 +170,7 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
 </details>
 
 The same actions are available in `./rhubarb-tui`, a keyboard-driven dashboard with tabs for
-images, clones, provenance and logs. Here it runs inside herdr:
-
-![The rhubarb-tui dashboard showing built images, their profiles, status and clone counts](docs/images/tui-images.webp)
+images, clones, provenance and logs.
 
 ## Choose a guest
 

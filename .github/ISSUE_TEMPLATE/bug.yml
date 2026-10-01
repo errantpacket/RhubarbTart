@@ -1,0 +1,34 @@
+name: Bug
+description: Something doesn't work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        For a security problem, use the private report form instead (see SECURITY.md).
+        Never paste passwords, keys or enrollment tokens here.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you ran, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output
+      description: The error or log lines. Remove anything private first.
+      render: text
+  - type: input
+    id: profile
+    attributes:
+      label: Profile
+      description: For example kali-research, or "none" if this isn't about a guest.
+  - type: input
+    id: host
+    attributes:
+      label: Host
+      description: Mac model, macOS version, and the output of `./rhubarbtart --version`.
+    validations:
+      required: true

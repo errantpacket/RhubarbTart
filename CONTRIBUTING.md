@@ -65,6 +65,9 @@ your change: Setup Assistant timing, the macOS 27 provisioning path, real instal
   `if cmd; then die …; fi`.
 - New cryptographic or parsing code gets a case in `tools/tests/test_verification.py` using
   reference-implementation values, not values this code produced.
+- Docs, the README and skills are written in plain, simplified technical English: short sentences,
+  active voice, no em dashes, no hype words and no filler. The full rules are in the
+  `rhubarb-dev` skill ("Writing docs and skills"); `check.sh` fails on an em dash in Markdown.
 - Update the reference pages under `docs/` when behavior changes, and any affected skill. The
   posture and provenance tables are in [`docs/trust-model.md`](docs/trust-model.md). The config,
   toolchain and repository tables are in [`docs/reference.md`](docs/reference.md). The README is

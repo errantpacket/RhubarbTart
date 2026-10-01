@@ -40,6 +40,7 @@ RhubarbTart is built to answer those questions:
 | **Tested before use** | A new image only gets its final name after a temporary copy of it passes a set of security checks run from outside the VM |
 | **Hardened defaults** | No default passwords, no automatic login, no password-free `sudo` for users ([one narrow Kali exception](docs/trust-model.md#security-posture)), SSH by key only or not at all, firewall on, and no machine or VPN identity shared between copies |
 | **Secrets on the host** | Passwords are stored in your macOS keychain. Every copy gets its own password, and VPN sign-in happens per copy, never inside the image |
+| **Evidence you can hand over** | In an engagement, the commands run through `rhubarbtart exec` and the files collected from clones are kept on your Mac in a hash-chained journal. Seal it into a signed vault that can be checked offline on any machine ([Engagements](docs/using.md#engagements)) |
 | **Configured in JSON** | A guest is defined by a short profile: an OS, a list of tools and a few options |
 
 ![The rhubarbtart-tui Provenance tab for an image: build commit, input and lock hashes, the pinned toolchain and the locked base](docs/images/tui-provenance.webp)

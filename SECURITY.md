@@ -8,9 +8,9 @@ chain, or how secrets and clone state are handled is a serious bug. Reports are 
 
 **Please do not open a public issue for a security problem.**
 
-- Preferred: GitHub's **private vulnerability reporting**: the **Security** tab → **Report a
-  vulnerability** (GitHub → Security Advisories). This keeps the report private to the maintainers.
-- If that isn't available to you, email **security@errantpacket.com**.
+Report it through GitHub's **private vulnerability reporting**: the repository's **Security** tab →
+**Report a vulnerability**, or [this form](https://github.com/errantpacket/RhubarbTart/security/advisories/new).
+Only the maintainer can see the report.
 
 Please include:
 

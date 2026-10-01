@@ -8,6 +8,7 @@
 ![Guests](https://img.shields.io/badge/guests-macOS%2026%20·%20macOS%2027%20·%20NixOS%20·%20Kali-c9184a)
 ![Toolchain](https://img.shields.io/badge/toolchain-no%20Homebrew-2b2d42)
 ![Provenance](https://img.shields.io/badge/inputs-pinned%20%2B%20verified-2b2d42)
+[![check](https://github.com/errantpacket/RhubarbTart/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/errantpacket/RhubarbTart/actions/workflows/check.yml)
 
 ![The rhubarbtart-tui dashboard listing built images with their profile, status and clone count](docs/images/tui-images.webp)
 <br/><sub>The <code>./rhubarbtart-tui</code> dashboard, running inside <a href="https://herdr.dev">herdr</a>.</sub>

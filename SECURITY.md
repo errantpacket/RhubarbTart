@@ -10,8 +10,7 @@ chain, or how secrets and clone state are handled is a serious bug. Reports are 
 
 - Preferred: GitHub's **private vulnerability reporting**: the **Security** tab → **Report a
   vulnerability** (GitHub → Security Advisories). This keeps the report private to the maintainers.
-- If that isn't available to you, contact the maintainer privately. _(Maintainer: set a security
-  contact here, for example an email address or a Signal handle, before making this repository public.)_
+- If that isn't available to you, email **security@errantpacket.com**.
 
 Please include:
 

@@ -3,19 +3,6 @@
 # 🍎 RhubarbTart
 
 **Security-research VMs for Apple silicon, built from verified vendor installers.**
-<br/>Describe a guest in a short JSON profile: an OS (macOS 26 or 27, NixOS or Kali) and the tools
-you need. RhubarbTart downloads the vendor installers, checks each one against a pinned hash and,
-where there is one, the vendor's signature, and builds a hardened [Tart](https://tart.run) VM image
-from them. Before the image is used, a temporary copy of it is tested from outside the VM. You
-then work in disposable clones of the image, each with its own password, and delete them when
-you're done.
-<br/><br/>It's meant for security work where you need to know what was on the machine. When testing
-macOS or iOS apps and their backends, you can state what the test machine contained and repeat a
-test from the same starting point. When analysing malware, you run the sample in a clone and delete
-it afterwards, so the next analysis starts clean and anything that wasn't in the image points to the sample. For
-client work, each engagement gets its own clones, so one client's data doesn't carry over to the
-next. The same setup is the base for running AI agents on scoped research, penetration tests and
-CTFs, with each command they run recorded as evidence on the host (early stage).
 
 ![Apple silicon](https://img.shields.io/badge/host-Apple%20silicon-c9184a)
 ![Guests](https://img.shields.io/badge/guests-macOS%2026%20·%20macOS%2027%20·%20NixOS%20·%20Kali-c9184a)
@@ -23,17 +10,29 @@ CTFs, with each command they run recorded as evidence on the host (early stage).
 ![Provenance](https://img.shields.io/badge/inputs-pinned%20%2B%20verified-2b2d42)
 
 ![The rhubarbtart-tui dashboard listing built images with their profile, status and clone count](docs/images/tui-images.webp)
-<br/><sub>The <code>./rhubarbtart-tui</code> dashboard, here running inside herdr.</sub>
+<br/><sub>The <code>./rhubarbtart-tui</code> dashboard, running inside <a href="https://herdr.dev">herdr</a>.</sub>
 
 </div>
 
 ---
 
+Describe a guest in a short JSON profile: an OS (macOS 26 or 27, NixOS or Kali) and the tools
+you need. RhubarbTart downloads the vendor installers and checks each one against a pinned hash
+and, where one exists, the vendor's signature. It then builds a hardened [Tart](https://tart.run)
+VM image from them and tests a temporary copy from outside the VM. You work in disposable clones
+of the image, each with its own password, and delete them when you're done. In an engagement, the
+commands you run and the files you collect are kept as evidence on your Mac. You can seal that
+evidence into a signed vault to hand over.
+
+Use it for security work where you need to know what was on the machine. Examples are testing
+macOS and iOS apps, analysing malware, client engagements, and AI agents working on scoped
+research under [herdr](https://herdr.dev). [What it's for](#what-its-for) describes each use.
+
 ## Why RhubarbTart
 
 Research VMs are often built from a snapshot someone else made, then changed over time. After a
-while it's hard to say what software the machine contained, to reproduce a result on the same
-setup, or to be sure nothing from one job carried over into the next.
+while it's hard to say what software the machine contained. It's also hard to reproduce a result
+on the same setup, or to be sure that nothing from one job carried over into the next.
 
 RhubarbTart is built to answer those questions:
 
@@ -43,7 +42,12 @@ RhubarbTart is built to answer those questions:
 | **Tested before use** | A new image only gets its final name after a temporary copy of it passes a set of security checks run from outside the VM |
 | **Hardened defaults** | No default passwords, no automatic login, no password-free `sudo` for users ([one narrow Kali exception](docs/trust-model.md#security-posture)), SSH by key only or not at all, firewall on, and no machine or VPN identity shared between copies |
 | **Secrets on the host** | Passwords are stored in your macOS keychain. Every copy gets its own password, and VPN sign-in happens per copy, never inside the image |
+| **Evidence you can hand over** | In an engagement, the commands run through `rhubarbtart exec` and the files collected from clones are kept on your Mac in a hash-chained journal. Seal it into a signed vault that can be checked offline on any machine ([Engagements](docs/using.md#engagements)) |
 | **Configured in JSON** | A guest is defined by a short profile: an OS, a list of tools and a few options |
+
+![The rhubarbtart-tui Provenance tab for an image: build commit, input and lock hashes, the pinned toolchain and the locked base](docs/images/tui-provenance.webp)
+<sub>Every image records what went into it. The dashboard's Provenance tab shows the build commit,
+the input and lock hashes, the pinned toolchain and the locked base.</sub>
 
 ## How it fits together
 
@@ -60,8 +64,9 @@ There are four main parts:
 4. You **work in a clone** of the image: a disposable copy with its own password. When you're
    done, delete the clone. The next clone starts from the same state.
 
-An image's name is derived from its inputs (`rbt-<profile>-<hash>`), so the same lock always gives
-the same image name. A record of what went into each image is saved next to it.
+An image's name comes from its inputs (`rbt-<profile>-<hash>`), so the same lock always gives
+the same image name. The build saves a record of what went into each image in
+`out/<image>.provenance.json`.
 
 > [!TIP]
 > New to the terms? **[Key concepts](docs/concepts.md)** explains each one, including the build
@@ -74,12 +79,12 @@ Each use follows the same steps: build a hardened guest with known contents, wor
 **disposable clone**, and delete the clone afterwards.
 
 <details>
-<summary><b>macOS, iOS and Apple-app penetration testing</b></summary>
+<summary><b>macOS and iOS app testing</b></summary>
 
 Testing a macOS app, an iOS app and its backend, or an Apple service needs a clean Apple
-environment that you can set up the same way each time. RhubarbTart builds a hardened **macOS**
+environment, set up the same way each time. RhubarbTart builds a hardened **macOS**
 guest with your tools (Chrome, ZAP, a VPN or ZTNA client) pinned and verified. Each image's
-contents are recorded and each clone is separate and disposable, so you can state what the
+contents are recorded, and each clone is separate and disposable. So you can state what the
 machine contained, repeat a test from the same starting point, and keep one client's data out of
 the next engagement.
 
@@ -110,16 +115,16 @@ explicit link between two of them, and a lab target like Juice Shop has no route
 <details>
 <summary><b>Agent-driven engagements with herdr</b></summary>
 
-RhubarbTart can run AI agents under [herdr](https://herdr.dev), a terminal multiplexer for agents,
-for scoped research, penetration tests and CTFs inside these VMs. Evidence is kept on the host,
-outside the VMs. You can:
+RhubarbTart can run AI agents for scoped research, penetration tests and CTFs inside these VMs.
+The agents run under [herdr](https://herdr.dev), a terminal workspace manager for AI coding
+agents. Evidence stays on the host, outside the VMs. You can:
 
 - create and remove a whole set of clones for one scope as an
   [engagement](docs/using.md#engagements);
 - record the commands run in its clones and the files they produce as hash-chained evidence, and
   seal that evidence into a signed, portable vault;
-- start the engagement's agents under herdr with `rhubarbtart herdr arm`. Each agent reaches only its
-  assigned clone, through the `rbt-range` client, and commands that match a configured pattern
+- start the engagement's agents under herdr with `rhubarbtart herdr arm`. Each agent reaches only
+  its assigned clone, through the `rbt-range` client. Commands that match a configured pattern
   wait for your approval.
 
 Not built yet: enforcing an engagement's agent budget, recording the agents' prompts and replies,
@@ -163,14 +168,14 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
    copy and tests it from the outside. Only if those tests pass does the image get its final name.
    A build is a full OS install and can take 15 to 45 minutes, so run it in a separate terminal.
    `./scripts/build.sh --list` lists the available profiles.
-4. **`rhubarbtart new`** creates a clone and sets its own password, which is stored in your keychain.
-   `rhubarbtart run` starts it. [Using your VMs](docs/using.md) covers `ssh`, `enroll`, `reset`, `rm`,
-   engagements and the `./rhubarbtart-tui` dashboard.
+4. **`rhubarbtart new`** creates a clone and gives it its own password, stored in your keychain.
+   `rhubarbtart run` starts it. [Using your VMs](docs/using.md) covers `ssh`, `enroll`, `reset`,
+   `rm`, engagements and the dashboard.
 
 </details>
 
-The same actions are available in `./rhubarbtart-tui`, a keyboard-driven dashboard with tabs for
-images, clones, provenance and logs.
+`./rhubarbtart-tui` gives the same actions in a keyboard-driven dashboard, with tabs for images,
+clones, provenance and logs. Inside herdr it uses herdr's colour theme.
 
 ## Choose a guest
 
@@ -230,15 +235,15 @@ Open bugs, enhancements and the roadmap are in the
 
 ## License
 
-RhubarbTart is licensed under the [Functional Source License 1.1 (Apache-2.0 future
-license)](LICENSE.md) (`FSL-1.1-ALv2`): free for personal, internal, educational and research use;
-the only restriction is using it to build a competing commercial product, and the license converts
-to Apache-2.0 two years after each release. Third-party components keep their own licenses, listed
-in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+RhubarbTart is licensed under the [Functional Source License 1.1, Apache-2.0 future
+license](LICENSE.md) (`FSL-1.1-ALv2`). You may use it for any purpose except building a competing
+commercial product. Each release becomes Apache-2.0 two years after it is published. Third-party
+components keep their own licenses, listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
 ---
 
 <div align="center">
 <sub>Setup Assistant automation adapted from <a href="https://github.com/cirruslabs/macos-image-templates">cirruslabs/macos-image-templates</a> ·
-VMs run on <a href="https://github.com/openai/tart">Tart</a> · built with Packer, uv and Nix.</sub>
+VMs run on <a href="https://tart.run">Tart</a> · agents run under <a href="https://herdr.dev">herdr</a> ·
+built with Packer, uv and Nix.</sub>
 </div>

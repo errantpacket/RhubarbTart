@@ -1,6 +1,6 @@
 ---
 name: rhubarb-dev
-description: Safely change RhubarbTart's code (resolvers and verification, Packer templates, in-guest install and seal scripts, NixOS modules, Kali preseed, build/smoke-test/enroll scripts, the rhubarbtart CLI and typed core, engagements, evidence and vaults, the control-plane service, herdr agents and approvals, the TUI, check.sh) without breaking its security and provenance guarantees. Explains the invariants and why they exist, where each concern lives, per-family pitfalls (macOS bash 3.2, `! cmd` under set -e, password handling, seal ordering) and how to validate a change (check.sh, self-tests, Docker NixOS evaluation, stub simulations). Use this for any code edit, bug fix, refactor or new feature in this repo, for hardening changes, adapting to a new macOS/NixOS/Kali release, fixing a failing check, or reviewing someone's diff or doing a security review of the pipeline, even for small changes.
+description: Safely change RhubarbTart's code (resolvers and verification, Packer templates, in-guest install and seal scripts, NixOS modules, Kali preseed, build/smoke-test/enroll scripts, the rhubarbtart CLI and typed core, engagements, evidence and vaults, the control-plane service, herdr agents and approvals, the TUI, check.sh) without breaking its security and provenance guarantees. Also sets how the README, docs and skills are written (plain technical English, no em dashes or hype). Explains the invariants and why they exist, where each concern lives, per-family pitfalls (macOS bash 3.2, `! cmd` under set -e, password handling, seal ordering) and how to validate a change (check.sh, self-tests, Docker NixOS evaluation, stub simulations). Use this for any code edit, bug fix, refactor or new feature in this repo, for hardening changes, adapting to a new macOS/NixOS/Kali release, fixing a failing check, or reviewing someone's diff or doing a security review of the pipeline, even for small changes.
 ---
 
 # Changing RhubarbTart safely
@@ -126,3 +126,27 @@ Then, for the change itself:
 5. Report precisely: what you verified (and how) versus what only a real build on the Mac can
    confirm (keystroke timing, provisioning API, installer flows, sshd/launchd/systemd runtime
    state).
+
+## Writing docs and skills
+
+The README, `docs/`, `CONTRIBUTING.md`, `SECURITY.md`, the changelog and these skills share one
+style: plain, simplified technical English. Apply it whenever you write or edit prose here.
+
+- **Short, plain sentences.** One idea per sentence, active voice, concrete nouns. Aim for about
+  20 words; split anything over 30. Use the same term for the same thing throughout.
+- **No em dashes (U+2014).** Use a period, comma, colon, semicolon or parentheses. Don't use ` -- ` as a
+  dash in prose either (CLI flags such as `--yes` and `-- CMD` are fine). `check.sh` fails on an
+  em dash in any tracked Markdown file.
+- **No hype.** Not "powerful", "seamless", "robust", "comprehensive", "cutting-edge",
+  "effortless", "crucial", "truly", "simply", or "just" as a minimizer. Say what it does.
+- **No common AI-writing habits.** No "It's worth noting", "In summary", "not just X, but Y",
+  "X isn't about A; it's about B", rhetorical questions as headings, lists forced into threes,
+  sentences that restate the heading, stacked adjectives, or bold on every other phrase. No emoji
+  in prose; the 🍎 in the project's display name (README and TUI titles, release titles, the
+  GitHub description) is the exception.
+- **Accurate before polished.** Check every command, flag, path and claim against the code. Link
+  to the page that covers a topic instead of repeating it. The README is the landing page; the
+  `docs/` pages are the spec.
+- **Keep the flow.** Edit rather than rewrite, and leave clear, correct text alone. In the README,
+  put long detail in collapsed `<details>` blocks and keep the main path short.
+

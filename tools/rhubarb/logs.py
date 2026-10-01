@@ -106,30 +106,48 @@ def tail_log(log_id: str, cursor: tuple | None = None, max_lines: int = 2000) ->
     the read window), returns the last ``max_lines`` lines with ``reset=True``. Otherwise
     returns only the new bytes, so following a growing build log costs what it wrote.
     Raises like ``read_log()``.
+
+    A log counts as the same one only if it has the same device and inode AND the bytes just
+    before the cursor are unchanged (#137). The inode alone is not enough: Linux reuses a
+    deleted file's inode at once, and a log truncated and rewritten longer between two reads
+    keeps its inode on every system.
     """
     f, st = _open_log(log_id)
     ident = (st.st_dev, st.st_ino)
     with f:
         start = None
-        if cursor is not None and len(cursor) == 3 and tuple(cursor[:2]) == ident:
+        if cursor is not None and len(cursor) == 4 and tuple(cursor[:2]) == ident:
             offset = cursor[2]
-            if 0 <= offset <= st.st_size and st.st_size - offset <= MAX_LOG_BYTES:
+            if (0 <= offset <= st.st_size and st.st_size - offset <= MAX_LOG_BYTES
+                    and _fingerprint(f, offset) == cursor[3]):
                 start = offset
         reset = start is None
         if reset:
             start = max(0, st.st_size - MAX_LOG_BYTES)
         f.seek(start)
         data = f.read(st.st_size - start)
-    if reset and start > 0:
-        cut = data.find(b"\n")          # the first line is probably cut mid-way
-        start, data = (start + cut + 1, data[cut + 1:]) if cut >= 0 else (st.st_size, b"")
-    done = data.rfind(b"\n") + 1        # bytes up to the end of the last complete line
-    end = start + done
+        if reset and start > 0:
+            cut = data.find(b"\n")          # the first line is probably cut mid-way
+            start, data = (start + cut + 1, data[cut + 1:]) if cut >= 0 else (st.st_size, b"")
+        done = data.rfind(b"\n") + 1        # bytes up to the end of the last complete line
+        end = start + done
+        fp = _fingerprint(f, end)
     lines = data.decode(errors="replace").splitlines()
     if reset:
         lines = lines[-max_lines:]
-    return LogTail(text="\n".join(lines), cursor=(*ident, end), reset=reset,
+    return LogTail(text="\n".join(lines), cursor=(*ident, end, fp), reset=reset,
                    partial=done < len(data))
+
+
+_FINGERPRINT_BYTES = 256
+
+
+def _fingerprint(f, end: int) -> str:
+    """A short hash of the bytes just before ``end``: if they change, the log is not the one
+    the cursor was taken on."""
+    import hashlib
+    f.seek(max(0, end - _FINGERPRINT_BYTES))
+    return hashlib.sha256(f.read(min(end, _FINGERPRINT_BYTES))).hexdigest()[:16]
 
 
 def new_build_log(profile: str) -> Path:

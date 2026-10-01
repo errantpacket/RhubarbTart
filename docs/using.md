@@ -49,8 +49,7 @@ pick a Textual theme instead, for example `nord` or `catppuccin-latte`.
 | `reset NAME [--same-image] [--no-rotate]` | Throws the clone away (identity, enrollment and all) and re-clones, from the current image by default. A stacked clone stays stacked |
 | `rm NAME [--yes]` | Stops and deletes the clone, its keychain entry (only if it had a unique/rotated password) and its pinned host key |
 
-> [!NOTE]
-> `rhubarbtart` only touches clones it created. It never modifies built images (`rbt-…`) or VMs
+> **Note:** `rhubarbtart` only touches clones it created. It never modifies built images (`rbt-…`) or VMs
 > made some other way, and clone names can't start with `rbt-`. Per-clone rotation needs key
 > SSH (images built with `RHUBARB_SSH_PUBKEYS`, with the key in `ssh-agent` or `RHUBARB_SSH_IDENTITY`
 > pointing at it). Without it the clone keeps the image's password, and `rhubarbtart list` says
@@ -246,4 +245,4 @@ Store a secret once with `security add-generic-password -s RhubarbTart-enroll -a
 (it prompts, so the secret never lands in your shell history). `rhubarbtart enroll` wraps
 `scripts/enroll.sh` and records which services each clone is enrolled in.
 
-← back to the [README](../README.md)
+← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

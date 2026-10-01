@@ -147,6 +147,8 @@ style: plain, simplified technical English. Apply it whenever you write or edit 
 - **Accurate before polished.** Check every command, flag, path and claim against the code. Link
   to the page that covers a topic instead of repeating it. The README is the landing page; the
   `docs/` pages are the spec.
+- **The docs are also a site.** `docs/` builds into the published site (`zensical.toml`); `check.sh`
+  runs the build with `--strict`. Links to files outside `docs/` must be absolute GitHub URLs.
 - **Keep the flow.** Edit rather than rewrite, and leave clear, correct text alone. In the README,
   put long detail in collapsed `<details>` blocks and keep the main path short.
 

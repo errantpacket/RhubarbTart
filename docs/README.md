@@ -1,6 +1,7 @@
 # Documentation
 
-Guides and reference pages describe RhubarbTart as it works today. Design records, the files with
+Guides and reference pages describe RhubarbTart as it works today. This page is also the home page
+of the [documentation site](https://errantpacket.github.io/RhubarbTart/), built from these files. Design records, the files with
 uppercase names, keep the plans and decisions behind it; each notes where the build differs from
 the plan.
 

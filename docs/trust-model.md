@@ -164,4 +164,4 @@ sequenceDiagram
     G-->>BS: seal & power off
 ```
 
-← back to the [README](../README.md)
+← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

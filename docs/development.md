@@ -6,6 +6,18 @@ How to validate a change: `check.sh`, the off-Mac paths, and the project skills 
 ./tools/check.sh    # before every commit; also runs on Linux
 ```
 
+The documentation site is built from `docs/` by [Zensical](https://zensical.org), pinned and
+hash-locked in `tools/docs_site.py` like the TUI's Textual. Preview it, and build it the way CI does:
+
+```sh
+uv run --script tools/docs_site.py serve            # http://localhost:8000
+uv run --script tools/docs_site.py build --strict   # fails on a broken link
+```
+
+`check.sh` runs the strict build, and `.github/workflows/docs.yml` publishes the site to GitHub
+Pages on each push to `main`. Links from a docs page to files outside `docs/` must be absolute
+GitHub URLs, because the site only contains `docs/`.
+
 CI runs the same `check.sh` on Linux for every pull request and push to `main`
 (`.github/workflows/check.yml`). There, Packer's syntax and format checks use the runner's
 preinstalled Packer, which is not pinned; the pinned Packer runs them on the Mac. `check.sh` also checks that the workflow's actions are
@@ -16,7 +28,7 @@ render test, and profile validation. The self-tests cover Ed25519 RFC 8032 vecto
 real Nix, Debian version ordering, clone records, the `rhubarbtart` CLI lifecycle, password rotation,
 engagements and links, the evidence chain, vault seal and verify, the control-plane service, the
 range client, `herdr arm`, tiered approvals and the logs API. It also greps for regressions of the
-[ground rules](../CONTRIBUTING.md#ground-rules): Homebrew or `packer init` creeping back, default
+[ground rules](https://github.com/errantpacket/RhubarbTart/blob/main/CONTRIBUTING.md#ground-rules): Homebrew or `packer init` creeping back, default
 credentials, `NOPASSWD`, auto-login, password SSH, disabled SIP or Gatekeeper, unsigned repos,
 baked VPN secrets, plain-HTTP downloads, the service or herdr driver bypassing the core, and
 plugin-version or Textual-lock drift.
@@ -34,4 +46,4 @@ plugin-version or Textual-lock drift.
 | `rhubarb-update-inputs` | Refresh locks, pin Team IDs and keys, bump the toolchain, add tools or OS bases |
 | `rhubarb-dev` | Change the build code without breaking a guarantee |
 
-← back to the [README](../README.md)
+← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

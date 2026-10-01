@@ -59,4 +59,4 @@ flowchart TB
    `rbt-<profile>-<inputs-sha>`. The name is derived from the inputs, so identical inputs give an
    identical name, and `out/<vm>.provenance.json` records exactly what went in.
 
-← back to the [README](../README.md)
+← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

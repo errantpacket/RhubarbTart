@@ -29,7 +29,7 @@ class RhubarbTUI(ActionDispatch, App):
     into the action log, and destructive actions confirm first via ``ConfirmScreen``.
     """
 
-    TITLE = "RhubarbTart"
+    TITLE = "🍎 RhubarbTart"
     SUB_TITLE = "control plane"
 
     CSS = """

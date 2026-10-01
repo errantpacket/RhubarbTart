@@ -1,4 +1,4 @@
-"""Self-tests: clone records, the rhubarb CLI, host operations, SSH, stacked clones and the typed core API."""
+"""Self-tests: clone records, the rhubarbtart CLI, host operations, SSH, stacked clones and the typed core API."""
 
 import json
 import os
@@ -187,7 +187,7 @@ def test_confirm_prompt() -> None:
 
 
 def test_cli_progress_stream() -> None:
-    """#19: cli.py still streams the core's live milestones for `rhubarb new`/`reset` (it
+    """#19: cli.py still streams the core's live milestones for `rhubarbtart new`/`reset` (it
     hands api a progress callback that prints each line), and api's default (no callback)
     stays a pure no-op so existing callers/tests are unaffected."""
     import io
@@ -460,7 +460,7 @@ def test_ssh_provenance() -> None:
 
 
 def test_stacked_clones() -> None:
-    """#31: `rhubarb new --from-registry` (macOS only) verifies the published copy, stacks the
+    """#31: `rhubarbtart new --from-registry` (macOS only) verifies the published copy, stacks the
     clone on it, records its base blob, flags a missing base, and releases an unused base."""
     from rhubarb import api
     from rhubarb import clones as cl
@@ -551,7 +551,7 @@ def test_stacked_clones() -> None:
 
 
 def test_reset_keeps_engagement() -> None:
-    """#89: `rhubarb reset` re-clones under the same name and must keep the clone's engagement
+    """#89: `rhubarbtart reset` re-clones under the same name and must keep the clone's engagement
     tag, or the clone silently leaves its engagement and teardown orphans it."""
     from rhubarb import api
     from rhubarb import clones as cl
@@ -636,7 +636,7 @@ def test_api_pure() -> None:
     check("_current_image: unknown / invalid profile id -> None",
           api._current_image("no-such-profile") is None)
 
-    # current/outdated status derivation (rhubarb images / list): an image is 'current' iff it
+    # current/outdated status derivation (rhubarbtart images / list): an image is 'current' iff it
     # equals what its profile's lock now produces, else 'outdated'.
     def status(image):
         return "current" if api._current_image(api._profile_of(image)) == image else "outdated"
@@ -697,7 +697,7 @@ def test_api_pure() -> None:
 
 
 def test_version() -> None:
-    """#138: one version, SemVer, shown by `rhubarb --version`."""
+    """#138: one version, SemVer, shown by `rhubarbtart --version`."""
     import re
 
     from rhubarb import __version__
@@ -705,5 +705,5 @@ def test_version() -> None:
     check("__version__ is MAJOR.MINOR.PATCH", re.fullmatch(r"\d+\.\d+\.\d+", __version__) is not None)
     res = subprocess.run([sys.executable, str(ROOT / "tools" / "rhubarb_cli.py"), "--version"],
                          capture_output=True, text=True, timeout=60)
-    check("rhubarb --version prints 'rhubarb <version>' and exits 0",
-          res.returncode == 0 and res.stdout.strip() == f"rhubarb {__version__}")
+    check("rhubarbtart --version prints 'rhubarbtart <version>' and exits 0",
+          res.returncode == 0 and res.stdout.strip() == f"rhubarbtart {__version__}")

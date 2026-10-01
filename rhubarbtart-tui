@@ -1,5 +1,5 @@
 #!/bin/bash
-# rhubarb-tui: Textual dashboard over the RhubarbTart core API.  `./rhubarb-tui`
+# rhubarbtart-tui: Textual dashboard over the RhubarbTart core API.  `./rhubarbtart-tui`
 # Thin client of tools/rhubarb/api.py; never touches tart/keychain directly.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"

@@ -13,7 +13,7 @@ pinned to commit SHAs and that its uv matches `config/toolchain.env`.
 
 `check.sh` runs shell, Packer and Python checks, the offline self-tests, a headless Textual TUI
 render test, and profile validation. The self-tests cover Ed25519 RFC 8032 vectors, NAR hash vs
-real Nix, Debian version ordering, clone records, the `rhubarb` CLI lifecycle, password rotation,
+real Nix, Debian version ordering, clone records, the `rhubarbtart` CLI lifecycle, password rotation,
 engagements and links, the evidence chain, vault seal and verify, the control-plane service, the
 range client, `herdr arm`, tiered approvals and the logs API. It also greps for regressions of the
 [ground rules](../CONTRIBUTING.md#ground-rules): Homebrew or `packer init` creeping back, default

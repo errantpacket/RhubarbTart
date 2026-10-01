@@ -1,4 +1,4 @@
-"""Per-clone records for the `rhubarb` CLI.
+"""Per-clone records for the `rhubarbtart` CLI.
 
 Where: ~/Library/Application Support/RhubarbTart (macOS), $XDG_STATE_HOME/rhubarbtart
 elsewhere, or $RHUBARB_STATE_DIR. Deliberately outside the repo (never committed or synced
@@ -127,7 +127,7 @@ def load(name: str) -> dict:
     try:
         st = os.lstat(path)
     except FileNotFoundError:
-        raise VerifyError(f"no rhubarb clone named {name!r} (see `rhubarb list`)") from None
+        raise VerifyError(f"no rhubarbtart clone named {name!r} (see `rhubarbtart list`)") from None
     if not stat.S_ISREG(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
         raise VerifyError(f"{path}: must be a regular file owned by you with mode 0600; refusing it")
     try:

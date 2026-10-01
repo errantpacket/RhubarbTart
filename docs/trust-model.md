@@ -87,7 +87,7 @@ config (`config/cosign/signing-config-offline.json`) names no CA, OIDC, transpar
 timestamp service, and every other host is routed to a dead proxy so cosign can reach only the registry, so nothing about these images reaches public Sigstore services. The
 trade-off is that there's no public transparency log, so trust rests on the committed public key
 `config/keys/rhubarb-cosign.pub`. Consumers verify with `publish.sh verify <ref@digest>` and
-always use images by digest. `rhubarb new --from-registry` (macOS) runs that same verification before it
+always use images by digest. `rhubarbtart new --from-registry` (macOS) runs that same verification before it
 stacks a clone on the published copy, and refuses to clone anything that fails it.
 
 ## Host-side boundaries
@@ -97,32 +97,32 @@ so it never holds either.
 
 - **Network.** Clones use Tart's default NAT network, which drops traffic between VMs, so clones
   can't reach each other. Guest SSH accepts only keys, and only from `192.168.64.1` (the `from=`
-  restriction). An engagement's `links` are the only path between clones: `rhubarb engagement
+  restriction). An engagement's `links` are the only path between clones: `rhubarbtart engagement
   connect` opens an SSH remote forward (`ssh -R`) for each declared port, and the path closes when
   `connect` exits. Softnet was evaluated and rejected
   ([#30](https://github.com/errantpacket/RhubarbTart/issues/30)).
 - **Evidence journal.** Each engagement's evidence lives in the host state dir as
   `evidence/<id>/journal.jsonl` plus content-addressed `items/<sha256>`, in 0700 directories and
   0600 files. Each entry commits to the previous entry and to its own content, so an edit,
-  reordering or deletion fails `rhubarb evidence verify`. Commands run in an engagement's clones
-  through `rhubarb exec` or the control plane are journaled as they run. Files are pulled from the clone and hashed on arrival,
+  reordering or deletion fails `rhubarbtart evidence verify`. Commands run in an engagement's clones
+  through `rhubarbtart exec` or the control plane are journaled as they run. Files are pulled from the clone and hashed on arrival,
   never extracted onto the host. On its own, the chain proves internal consistency, not origin.
-- **Vaults.** `rhubarb vault seal` writes a read-only bundle whose `root.json` commits to the
+- **Vaults.** `rhubarbtart vault seal` writes a read-only bundle whose `root.json` commits to the
   journal hash, every item hash and the chain head. `scripts/vault.sh` signs `root.json` with
   `cosign sign-blob --bundle`, using the same offline key and signing config as published images.
   `vault verify` checks the signature, then re-derives every hash. By default it uses the
   `cosign.pub` inside the bundle, which proves the bundle is intact. To prove who sealed it, pass
   the publisher's key with `--pub`.
-- **Control-plane socket.** `rhubarb serve` listens on a Unix socket (`service.sock` in the state
+- **Control-plane socket.** `rhubarbtart serve` listens on a Unix socket (`service.sock` in the state
   dir) created 0600 inside a 0700 operator-owned directory. There is no TCP listener and no token:
   filesystem permissions are the boundary. GET routes only read. Each POST route is one core call
   that journals its own evidence. The service never calls `tart` or the keychain itself, and
   `check.sh` enforces that.
-- **Agents (herdr).** `rhubarb herdr arm` starts each agent in a herdr pane pinned to one clone
+- **Agents (herdr).** `rhubarbtart herdr arm` starts each agent in a herdr pane pinned to one clone
   (`RBT_RANGE_CLONE`) and the socket. The agent's tool is `rbt-range`, which runs commands in that
   clone through the socket, so every command is journaled and the agent never holds the clone's
   password. Commands that match a tiered pattern in `engagements/<id>.herdr.json` are held
-  (exit 126, `approval_required`) until the operator runs `rhubarb herdr approve`. Each grant is
+  (exit 126, `approval_required`) until the operator runs `rhubarbtart herdr approve`. Each grant is
   single-use, and request, grant and use are all recorded in the evidence journal. This is the
   sanctioned, recorded path, not a sandbox: an agent runs as the operator on the host, so one that
   escapes its shell could reach the socket directly. See the

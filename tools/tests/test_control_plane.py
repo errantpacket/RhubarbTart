@@ -45,7 +45,7 @@ def test_control_plane_service() -> None:
             st, body = service.request(sock, "GET", "/health")
             from rhubarb import __version__
             check("GET /health -> 200 ok with the version", st == 200 and body["ok"]
-                  and body["service"] == "rhubarb" and body["version"] == __version__)
+                  and body["service"] == "rhubarbtart" and body["version"] == __version__)
 
             st, body = service.request(sock, "GET", "/images")
             check("GET /images serializes the dataclass list",

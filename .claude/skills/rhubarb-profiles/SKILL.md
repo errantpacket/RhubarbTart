@@ -30,7 +30,7 @@ Check the live catalog with `ls config/packages/`; each file lists the OS famili
 |---|---|---|---|---|
 | `chrome` | ✓ | ✓ | ✓ | macOS pkg URL is unversioned, so its hash is trust-on-first-use |
 | `zap` | ✓ | ✓ | ✓ | Kali: from the Kali archive (`zaproxy`) |
-| `warp` | ✓ | ✓ | ✓ | Enrolled per clone with a service token (`rhubarb enroll NAME warp --org TEAM`) |
+| `warp` | ✓ | ✓ | ✓ | Enrolled per clone with a service token (`rhubarbtart enroll NAME warp --org TEAM`) |
 | `tailscale` | ✓ | ✓ | ✓ | macOS: one system-extension approval per clone |
 | `juice-shop` | | ✓ | | Lab **target** (OWASP Juice Shop on port 3000), never for an attacker VM. Runs with no egress; reached from other clones only through an engagement's `links` |
 
@@ -76,7 +76,7 @@ desktop, is purged and pinned out automatically (#59).
    `uv run tools/resolve.py resolve NAME`. Any change to a profile changes its hash, so its lock
    must be re-resolved (build refuses a stale lock).
 4. Show the user the new `locks/NAME.lock.json`, commit it with their go-ahead, then build (the
-   `rhubarb-build` skill), and work in clones: `./rhubarb new web-1 --profile NAME`.
+   `rhubarb-build` skill), and work in clones: `./rhubarbtart new web-1 --profile NAME`.
 5. Add the profile to the README **Choose a guest** table.
 
 ## Confirm with the user
@@ -85,7 +85,7 @@ desktop, is purged and pinned out automatically (#59).
   macOS for testing Apple clients.
 - **VPN/ZTNA needs.** Enrollment is always per clone and at runtime, never baked, so they'll
   need tokens or auth keys in their host keychain (the `rhubarb-build` skill covers
-  `rhubarb enroll`).
+  `rhubarbtart enroll`).
 - **Whether the image will be shared.** Tools installed from a vendor portal (licensed,
   tenant-specific installers) mean private registries only.
 - **Sizing.** Kali with `kali-linux-default` plus a desktop wants 80 GB+ of disk and 8 GB+ of RAM.

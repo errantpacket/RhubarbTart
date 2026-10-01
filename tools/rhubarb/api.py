@@ -168,7 +168,7 @@ def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | 
     # wait_for_ssh time out and soft-fail the rotation. A second boot reliably comes up, so retry
     # the boot on "unreachable" before giving up; "denied" (a key problem) won't improve, so bail. (#23)
     note = (f"{name}: SSH not reachable after 2 boots; keeping the image's password. "
-            f"Retry later with: rhubarb reset {name} --same-image (if the image was built "
+            f"Retry later with: rhubarbtart reset {name} --same-image (if the image was built "
             f"without RHUBARB_SSH_PUBKEYS, its SSH is disabled and a retry won't help)")
     for attempt in range(2):
         _emit(progress, f"{name}: booting headless to rotate its password"
@@ -335,7 +335,7 @@ def images() -> list[Image]:
     """List the RhubarbTart images (and vanilla/unverified precursors) present locally.
 
     Cross-references local Tart VMs with the committed locks and the clone records to mark
-    each image current or outdated and count its clones. Mirrors ``rhubarb images``.
+    each image current or outdated and count its clones. Mirrors ``rhubarbtart images``.
 
     Returns a list of ``Image``, sorted by name. Empty when no built images exist.
     Raises ``VerifyError`` / ``FileNotFoundError`` as described in the module docstring
@@ -364,7 +364,7 @@ def clones() -> CloneList:
 
     Loads each StrictModes-trusted clone record, joins it with live Tart state, derives
     image freshness and password mode, and collects any rejected records. Mirrors
-    ``rhubarb list``.
+    ``rhubarbtart list``.
 
     Returns a ``CloneList`` (trusted ``clones`` + ``problems``). Raises ``VerifyError`` /
     ``FileNotFoundError`` per the module docstring; individual bad records are surfaced in
@@ -433,7 +433,7 @@ def new(name: str, profile: str | None = None, image: str | None = None,
     Clones via ``tart clone``, writes the clone record, and — unless ``rotate`` is False —
     boots the clone headless to give it its own per-clone password, proven via PAM. If the
     clone is unreachable or rejects the key, the image password is kept (reported in the
-    result's ``note``). Mirrors ``rhubarb new``.
+    result's ``note``). Mirrors ``rhubarbtart new``.
 
     ``progress`` (optional) is a ``Callable[[str], None]`` the operation calls with each
     milestone as it completes (``"cloned <image> -> <name>"``, ``"<name>: booting headless
@@ -447,7 +447,7 @@ def new(name: str, profile: str | None = None, image: str | None = None,
 
     ``engagement`` (optional) tags the clone's record with the engagement id it belongs to;
     ``None`` (the default) is an ad-hoc clone. It only records lineage — no other behavior
-    changes. Stage 1B's ``provision`` passes it; ``rhubarb new`` leaves it ``None``.
+    changes. Stage 1B's ``provision`` passes it; ``rhubarbtart new`` leaves it ``None``.
 
     Returns a ``NewResult``. Raises ``VerifyError`` (not exactly one of profile/image, bad
     name, name already taken, image not built here, no keychain password, or a rotation
@@ -493,7 +493,7 @@ def ssh_args(name: str) -> SSHArgs:
     """Resolve the clone's IP and build a ready-to-exec interactive SSH invocation.
 
     Waits (bounded) for the VM's IP via ``tart ip``, then assembles the pinned, no-forward
-    SSH argv used by ``rhubarb ssh``. Does not connect; the caller execs ``argv`` (appending
+    SSH argv used by ``rhubarbtart ssh``. Does not connect; the caller execs ``argv`` (appending
     any remote command).
 
     Returns an ``SSHArgs``. Raises ``VerifyError`` (unknown/untrusted clone, or no IP — not
@@ -510,7 +510,7 @@ def enroll(name: str, service: str, org: str | None = None) -> EnrollResult:
 
     ``service`` is one of ``tailscale`` | ``warp``; ``org`` is the optional team/organization.
     The enrollment secret is handled by the core (keychain), never by the caller. On success
-    the enrollment is recorded in the clone's record. Mirrors ``rhubarb enroll``.
+    the enrollment is recorded in the clone's record. Mirrors ``rhubarbtart enroll``.
 
     Returns an ``EnrollResult``. Raises ``VerifyError`` (unknown/untrusted clone, unknown
     service, or the enrollment script failed) / ``FileNotFoundError`` per the module
@@ -547,9 +547,9 @@ def reset(name: str, same_image: bool = False, rotate: bool = True,
     per-clone keychain entry if it had one), deletes its record, then re-clones — from the
     profile's current image, or from its existing lineage image when ``same_image`` is True
     (which must still be built here). Enrollment and identity are gone. The re-clone rotates
-    to a fresh per-clone password by default (as ``rhubarb reset`` does); pass
+    to a fresh per-clone password by default (as ``rhubarbtart reset`` does); pass
     ``rotate=False`` to keep the image password (the CLI's ``--no-rotate``). Mirrors
-    ``rhubarb reset``.
+    ``rhubarbtart reset``.
 
     ``progress`` (optional) streams the same live milestones as ``new`` — plus the teardown
     line ``"<name>: destroyed ...; re-cloning from <image>"`` before the re-clone, so the
@@ -583,7 +583,7 @@ def rm(name: str) -> RemoveResult:
 
     Stops the VM, ``tart delete``s it, forgets its pinned host key, and deletes its keychain
     entry if it had a unique password, then deletes the record. Confirmation is the
-    frontend's responsibility; the core just removes. Mirrors ``rhubarb rm`` (minus the
+    frontend's responsibility; the core just removes. Mirrors ``rhubarbtart rm`` (minus the
     interactive prompt).
 
     Returns a ``RemoveResult``. Raises ``VerifyError`` (unknown/untrusted clone) /
@@ -637,7 +637,7 @@ def provision(engagement: str) -> ProvisionResult:
     the profile's current verified image and REFUSES (``VerifyError``) if that image is not
     built + keychain-backed on this Mac — checking every range up front, so a missing image
     provisions nothing. Each range then clones ``count`` copies via ``new`` (rotating a
-    per-clone password, like ``rhubarb new``), tagged with the engagement id, named from the
+    per-clone password, like ``rhubarbtart new``), tagged with the engagement id, named from the
     range ``prefix`` or ``<engagement>-<profile>`` (bare for one, ``-1``..``-count`` for more).
     A name that already exists (a VM or a clone record) is reported in ``skipped``, never
     duplicated.
@@ -722,7 +722,7 @@ def connect_plan(engagement: str) -> list[Tunnel]:
 
     def running(name: str) -> tuple[dict, str]:
         if name not in tagged:
-            raise VerifyError(f"{name} is not provisioned; run: rhubarb engagement provision {eng.id}")
+            raise VerifyError(f"{name} is not provisioned; run: rhubarbtart engagement provision {eng.id}")
         rec = _clones.load(name)
         return rec, hostops.vm_ip(name, rec["family"], wait=30)
 
@@ -970,7 +970,7 @@ def approve(engagement: str, request_id: str) -> None:
     _engagements.load_engagement(engagement)
     if request_id not in {p["request_id"] for p in _approvals.pending(engagement)}:
         raise VerifyError(f"no pending approval {request_id!r} in engagement {engagement} "
-                          f"(see: rhubarb herdr pending {engagement})")
+                          f"(see: rhubarbtart herdr pending {engagement})")
     _approvals.grant(engagement, request_id)
 
 

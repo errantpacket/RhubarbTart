@@ -2,7 +2,7 @@
 # requires-python = ">=3.12"
 # dependencies = []
 # ///
-"""Entry point for ./rhubarb (see tools/rhubarb/cli.py)."""
+"""Entry point for ./rhubarbtart (see tools/rhubarb/cli.py)."""
 
 import sys
 from pathlib import Path

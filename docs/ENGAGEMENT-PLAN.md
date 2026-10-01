@@ -7,7 +7,7 @@ to `main` in #48. The later phases this charter defers have since shipped; see t
 Implements **Phase 1** of [`PLAN.md`](PLAN.md): the **engagement**, the scoped unit that owns a
 named set of ranges (VMs), built and torn down as one. See the design in
 [`PLAN.md` › Engagements](PLAN.md#engagements-the-unit-of-isolation). Delivers: a committed,
-reviewable **scope-manifest** format with strict validation; `rhubarb engagement` commands
+reviewable **scope-manifest** format with strict validation; `rhubarbtart engagement` commands
 (define / list / provision / teardown); and **engagement-tagged clone records**. It builds on the
 verified-image and core-API foundation (Phase 0/0.5); the CLI and TUI stay thin clients of
 `tools/rhubarb/api.py`.
@@ -17,7 +17,7 @@ capture (3), the vault (4), agents/herdr (5), consumption (6), scale (7). To avo
 schema is defined **in full now** (stable), but Phase 1 only *acts on* identity and ranges. Targets,
 agent budget and evidence policy are validated syntactically and stored for the phases that enforce them.
 
-_Since then:_ Phase 2 added a `links` field that `rhubarb engagement connect` acts on (#30, #95).
+_Since then:_ Phase 2 added a `links` field that `rhubarbtart engagement connect` acts on (#30, #95).
 Phases 3 to 5 shipped as evidence capture (#85), vaults (#86) and herdr integration (#104, #108);
 only herdr got its own charter ([HERDR-CHARTER.md](HERDR-CHARTER.md)). `targets` and
 `agent_budget` are still validated and stored but not enforced.
@@ -67,7 +67,7 @@ a stable frozen dataclass (mirroring `profiles.py`'s strictness); **no `tart`, n
 missing `authorization` / unknown profile are rejected with clear errors; `clones.py`/`api.py` behavior
 is unchanged (pure addition). Off-Mac.
 
-### Stage 1B: engagement-tagged clones and `rhubarb engagement` commands
+### Stage 1B: engagement-tagged clones and `rhubarbtart engagement` commands
 
 - **Records:** add an `engagement` field to the clone record (`clones.py`): the engagement a clone
   belongs to, `None` for ad-hoc clones. Keep the StrictModes record trust and schema; **old records
@@ -76,7 +76,7 @@ is unchanged (pure addition). Off-Mac.
   engagement-tagged clones (names from `<engagement>-<profile>-<i>` or the range `prefix`), reusing
   `api.new`; `teardown(engagement)` → `api.rm` every clone tagged to it (idempotent); `engagements()` /
   `engagement_clones(id)` for listing. Refuse to provision from an unbuilt/unverified image.
-- **CLI (`rhubarb engagement …`):** `define <file>` (validate + acknowledge), `list`, `provision <id>`,
+- **CLI (`rhubarbtart engagement …`):** `define <file>` (validate + acknowledge), `list`, `provision <id>`,
   `teardown <id> [--yes]`. Thin adapter over the core, like the other commands.
 
 **Gate 1B:** `check.sh` green; unit tests cover record tagging (round-trip + old-record compat) and
@@ -86,7 +86,7 @@ exactly that set (no orphans; reuses the #18 reap), leaving other clones untouch
 
 After Gate 1B, Phase 1 is done: a manifest defines a set of ranges that build and tear down as a unit.
 A TUI engagements view, and `arm`/`run`/evidence, come with later phases. (`arm` and evidence have
-shipped: `rhubarb herdr arm`, `rhubarb evidence`; there is no TUI engagements view yet.)
+shipped: `rhubarbtart herdr arm`, `rhubarbtart evidence`; there is no TUI engagements view yet.)
 
 ## Multi-agent execution
 

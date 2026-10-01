@@ -57,7 +57,7 @@ drive each one, under an explicit engagement scope, with all evidence captured a
 
 Five parts, in three trust zones. The **operator** works through a **management interface**
 (herdr) that runs agents. Agents don't touch targets directly. They act through the **rhubarb
-control plane** (the `rhubarb` CLI, grown into a small API), which owns the VMs. Each
+control plane** (the `rhubarbtart` CLI, grown into a small API), which owns the VMs. Each
 engagement gets its own **range**: one or more isolated Rhubarb VMs. Evidence flows one way, out
 of the range into a per-engagement **vault** that lives outside every VM.
 
@@ -104,7 +104,7 @@ operator's workstation directly.
 
 ## Management interface and control-plane API
 
-The architecture calls for a **control plane** (the `rhubarb` CLI, grown into a small API) and a
+The architecture calls for a **control plane** (the `rhubarbtart` CLI, grown into a small API) and a
 **management interface** (herdr). Before building either, we surveyed the Tart ecosystem to
 settle build-vs-buy. The finding shapes everything downstream.
 
@@ -141,23 +141,23 @@ has one place to land. It is done: `tools/rhubarb/api.py` (Phase 0.5,
 
 **Layered surfaces (cheapest first):**
 
-1. **CLI.** `rhubarb` for images, clones, enrollment and engagements; `resolve.py` for build. It
+1. **CLI.** `rhubarbtart` for images, clones, enrollment and engagements; `resolve.py` for build. It
    remains the ground truth and the scripting interface.
 2. **TUI: Textual (Python), operator convenience (done, Phase 0.5).** Same runtime as the core,
    pinned by `uv` (`tools/rhubarb_tui.py.lock`), imports `tools/rhubarb/*` directly, and stays
    inside the local trust boundary and the keychain/GUI-session rules. It has an image/clone
    browser, live state, one-key run/ssh/enroll/reset/rm, a provenance view, a build launcher and
-   a Logs tab. Launched by `./rhubarb-tui`; the app lives in `tools/rhubarb/tui/`.
+   a Logs tab. Launched by `./rhubarbtart-tui`; the app lives in `tools/rhubarb/tui/`.
 3. **Control-plane service and herdr (done, Phase 5).** The interface for agent-driven
    engagements is bespoke. The plan was a small **localhost-bound, authenticated** FastAPI service
    exposing the same core plus the engagement and evidence APIs, with herdr (or a web UI) on top.
-   As built (#104), it is `rhubarb serve`: stdlib HTTP over a Unix domain socket at 0600, with no
+   As built (#104), it is `rhubarbtart serve`: stdlib HTTP over a Unix domain socket at 0600, with no
    TCP port and no web framework to pin (`tools/rhubarb/service.py`). herdr integration followed
    in #108. This layer can drive VMs and touch the keychain, so it gets a dedicated security
    review and does not bind a network interface.
 4. **Orchard: fleet backend (Phase 7, optional, not started).** When engagements need many ranges
    across multiple Apple-silicon hosts, run range VMs *as* Orchard VMs. The control plane would
-   call Orchard's REST API for placement, lifecycle and logs, while `rhubarb` keeps owning
+   call Orchard's REST API for placement, lifecycle and logs, while `rhubarbtart` keeps owning
    provenance, records, secrets, enrollment and evidence. Orchard answers "where does it run";
    rhubarb answers "what is it and can we trust it". Adopt only when needed, because it adds a
    controller/worker deployment and its own auth surface.
@@ -196,7 +196,7 @@ agent cannot widen its own reach.
 _As built (#30, #95):_ Softnet was evaluated and rejected for now. It needs an unsigned root
 helper and breaks the images' SSH `from="192.168.64.1"` pin (reasons on #30). Tart's default NAT
 network already keeps clones from reaching each other. An engagement opens attacker-to-target
-paths only through explicit manifest `links`, which `rhubarb engagement connect ID` opens as
+paths only through explicit manifest `links`, which `rhubarbtart engagement connect ID` opens as
 `ssh -R` tunnels until Ctrl-C. Lab targets have no egress (systemd `IPAddressDeny` plus a
 firewall rule, checked by the smoke test). The manifest's `targets` list is validated and stored
 but not yet enforced. Moving targets to Tart's native host-only network is #94.
@@ -218,11 +218,11 @@ agents are working, blocked or idle. RhubarbTart supplies what herdr doesn't: th
 the scope and the evidence pipe.
 
 **Where the agent runs.** The agent process runs on the host (inside herdr) and reaches its
-engagement's VMs only through the control plane, in an `rhubarb`-issued session into the range.
+engagement's VMs only through the control plane, in a `rhubarbtart`-issued session into the range.
 The agent never gets host credentials or raw network access. It gets a handle to "the Kali box in
 engagement X" and acts through it. That keeps the untrusted part (an autonomous agent) one layer
 removed from both the host and the targets. As built, the handle is `rbt-range`
-(`tools/rhubarb_agent.py`, `tools/rhubarb/agent.py`), pinned to one clone by `rhubarb herdr arm
+(`tools/rhubarb_agent.py`, `tools/rhubarb/agent.py`), pinned to one clone by `rhubarbtart herdr arm
 ID`. A later option is to run the agent inside its own per-engagement driver VM for stronger
 isolation, enabled per engagement in the manifest.
 
@@ -246,7 +246,7 @@ vault after a write, or touch the control plane's own configuration.
   (anything reaching a production target, destructive operations, exfiltration-shaped moves)
   pause for operator approval. As built (#111), the markings are regexes in
   `engagements/<id>.herdr.json`, and the operator releases a held command with
-  `rhubarb herdr approve`.
+  `rhubarbtart herdr approve`.
 - **Stops are real.** Wall-clock, spend and a manifest kill-time hard-stop the agent and can
   auto-seal the engagement. The manifest validates these fields; runtime enforcement is not built
   yet.
@@ -291,9 +291,9 @@ the *export* step (below) anchors trust outside.
 _As built (#85, #99):_ the record moved to the host. The guest never holds it.
 `tools/rhubarb/evidence.py` keeps a hash-chained `journal.jsonl` and content-addressed
 `items/<sha256>` per engagement in the host state directory. Entry kinds are `exec`, `artifact`,
-`ground_truth`, `lifecycle` and `approval`. `rhubarb exec` journals each command and its output
-as it runs. `rhubarb evidence collect` pulls each clone's `~/evidence` over SSH and hashes files
-on arrival. `rhubarb evidence list|verify` reads and checks the chain, and teardown collects
+`ground_truth`, `lifecycle` and `approval`. `rhubarbtart exec` journals each command and its output
+as it runs. `rhubarbtart evidence collect` pulls each clone's `~/evidence` over SSH and hashes files
+on arrival. `rhubarbtart evidence list|verify` reads and checks the chain, and teardown collects
 first. Screenshots and packet capture are not captured yet.
 
 ## Evidence export and storage outside the VMs
@@ -325,11 +325,11 @@ from this engagement, unaltered, and can see the range's provenance behind it. T
 host (keychain or a KMS), so reading one is an explicit decrypt, not an open share. Retention and
 who-may-read come from the manifest's evidence policy.
 
-_As built (#86, #101):_ `rhubarb vault seal ID` (`tools/rhubarb/vault.py`, `scripts/vault.sh`)
+_As built (#86, #101):_ `rhubarbtart vault seal ID` (`tools/rhubarb/vault.py`, `scripts/vault.sh`)
 writes a local `<engagement>-<sealed-at>.vault/` bundle. It holds `root.json` (scope, chain head,
 journal and item hashes, range provenance), the journal, the items, and a
 `cosign sign-blob --bundle` signature made offline with the publisher key from the host keychain.
-The bundle is made read-only on seal, and `rhubarb vault verify` checks it with nothing else on
+The bundle is made read-only on seal, and `rhubarbtart vault verify` checks it with nothing else on
 hand. Encryption at rest is not built yet (#100); until then confidentiality rests on the host
 disk (FileVault).
 
@@ -371,19 +371,19 @@ hardened host address those, not the range design.
 ## Phased roadmap
 
 Each phase is usable on its own and builds on the verified foundation (profiles, locks, the
-`rhubarb` clone CLI). Nothing here weakens the existing pin/verify/harden/prove guarantees.
+`rhubarbtart` clone CLI). Nothing here weakens the existing pin/verify/harden/prove guarantees.
 
 | Phase | Deliverable | Exit criteria |
 |---|---|---|
-| 0 · Foundation (done) | Profiles, per-profile locks, verified builds, `rhubarb` clone CLI with per-clone identity + runtime enrollment | Clones build, verify and run. NixOS, macOS 26 (#24), macOS 27 and Kali (#25) confirmed on real hardware; macOS 26 stage 1 is still flaky (#63) |
-| 0.5 · Control-plane core API + TUI (done) | `tools/rhubarb/api.py` typed core (structured returns, no argv/stdout parsing); `./rhubarb-tui` Textual dashboard over it, with read-only panes and confirm-gated actions (run/ssh/enroll/new/reset/rm/build). See [Management interface](#management-interface-and-control-plane-api) and [INTERFACE-PLAN.md](INTERFACE-PLAN.md) | Delivered: CLI, TUI and the service all call one audited core; no frontend touches tart/keychain directly; hardware-validated |
-| 1 · Engagement object (done) | Scope-manifest format + validation; `rhubarb engagement` commands (define/list/provision/teardown); engagement-tagged clone records. See [ENGAGEMENT-PLAN.md](ENGAGEMENT-PLAN.md) | A manifest defines a named set of ranges that build and tear down as a unit; Gate 1B validated on hardware (#44) |
-| 2 · Network isolation (done, changed design) | Planned: per-engagement Softnet segment with default-deny egress. Built (#30, #95): Tart NAT keeps clones apart; explicit manifest `links` opened by `rhubarb engagement connect`; lab targets have no egress. Softnet rejected for now | Mac-validated on `juiceshop-lab` (#30): no direct attacker-to-target route without a link; the target cannot reach the internet or the host |
-| 3 · Evidence capture (done, host-side) | Hash-chained journal + content-addressed items on the host (`tools/rhubarb/evidence.py`, #85, #99); `rhubarb exec` journaling; `rhubarb evidence collect\|list\|verify`. Screen and packet capture not built | An engagement run produces a hashed, structured, verifiable evidence record |
-| 4 · Vault + custody (done, no encryption yet) | Host-pulled export; signed root manifest + provenance record; seal (`tools/rhubarb/vault.py`, `scripts/vault.sh`, #86, #101). Encryption at rest is #100 | Evidence lands outside, verifies against its signature (`rhubarb vault verify`), and is read-only after seal |
-| 5 · herdr integration (done) | Control-plane service `rhubarb serve` (#104: #105, #106, #107); scoped range client `rbt-range`, `rhubarb herdr arm`, tiered approvals (#108: #109, #110, #111). Budget enforcement, prompt capture and the per-engagement agent VM are tracked in #126 | Mac-validated (#111): a tiered command was held, approved, then ran, and the exchange verifies in the journal |
-| 6 · Consumption (partly done) | Vault verify tool (done, `rhubarb vault verify`). Not built: renderers (findings + walkthrough → report / CTF write-up), re-test diff | A sealed vault yields a shareable deliverable a third party can verify |
-| 7 · Scale (optional, partly done) | Done: signed image registry on localhost (#32) and stacked clones via `rhubarb new --from-registry` (#31). Not built: multi-Mac via Orchard, per-engagement agent driver VM | Ranges run across hosts with the same isolation and evidence guarantees |
+| 0 · Foundation (done) | Profiles, per-profile locks, verified builds, `rhubarbtart` clone CLI with per-clone identity + runtime enrollment | Clones build, verify and run. NixOS, macOS 26 (#24), macOS 27 and Kali (#25) confirmed on real hardware; macOS 26 stage 1 is still flaky (#63) |
+| 0.5 · Control-plane core API + TUI (done) | `tools/rhubarb/api.py` typed core (structured returns, no argv/stdout parsing); `./rhubarbtart-tui` Textual dashboard over it, with read-only panes and confirm-gated actions (run/ssh/enroll/new/reset/rm/build). See [Management interface](#management-interface-and-control-plane-api) and [INTERFACE-PLAN.md](INTERFACE-PLAN.md) | Delivered: CLI, TUI and the service all call one audited core; no frontend touches tart/keychain directly; hardware-validated |
+| 1 · Engagement object (done) | Scope-manifest format + validation; `rhubarbtart engagement` commands (define/list/provision/teardown); engagement-tagged clone records. See [ENGAGEMENT-PLAN.md](ENGAGEMENT-PLAN.md) | A manifest defines a named set of ranges that build and tear down as a unit; Gate 1B validated on hardware (#44) |
+| 2 · Network isolation (done, changed design) | Planned: per-engagement Softnet segment with default-deny egress. Built (#30, #95): Tart NAT keeps clones apart; explicit manifest `links` opened by `rhubarbtart engagement connect`; lab targets have no egress. Softnet rejected for now | Mac-validated on `juiceshop-lab` (#30): no direct attacker-to-target route without a link; the target cannot reach the internet or the host |
+| 3 · Evidence capture (done, host-side) | Hash-chained journal + content-addressed items on the host (`tools/rhubarb/evidence.py`, #85, #99); `rhubarbtart exec` journaling; `rhubarbtart evidence collect\|list\|verify`. Screen and packet capture not built | An engagement run produces a hashed, structured, verifiable evidence record |
+| 4 · Vault + custody (done, no encryption yet) | Host-pulled export; signed root manifest + provenance record; seal (`tools/rhubarb/vault.py`, `scripts/vault.sh`, #86, #101). Encryption at rest is #100 | Evidence lands outside, verifies against its signature (`rhubarbtart vault verify`), and is read-only after seal |
+| 5 · herdr integration (done) | Control-plane service `rhubarbtart serve` (#104: #105, #106, #107); scoped range client `rbt-range`, `rhubarbtart herdr arm`, tiered approvals (#108: #109, #110, #111). Budget enforcement, prompt capture and the per-engagement agent VM are tracked in #126 | Mac-validated (#111): a tiered command was held, approved, then ran, and the exchange verifies in the journal |
+| 6 · Consumption (partly done) | Vault verify tool (done, `rhubarbtart vault verify`). Not built: renderers (findings + walkthrough → report / CTF write-up), re-test diff | A sealed vault yields a shareable deliverable a third party can verify |
+| 7 · Scale (optional, partly done) | Done: signed image registry on localhost (#32) and stacked clones via `rhubarbtart new --from-registry` (#31). Not built: multi-Mac via Orchard, per-engagement agent driver VM | Ranges run across hosts with the same isolation and evidence guarantees |
 
 The first milestone was **Phases 1 to 4 for a single engagement**, before wiring in herdr or
 scale: define the engagement, isolate its range, capture what the agent does, and produce a
@@ -398,7 +398,7 @@ target; #83, #84) rather than a CTF.
   Bedrock AgentCore) is tracked in #103.
 - **Evidence transport (decided).** The options were a read-only virtiofs/dir-share from guest to
   host, an authenticated pull over the host-only SSH channel, or the tart-guest-agent. Each has
-  different trust and macOS-vs-Linux support. `rhubarb evidence collect` uses the SSH pull (#85).
+  different trust and macOS-vs-Linux support. `rhubarbtart evidence collect` uses the SSH pull (#85).
 - **Signing key custody (decided for now).** Vaults are signed with the same offline cosign key
   that signs published images. The private key and passphrase live in the host login keychain
   (`scripts/signing-key.sh`). One key per publisher; hardware keys and a KMS were not adopted.

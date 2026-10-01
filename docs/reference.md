@@ -25,12 +25,12 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 |---|---|---|
 | `RHUBARB_SSH_PUBKEYS` | unset | Public keys (ed25519/ecdsa, optionally `-sk`; RSA rejected) to authorize. Unset: SSH disabled |
 | `RHUBARB_SSH_FROM` | `192.168.64.1` | `from=` restriction on those keys (Tart's host address); Kali's preseed server binds here too |
-| `RHUBARB_SSH_IDENTITY` | unset | Private key `rhubarb` uses to reach clones (adds `-i … -o IdentitiesOnly=yes`). Unset: the `ssh-agent` and default `~/.ssh/id_*` are used. `rhubarb` never reads the operator's `~/.ssh/config` (`-F /dev/null`) |
-| `RHUBARB_USER` | `admin` | Username for the low-level `scripts/ssh.sh` / `enroll.sh` (`rhubarb` reads it from the clone's record) |
+| `RHUBARB_SSH_IDENTITY` | unset | Private key `rhubarbtart` uses to reach clones (adds `-i … -o IdentitiesOnly=yes`). Unset: the `ssh-agent` and default `~/.ssh/id_*` are used. `rhubarbtart` never reads the operator's `~/.ssh/config` (`-F /dev/null`) |
+| `RHUBARB_USER` | `admin` | Username for the low-level `scripts/ssh.sh` / `enroll.sh` (`rhubarbtart` reads it from the clone's record) |
 | `REBUILD_VANILLA` | `0` | macOS: `1` reinstalls the vanilla VM from the IPSW and **rotates its password**. New macOS builds get a new vanilla VM automatically |
 | `RHUBARB_HEADLESS` | `true` | Build: `false` shows the VM window instead of running headless (watch a build) |
 | `RHUBARB_NO_COLOR` / `NO_COLOR` | unset | Build: set either to disable Packer's color (Nix writes progress to stderr, which the colored UI paints red) |
-| `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` (elsewhere `$XDG_STATE_HOME/rhubarbtart`) | Where `rhubarb` keeps clone records, `events.log`, run and build logs (`logs/`), the evidence store (`evidence/`) and the control-plane socket (`service.sock`) |
+| `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` (elsewhere `$XDG_STATE_HOME/rhubarbtart`) | Where `rhubarbtart` keeps clone records, `events.log`, run and build logs (`logs/`), the evidence store (`evidence/`) and the control-plane socket (`service.sock`) |
 | `RHUBARB_SSH_WAIT` | `180` | Seconds each rotation (`new`/`reset`/`engagement provision`) waits for a clone's SSH **per boot attempt** (up to two boots) before keeping the inherited password |
 | `RHUBARB_SSH_DENIED_RETRY` | `5` | Seconds between the 3 key-refusal checks before rotation concludes the key is wrong (a new guest can refuse once while booting, #88) |
 | `RHUBARB_CACHE` | `./cache` | Downloads, content-addressed as `artifacts/<sha256>/<file>` so builds of the same file name never collide, and per-profile guest stage dirs (`stage/`) |
@@ -38,8 +38,8 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `RHUBARB_REGISTRY_PORT` | `5780` | `registry.sh`: port of the local zot registry (5000 is macOS's AirPlay Receiver) |
 | `RHUBARB_COSIGN_PUB` | `config/keys/rhubarb-cosign.pub` | `publish.sh verify`: public key to verify against (another publisher's) |
 | `GITHUB_TOKEN` | unset | Optional; avoids GitHub API rate limits while resolving |
-| `RHUBARB_TUI_MOUSE` | on (off inside herdr) | `./rhubarb-tui`: `1`/`0` turns mouse capture on or off; `--mouse` / `--no-mouse` override it |
-| `RHUBARB_TUI_THEME` | herdr's theme inside herdr, else Textual's default | `./rhubarb-tui`: any Textual theme name (for example `nord`); `--theme NAME` does the same |
+| `RHUBARB_TUI_MOUSE` | on (off inside herdr) | `./rhubarbtart-tui`: `1`/`0` turns mouse capture on or off; `--mouse` / `--no-mouse` override it |
+| `RHUBARB_TUI_THEME` | herdr's theme inside herdr, else Textual's default | `./rhubarbtart-tui`: any Textual theme name (for example `nord`); `--theme NAME` does the same |
 | `RBT_SERVICE_SOCKET` · `RBT_RANGE_CLONE` | set by `herdr arm` | `rbt-range`: the control-plane socket and the one clone this agent may drive |
 | `RBT_APPROVAL_WAIT` · `RBT_APPROVAL_POLL` | `600` · `5` | `rbt-range`: seconds to wait for an operator approval of a tiered command, and between checks (`0` disables waiting) |
 | `RBT_HERDR` | unset | `herdr arm`: path to the `herdr` binary if it is not on `PATH` or in a default install location |
@@ -84,7 +84,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
   agree.
 - **Textual** is the TUI's only third-party dependency and the repo's first. It is not a
   bootstrap binary. It is pinned to an exact version in `tools/rhubarb_tui.py`'s PEP 723 header
-  and hash-locked in `tools/rhubarb_tui.py.lock` (`uv lock --script`); `./rhubarb-tui` runs under
+  and hash-locked in `tools/rhubarb_tui.py.lock` (`uv lock --script`); `./rhubarbtart-tui` runs under
   `uv run --script`, which installs it from that lock and verifies every file's sha256 (the
   `--require-hashes` equivalent). The headless render test `tools/test_rhubarb_tui.py` pins the
   same version in its own `tools/test_rhubarb_tui.py.lock`. `check.sh` asserts the pins and both
@@ -110,16 +110,16 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `tools/resolve.py` | `list` · `plan` · `resolve` · `verify` · `provenance` · `preflight` · `toolchain-pin` |
 | `tools/rhubarb/{bases,packages,profiles,locks,toolchain}.py` | Base and package resolvers, profile loading, lock files and image identity, toolchain pins and preflight |
 | `tools/rhubarb/{apt,gpg,pgp_ed25519,distsign,nar,macos,common}.py` | Verification: signed apt repos, pinned-key OpenPGP (via the toolchain gpg), a minimal Ed25519 OpenPGP verifier for GnuPG's own tarballs, Tailscale distsign, Nix NAR hashes, macOS signature checks, shared helpers |
-| `rhubarb` · `tools/rhubarb_cli.py` · `tools/rhubarb/cli.py` | Clone management CLI (launcher shim, entry point, commands) |
+| `rhubarbtart` · `tools/rhubarb_cli.py` · `tools/rhubarb/cli.py` | Clone management CLI (launcher shim, entry point, commands) |
 | `tools/rhubarb/api.py` | Typed core API: the one import surface for the CLI, TUI and service |
 | `tools/rhubarb/{results,logs}.py` | The dataclasses the core returns · the logs API behind the TUI Logs tab (both re-exported by `api`) |
 | `tools/rhubarb/{clones,hostops}.py` | Clone record store (StrictModes rules) · tart, keychain, SSH and password rotation |
 | `tools/rhubarb/engagements.py` | Engagement manifest loading and strict validation |
 | `tools/rhubarb/evidence.py` · `tools/rhubarb/vault.py` | Hash-chained evidence journal with content-addressed items · signed, sealed evidence vaults |
-| `tools/rhubarb/service.py` | Control-plane service: HTTP over a 0600 Unix socket (`rhubarb serve`) |
+| `tools/rhubarb/service.py` | Control-plane service: HTTP over a 0600 Unix socket (`rhubarbtart serve`) |
 | `rbt-range` · `tools/rhubarb_agent.py` · `tools/rhubarb/agent.py` | Scoped range client an agent uses to run commands in its one assigned clone |
-| `tools/rhubarb/{herdr,approvals}.py` | `rhubarb herdr arm` (launch an engagement's agents) · tiered-command approvals, ledgered in the evidence journal |
-| `rhubarb-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb_tui.py.lock` | TUI launcher shim, launcher (carries the pinned Textual) and its hashed lockfile |
+| `tools/rhubarb/{herdr,approvals}.py` | `rhubarbtart herdr arm` (launch an engagement's agents) · tiered-command approvals, ledgered in the evidence journal |
+| `rhubarbtart-tui` · `tools/rhubarb_tui.py` · `tools/rhubarb_tui.py.lock` | TUI launcher shim, launcher (carries the pinned Textual) and its hashed lockfile |
 | `tools/rhubarb/tui/` | Textual TUI over `api.py`: app shell (`app.py`), action dispatch (`dispatch.py`), read-only panes (`images_pane`, `clones_pane`, `provenance_pane`, `logs_pane`), table helpers (`tables.py`), herdr theme sync (`theme.py`), modals (`confirm.py`, `prompt.py`), and one module per action in `actions/` (`build`, `enroll`, `new`, `reset`, `rm`, `run`, `ssh`) |
 | `tools/bootstrap.sh` · `tools/check.sh` | Toolchain install · static checks and tests |
 | `tools/test_rhubarb.py` · `tools/tests/` · `tools/testdata/` | Offline self-tests: the runner, the tests grouped by area, and their fixtures |

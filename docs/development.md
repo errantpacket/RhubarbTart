@@ -7,8 +7,8 @@ How to validate a change: `check.sh`, the off-Mac paths, and the project skills 
 ```
 
 CI runs the same `check.sh` on Linux for every pull request and push to `main`
-(`.github/workflows/check.yml`). There, Packer checks show as SKIPPED, because the pinned Packer is
-the macOS build; they still run on the Mac. `check.sh` also checks that the workflow's actions are
+(`.github/workflows/check.yml`). There, Packer's syntax and format checks use the runner's
+preinstalled Packer, which is not pinned; the pinned Packer runs them on the Mac. `check.sh` also checks that the workflow's actions are
 pinned to commit SHAs and that its uv matches `config/toolchain.env`.
 
 `check.sh` runs shell, Packer and Python checks, the offline self-tests, a headless Textual TUI

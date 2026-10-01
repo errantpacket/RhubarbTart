@@ -40,8 +40,8 @@ its toolchain**, not an iOS device.
 
 ### A pristine Mac, every time
 
-You never boot the sealed image; `rhubarb new` makes a copy-on-write **clone** to work in, and
-`rhubarb reset` swaps in a fresh one. Each test starts from the same clean state, and throwing the
+You never boot the sealed image; `rhubarbtart new` makes a copy-on-write **clone** to work in, and
+`rhubarbtart reset` swaps in a fresh one. Each test starts from the same clean state, and throwing the
 clone away is instant. See [Key concepts](concepts.md) and [Using your VMs](using.md).
 
 ### A test machine you can describe exactly
@@ -85,7 +85,7 @@ is a reproducible, throwaway Mac to run the Simulator and the surrounding toolin
 Apple apps lean on backends, so testing usually means watching and shaping traffic. Add an
 intercepting proxy to a profile's tool list (ZAP ships as a package today; others can be added, see
 [Define your own guest](profiles.md)). Run the test's commands in an engagement's clone with
-`rhubarb exec`, and each one is journaled as tamper-evident [evidence](using.md#engagements) that
+`rhubarbtart exec`, and each one is journaled as tamper-evident [evidence](using.md#engagements) that
 you can seal into a signed vault. Engagements do not filter a clone's outbound traffic yet; the
 network control today is that clones can't reach each other.
 

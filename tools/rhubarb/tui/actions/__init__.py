@@ -69,7 +69,7 @@ class NotAClone(Exception):
 def is_managed_clone(name: str) -> bool:
     """True only for a name shaped like a managed clone.
 
-    Managed clones are what ``rhubarb new`` creates. This rejects the two things
+    Managed clones are what ``rhubarbtart new`` creates. This rejects the two things
     Stage C must never act on: built images (``rbt-PROFILE-SHA...``) and the
     ``*-vanilla`` / ``*-unverified`` precursors. It is a name-shape gate only; the
     core still verifies the clone's StrictModes record before doing anything.

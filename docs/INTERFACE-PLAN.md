@@ -71,7 +71,7 @@ no `print`/`argv`:
 `cli.py` becomes a thin adapter that formats API returns for the terminal. **No behavior change.**
 
 **Gate A:** `check.sh` green · new API unit tests pass (record parsing, outdated/status
-derivation; pure, off-Mac) · **CLI parity**: every existing `rhubarb`/`resolve.py` command
+derivation; pure, off-Mac) · **CLI parity**: every existing `rhubarbtart`/`resolve.py` command
 behaves identically (capture before/after output on a scripted run) · no `tart`/keychain calls
 outside the core.
 
@@ -87,7 +87,7 @@ outside the core.
 
 ### Stage B: TUI, read-only
 
-A Textual app (`tools/rhubarb_tui.py`, launched by a `./rhubarb-tui` shim; the app code now lives
+A Textual app (`tools/rhubarb_tui.py`, launched by a `./rhubarbtart-tui` shim; the app code now lives
 in `tools/rhubarb/tui/`) that **only reads** via the Stage-A API: an images pane (current per profile), a clones pane (state, outdated, password
 mode, enrollments), and a provenance detail view. Auto-refresh; no writes, no destructive paths.
 

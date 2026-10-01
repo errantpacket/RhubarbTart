@@ -3,7 +3,7 @@
 All notable changes to RhubarbTart. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/). While the version is 0.x, a minor release may change
-anything; the version covers the `rhubarb` CLI, the profile, engagement and lock file formats, and
+anything; the version covers the `rhubarbtart` CLI, the profile, engagement and lock file formats, and
 provenance records, not the internals of `tools/rhubarb/api.py`.
 
 Built images are named from their inputs, not from this version: `rbt-<profile>-<inputs-sha>` is
@@ -30,21 +30,21 @@ The first versioned release.
   localhost registry and stacked macOS clones.
 
 ### Clones and engagements
-- `rhubarb` CLI: per-clone passwords in the host keychain, run, ssh, exec, enroll (Tailscale,
+- `rhubarbtart` CLI: per-clone passwords in the host keychain, run, ssh, exec, enroll (Tailscale,
   Cloudflare WARP), reset and rm, only ever on clones it created.
 - Engagements: scope manifests that provision and tear down a set of clones together. Clones can't
-  reach each other except over declared links (`rhubarb engagement connect`); lab targets have no
+  reach each other except over declared links (`rhubarbtart engagement connect`); lab targets have no
   egress.
 - Evidence kept on the host: a hash-chained journal of commands and collected files, sealed into
-  signed, portable vaults (`rhubarb vault seal|verify`).
+  signed, portable vaults (`rhubarbtart vault seal|verify`).
 
 ### Control plane and agents
 - Typed core API (`tools/rhubarb/api.py`) shared by every frontend.
-- Control-plane service over a 0600 Unix socket (`rhubarb serve`): read endpoints, guarded actions
+- Control-plane service over a 0600 Unix socket (`rhubarbtart serve`): read endpoints, guarded actions
   and a live evidence stream.
-- herdr integration: `rhubarb herdr arm` starts an engagement's agents, each limited to one clone
+- herdr integration: `rhubarbtart herdr arm` starts an engagement's agents, each limited to one clone
   through `rbt-range`; commands matching configured patterns wait for a single-use approval.
-- `./rhubarb-tui` dashboard: images, clones, provenance and logs, with background refresh and
+- `./rhubarbtart-tui` dashboard: images, clones, provenance and logs, with background refresh and
   herdr's colour theme when run inside herdr.
 
 ### Project

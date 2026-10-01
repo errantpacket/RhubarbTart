@@ -45,16 +45,16 @@ RhubarbTart wraps this so the supply chain is verifiable:
 - `scripts/publish.sh publish` pushes a smoke-passed image to a registry (a local
   [zot](https://zotregistry.dev/) by default), then signs it and its provenance record with
   [cosign](https://docs.sigstore.dev/), offline.
-- `scripts/publish.sh verify` (and, for macOS, `rhubarb new --from-registry`) checks that signature
+- `scripts/publish.sh verify` (and, for macOS, `rhubarbtart new --from-registry`) checks that signature
   before use.
 
 See [Publishing and stacked clones](publishing.md) for the full flow.
 
 ### Clones are cheap, disposable instances
 
-You never boot the sealed image. `rhubarb new` makes an **APFS clone**: a copy-on-write copy that
+You never boot the sealed image. `rhubarbtart new` makes an **APFS clone**: a copy-on-write copy that
 is near-instant and takes almost no extra disk until it is written to. You work in the clone and
-delete it when done, and `rhubarb reset` swaps in a fresh one from the image.
+delete it when done, and `rhubarbtart reset` swaps in a fresh one from the image.
 
 This is the container-like part: fast to create, isolated and throwaway, but for full VMs. It is how RhubarbTart keeps the "spin up, use, discard" model for macOS guests without
 any container runtime. See [Key concepts](concepts.md) (clone) and [Using your VMs](using.md).
@@ -92,7 +92,7 @@ Consequences:
   no nested virtualization).
 - On an **M3 or newer** host it is possible. Tart exposes the switch as `tart run --nested`
   ("enable nested virtualization if possible"). Two things are still needed:
-  1. `rhubarb run` does not pass `--nested` today, so a profile option to request it would have to
+  1. `rhubarbtart run` does not pass `--nested` today, so a profile option to request it would have to
      be added and recorded in the clone's lineage.
   2. A container runtime must be in the macOS image, which means a new catalog entry. Apple's
      `container` tool (macOS 26+) is open source and has no Docker Desktop subscription terms.

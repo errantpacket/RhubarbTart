@@ -13,7 +13,7 @@ New to the terms? See [Key concepts](concepts.md#sharing-images-optional).
 | `scripts/signing-key.sh init\|status` | Creates the **cosign** key pair once. The private key and its passphrase live only in your macOS keychain; the public key is committed at `config/keys/rhubarb-cosign.pub` |
 | `scripts/publish.sh publish <image>` | Pushes a smoke-passed image, signs it, attaches its provenance record as a signed attestation, verifies the result, and records `out/<image>.published.json` |
 | `scripts/publish.sh verify <ref@digest>` | Checks a published image's signature and provenance against the public key |
-| `rhubarb new NAME --profile P --from-registry` | Verifies the published copy, then makes a **stacked clone** on it (macOS only) |
+| `rhubarbtart new NAME --profile P --from-registry` | Verifies the published copy, then makes a **stacked clone** on it (macOS only) |
 
 ## Walkthrough
 
@@ -21,9 +21,9 @@ New to the terms? See [Key concepts](concepts.md#sharing-images-optional).
 ./scripts/signing-key.sh init                      # once per publisher; commit the public key
 ./scripts/registry.sh start                        # localhost-only registry
 ./scripts/publish.sh publish rbt-tahoe-research-edbb1008a6c0
-./rhubarb new mac-1 --profile tahoe-research --from-registry
-./rhubarb list                                     # IMAGE column: current / outdated / base-missing
-./rhubarb rm mac-1                                 # also frees the pulled base once nothing uses it
+./rhubarbtart new mac-1 --profile tahoe-research --from-registry
+./rhubarbtart list                                     # IMAGE column: current / outdated / base-missing
+./rhubarbtart rm mac-1                                 # also frees the pulled base once nothing uses it
 ./scripts/registry.sh stop
 ```
 
@@ -60,10 +60,10 @@ images, and only from a registry**, which is why it needs publishing first.
   stacked clone of that image. On a single Mac this is *extra* space on top of the local image
   and the registry copy, so it's opt-in. It pays off with several Macs sharing one registry.
 - **Where the base lives.** In Tart's internal content store. Once Tart's cache listing is pruned,
-  `tart list` no longer shows it, so `rhubarb` records each stacked clone's base and shows
-  `base-missing` in `rhubarb list` if it disappears.
-- **Cleanup.** `rhubarb rm` releases the base when the last clone using it is removed.
-  `rhubarb reset` keeps a stacked clone stacked, and checks the image is published before
+  `tart list` no longer shows it, so `rhubarbtart` records each stacked clone's base and shows
+  `base-missing` in `rhubarbtart list` if it disappears.
+- **Cleanup.** `rhubarbtart rm` releases the base when the last clone using it is removed.
+  `rhubarbtart reset` keeps a stacked clone stacked, and checks the image is published before
   destroying anything.
 
 </details>

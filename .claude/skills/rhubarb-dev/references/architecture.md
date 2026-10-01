@@ -62,7 +62,7 @@ rbt-<id>-<inputs12>-unverified ─▶ smoke-test.sh (throwaway clone) ─▶ tar
 | Image publishing: local OCI registry, offline cosign key, push/sign | `scripts/registry.sh`, `scripts/signing-key.sh`, `scripts/publish.sh` |
 | Vault root signing/verification (offline cosign) | `scripts/vault.sh` |
 | Regression guard | `tools/check.sh` |
-| Clone management CLI (thin adapter over the core) | `./rhubarb` → `tools/rhubarb_cli.py` → `tools/rhubarb/cli.py` → `tools/rhubarb/api.py` |
+| Clone management CLI (thin adapter over the core) | `./rhubarbtart` → `tools/rhubarb_cli.py` → `tools/rhubarb/cli.py` → `tools/rhubarb/api.py` |
 | Typed core: the single import surface for every frontend. Clone and engagement orchestration (`new`/`run`/`ssh`/`exec`/`enroll`/`reset`/`rm`, `provision`/`connect`/`teardown`, `collect`, `seal_vault`). Re-exports the returned dataclasses and the logs API, so callers only import `api` | `tools/rhubarb/api.py` |
 | The frozen dataclasses every `api` function returns (`Image`, `CloneList`, `NewResult`, ...) | `tools/rhubarb/results.py` |
 | Logs for the TUI (`list_logs`/`read_log`/`tail_log`/`new_build_log`): regular files inside the state dir only, opened with `O_NOFOLLOW` | `tools/rhubarb/logs.py` |
@@ -71,11 +71,11 @@ rbt-<id>-<inputs12>-unverified ─▶ smoke-test.sh (throwaway clone) ─▶ tar
 | Engagement manifests (load + strict validation, no tart/keychain/network) | `tools/rhubarb/engagements.py` |
 | Evidence store: append-only, hash-chained journal + content-addressed items | `tools/rhubarb/evidence.py` |
 | Evidence vault: seal to a signed, read-only bundle; verify | `tools/rhubarb/vault.py` |
-| Control-plane HTTP service on a 0600 Unix socket, plus its client | `tools/rhubarb/service.py` (`rhubarb serve`) |
+| Control-plane HTTP service on a 0600 Unix socket, plus its client | `tools/rhubarb/service.py` (`rhubarbtart serve`) |
 | Scoped range client, the agent's only door into a range | `tools/rhubarb/agent.py` (`./rbt-range` → `tools/rhubarb_agent.py`) |
 | herdr driver: `arm` launches an engagement's agents, pinned to clones | `tools/rhubarb/herdr.py` (config `engagements/<id>.herdr.json`) |
 | Tiered-action approvals, ledgered in the evidence journal | `tools/rhubarb/approvals.py` |
-| TUI: launcher with the pinned Textual; app, dispatch, panes, actions | `./rhubarb-tui` → `tools/rhubarb_tui.py` (+ `.lock`) → `tools/rhubarb/tui/` |
+| TUI: launcher with the pinned Textual; app, dispatch, panes, actions | `./rhubarbtart-tui` → `tools/rhubarb_tui.py` (+ `.lock`) → `tools/rhubarb/tui/` |
 
 ## Credentials
 
@@ -121,7 +121,7 @@ existed as a hash.
 
 ## Clones and records
 
-`rhubarb new` clones a verified image (from the profile's committed lock, or `--image`), then
+`rhubarbtart new` clones a verified image (from the profile's committed lock, or `--image`), then
 writes `~/Library/Application Support/RhubarbTart/clones/NAME.json` with the clone's profile,
 family, source image, username, Rosetta flag, `password_account`, `created_at`, its `engagement`
 tag (`None` for ad-hoc clones), an optional `base` (stacked registry clones, #31) and
@@ -166,7 +166,7 @@ Engagements, evidence, the service and agents all live on the host and reach VMs
   belongs to it, the service is running and herdr is installed. It records the config's hash as
   an `arm` evidence entry. check.sh forbids direct `hostops`/`tart`/`security` in `herdr.py`.
 - **Approvals** (`approvals.py`): a command matching the herdr config's `tiered` regexes is held
-  (`requested` entry) instead of run. `rhubarb herdr approve` records one `granted` entry; the
+  (`requested` entry) instead of run. `rhubarbtart herdr approve` records one `granted` entry; the
   next identical exec records `consumed` and runs. One grant allows one run. The ledger is the
   evidence journal; there is no other state.
 
@@ -222,7 +222,7 @@ hash-locked in `tools/rhubarb_tui.py.lock` (check.sh verifies the pin and the lo
   `test_logs`), with shared helpers in `tests/support.py`. `tools/test_rhubarb.py` is the one
   runner: it runs them in a fixed order, each with a throwaway `RHUBARB_STATE_DIR`. Add a new
   test to its area module and to the runner's `TESTS` list.
-- **rhubarb CLI:** `tests/test_clones.py` drives the real CLI against stand-in `tart`,
+- **rhubarbtart CLI:** `tests/test_clones.py` drives the real CLI against stand-in `tart`,
   `security` and `ssh` programs (`test_cli_lifecycle`), and the rotation script against a
   simulated guest for all three OS paths (`test_rotation_script`, in `tests/test_build.py`).
   Both run in `check.sh`.

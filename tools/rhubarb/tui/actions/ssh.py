@@ -4,7 +4,7 @@ Contract: see ``rhubarb/tui/actions/__init__.py`` and the ``rm`` exemplar.
 
 ``handle`` calls ``api.ssh_args(name)`` — which (via the core) resolves the clone's IP
 (``tart ip``, bounded wait) and builds the pinned, no-forward, interactive ``ssh`` argv
-used by ``rhubarb ssh``. It does **not** connect: a TUI cannot host an interactive shell
+used by ``rhubarbtart ssh``. It does **not** connect: a TUI cannot host an interactive shell
 inside a pane, so ``handle`` returns the argv in ``ActionOutcome.exec_argv`` (with
 ``needs_refresh=False`` — SSHing changes nothing on the host) for the app to hand off,
 mirroring how ``cli.cmd_ssh`` execs it.

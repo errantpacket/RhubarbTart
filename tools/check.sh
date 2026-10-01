@@ -24,9 +24,9 @@ ok() { echo "  ok    $*"; }
 bad() { echo "  FAIL  $*"; failures=$((failures + 1)); }
 skip() { echo "  SKIP  $*"; skipped=$((skipped + 1)); }
 
-SH_FILES=(rhubarb rhubarb-tui rbt-range tools/bootstrap.sh tools/check.sh scripts/*.sh guest/*/*.sh)
-INV_SH=(rhubarb rhubarb-tui rbt-range tools/bootstrap.sh scripts/*.sh guest/*/*.sh)   # invariant scans skip this file's own patterns
-MACOS_BASH=(rhubarb rhubarb-tui rbt-range tools/bootstrap.sh scripts/*.sh guest/macos/*.sh)   # run by macOS /bin/bash 3.2
+SH_FILES=(rhubarbtart rhubarbtart-tui rbt-range tools/bootstrap.sh tools/check.sh scripts/*.sh guest/*/*.sh)
+INV_SH=(rhubarbtart rhubarbtart-tui rbt-range tools/bootstrap.sh scripts/*.sh guest/*/*.sh)   # invariant scans skip this file's own patterns
+MACOS_BASH=(rhubarbtart rhubarbtart-tui rbt-range tools/bootstrap.sh scripts/*.sh guest/macos/*.sh)   # run by macOS /bin/bash 3.2
 HCL_FILES=(packer/*/*.pkr.hcl)
 
 echo "== syntax & lint"
@@ -84,7 +84,7 @@ if command -v uv >/dev/null; then
        grep -E "FAIL|Error|Traceback" <<<"$out" | head -40 | sed 's/^/          /'; fi
   # Headless TUI render test: mounts the Textual app with a mocked core API (no Mac/
   # tart/keychain) and asserts each pane renders. Runs via `uv run --script` under the
-  # hash-locked script lockfile, like ./rhubarb-tui. See docs/INTERFACE-PLAN.md, Gate B.
+  # hash-locked script lockfile, like ./rhubarbtart-tui. See docs/INTERFACE-PLAN.md, Gate B.
   if out="$(uv run --quiet --script tools/test_rhubarb_tui.py 2>&1)"
   then ok "TUI test (headless Textual Pilot, mocked core API)"
   else bad "TUI render test (run: uv run --script tools/test_rhubarb_tui.py)"
@@ -198,7 +198,7 @@ else ok "version $ver has a CHANGELOG entry"; fi
 
 # Textual is the TUI's only third-party dep (the repo's first). It must be pinned
 # to an exact version in tools/rhubarb_tui.py and hash-locked in the adjacent uv
-# script lockfile (uv lock --script), which `./rhubarb-tui` runs under with
+# script lockfile (uv lock --script), which `./rhubarbtart-tui` runs under with
 # `uv run --script`. See docs/INTERFACE-PLAN.md, decision gate B-0.
 tui_pin="$(sed -n 's/.*"textual==\([0-9A-Za-z.-]*\)".*/\1/p' tools/rhubarb_tui.py)"
 if [[ -z "$tui_pin" ]]; then

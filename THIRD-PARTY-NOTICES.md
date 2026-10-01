@@ -35,7 +35,7 @@ SOFTWARE.
 
 ## Bundled runtime dependency
 
-**Textualize/textual**: MIT License. Pinned and hash-locked for the `./rhubarb-tui` dashboard
+**Textualize/textual**: MIT License. Pinned and hash-locked for the `./rhubarbtart-tui` dashboard
 (`tools/rhubarb_tui.py`), fetched by `uv` at run time; not redistributed in this repository.
 
 ## Tools RhubarbTart runs (fetched by `tools/bootstrap.sh`, invoked as separate programs)

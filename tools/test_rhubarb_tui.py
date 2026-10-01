@@ -14,7 +14,7 @@ clones -> provenance selection wiring.
 This is Textual-dependent, so unlike ``tools/test_rhubarb.py`` (stdlib-only) it
 carries its own PEP 723 metadata pinning ``textual==8.2.8`` and an adjacent uv
 script lockfile (``tools/test_rhubarb_tui.py.lock``, ``uv lock --script``) that
-hash-verifies it — matching how ``./rhubarb-tui`` runs the app itself. ``check.sh``
+hash-verifies it — matching how ``./rhubarbtart-tui`` runs the app itself. ``check.sh``
 runs it with ``uv run --script``. See docs/INTERFACE-PLAN.md, Gate B.
 """
 

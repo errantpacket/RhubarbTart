@@ -34,7 +34,7 @@ let
 
   # Fresh copy of the app on every start. cp -r of the store tree makes read-only directories,
   # and only the final chmod makes them writable, so a copy cut short (the clone stopped or
-  # powered off mid-copy, which `rhubarb new`'s short password-rotation boot can do) used to
+  # powered off mid-copy, which `rhubarbtart new`'s short password-rotation boot can do) used to
   # leave a tree that rm -rf could not delete: every later start failed with "Permission denied"
   # until systemd's start limit gave up (#98). Making any leftover writable first fixes that.
   prepareApp = pkgs.writeShellScript "juice-shop-prepare" ''
@@ -45,7 +45,7 @@ let
     chmod -R u+w ${appDir}
   '';
 
-  # The Tart host: the only peer the app may talk to (the smoke test and `rhubarb engagement
+  # The Tart host: the only peer the app may talk to (the smoke test and `rhubarbtart engagement
   # connect` reach port 3000 from there). It is the SSH from= pin when that's a single IPv4,
   # else Tart's default vmnet gateway.
   sshFrom = (lib.importJSON ./../ssh.json).from or "";

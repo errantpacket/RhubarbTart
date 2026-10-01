@@ -115,7 +115,7 @@ def seal(engagement: str, out_dir: Path, sign: SignFn, sealed_at: str,
         raise VerifyError(f"engagement {engagement}: no evidence to seal")
     if rep.problems:
         raise VerifyError(f"engagement {engagement}: evidence does not verify, refusing to seal "
-                          f"({len(rep.problems)} problem(s)); run: rhubarb evidence verify {engagement}")
+                          f"({len(rep.problems)} problem(s)); run: rhubarbtart evidence verify {engagement}")
     store = _evidence.store_dir(engagement)
     vault = out_dir / f"{engagement}-{sealed_at.replace(':', '').replace('-', '')}.vault"
     if vault.exists():

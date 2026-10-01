@@ -34,7 +34,7 @@ def _is_frozen(obj, attr: str, value) -> bool:
         return True
 
 
-# ---- rhubarb CLI: clone records -------------------------------------------------------------
+# ---- rhubarbtart CLI: clone records -------------------------------------------------------------
 
 def _stub(bindir: Path, name: str, body: str) -> None:
     """A tiny stand-in program, run by *this* Python (portable to the Mac, no CLT python3)."""

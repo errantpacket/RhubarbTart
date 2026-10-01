@@ -1,5 +1,5 @@
 #!/bin/bash
-# rhubarb: manage research clones of verified RhubarbTart images.  `./rhubarb --help`
+# rhubarbtart: manage research clones of verified RhubarbTart images.  `./rhubarbtart --help`
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 # On the Mac, use the pinned toolchain (tart, uv); elsewhere fall back to PATH.

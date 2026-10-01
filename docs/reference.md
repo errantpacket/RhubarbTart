@@ -50,6 +50,9 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 <summary>Host, disk space, gpg and licensing (expand)</summary>
 
 - An Apple silicon Mac on macOS 26 or later. macOS 27 guests need a **macOS 27 host**.
+- Rosetta, for the Linux profiles that run x86_64 programs (`nixos-research`, `kali-research`):
+  `softwareupdate --install-rosetta --agree-to-license`. A new Mac may not have it. The build
+  and `rhubarbtart` check for it and stop with this command if it's missing.
 - About 100–150 GB free per built profile: OS images are 3–20 GB and VM disks 60–80 GB (sparse).
 - `gpg` on whichever machine resolves NixOS/Kali profiles or runs `toolchain-pin`. Any OS works.
 - Licensing: RhubarbTart is FSL-1.1-ALv2 ([LICENSE.md](https://github.com/errantpacket/RhubarbTart/blob/main/LICENSE.md)). Tart 2.38.0 is also

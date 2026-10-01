@@ -95,6 +95,21 @@ OS_BUILD="$(json_field os_build "$info")"
 INPUTS_SHA="$(json_field inputs_sha256 "$info")"
 ROSETTA="$(json_field rosetta "$info")"
 OPEN_PORTS="$(json_field open_ports "$info")"
+# Profiles with Rosetta boot with `tart run --rosetta`, which needs Rosetta for Linux VMs on this
+# Mac. Ask the Virtualization framework (0 unsupported, 1 not installed, 2 installed) rather than
+# `arch -x86_64`, which fails on macOS 27 even when Linux Rosetta works (#158). Fail now, not when
+# the smoke test times out at the end of the build.
+if [[ "$ROSETTA" == true ]]; then
+  rosetta="$(osascript -l JavaScript -e 'ObjC.import("Foundation");
+    $.NSBundle.bundleWithPath("/System/Library/Frameworks/Virtualization.framework").load;
+    $.NSClassFromString("VZLinuxRosettaDirectoryShare").availability' 2>/dev/null || echo unknown)"
+  case "$rosetta" in
+    2) log "Rosetta for Linux VMs: installed" ;;
+    1) die "$PROFILE uses Rosetta, which isn't installed on this Mac. Install it, then build again: softwareupdate --install-rosetta --agree-to-license" ;;
+    0) die "$PROFILE uses Rosetta, which this Mac doesn't support. Set \"rosetta\": false in profiles/$PROFILE.json" ;;
+    *) log "WARNING: couldn't check whether Rosetta is installed (got '$rosetta'); if it isn't, the smoke test will time out" ;;
+  esac
+fi
 export PKR_VAR_username PKR_VAR_cpu_count PKR_VAR_memory_gb PKR_VAR_disk_gb
 PKR_VAR_username="$(json_field username "$info")"
 PKR_VAR_cpu_count="$(json_field cpu "$info")"

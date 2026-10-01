@@ -86,6 +86,7 @@ def test_cli_lifecycle() -> None:
         bindir.mkdir()
         (t / "vms.json").write_text("{}")
         (t / "keychain.json").write_text("{}")
+        _stub(bindir, "osascript", 'print("2")\n')   # Rosetta installed (#158), whatever the host has
         _stub(bindir, "tart", """
 db = Path(os.environ["STUB"]) / "vms.json"; vms = json.loads(db.read_text()); a = sys.argv[1:]
 save = lambda: db.write_text(json.dumps(vms))
@@ -707,3 +708,48 @@ def test_version() -> None:
                          capture_output=True, text=True, timeout=60)
     check("rhubarbtart --version prints 'rhubarbtart <version>' and exits 0",
           res.returncode == 0 and res.stdout.strip() == f"rhubarbtart {__version__}")
+
+
+def test_rosetta_check() -> None:
+    """#158: a Rosetta clone is refused on a Mac without Rosetta (before tart runs), with the
+    install command; installed and unknown pass; the framework's answer maps to a state."""
+    from rhubarb import hostops
+    from rhubarb.common import VerifyError
+
+    with tempfile.TemporaryDirectory() as tmp:
+        t = Path(tmp)
+        (t / "bin").mkdir()
+        saved = os.environ.get("PATH", "")
+        os.environ["PATH"] = f"{t / 'bin'}:{saved}"
+        try:
+            seen = {}
+            for out in ("2", "1", "0", "garbage"):
+                _stub(t / "bin", "osascript", f'print("{out}")\n')
+                seen[out] = hostops.rosetta_availability()
+            check("rosetta: 2/1/0 map to installed/not-installed/unsupported, anything else unknown",
+                  seen == {"2": "installed", "1": "not-installed", "0": "unsupported",
+                           "garbage": "unknown"})
+            _stub(t / "bin", "osascript", 'print("1")\n')
+            _stub(t / "bin", "tart", 'Path(os.environ["TART_RAN"]).write_text("yes")\n')
+            os.environ["TART_RAN"] = str(t / "tart-ran")
+            try:
+                hostops.start_vm("web-1", rosetta=True, headless=True)
+                refused = ""
+            except VerifyError as e:
+                refused = str(e)
+            check("rosetta: not installed -> refused with the install command",
+                  "softwareupdate --install-rosetta" in refused)
+            check("rosetta: refused before tart runs", not (t / "tart-ran").exists())
+            _stub(t / "bin", "osascript", 'print("2")\n')
+            p = hostops.start_vm("web-1", rosetta=True, headless=True)
+            p.wait(timeout=30)
+            check("rosetta: installed -> tart runs", (t / "tart-ran").exists())
+            (t / "tart-ran").unlink()
+            (t / "bin" / "osascript").unlink()
+            os.environ["PATH"] = f"{t / 'bin'}:/nonexistent"
+            check("rosetta: no osascript at all -> unknown, not refused",
+                  hostops.rosetta_availability() == "unknown")
+        finally:
+            os.environ["PATH"] = saved
+            os.environ.pop("TART_RAN", None)
+

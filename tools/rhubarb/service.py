@@ -100,7 +100,8 @@ def _opt_number(body: dict, key: str) -> float | None:
 def _get_route(parts: list[str]) -> Callable[[], object] | None:
     match parts:
         case ["health"]:
-            return lambda: {"ok": True, "service": "rhubarb"}
+            from . import __version__
+            return lambda: {"ok": True, "service": "rhubarb", "version": __version__}
         case ["images"]:
             return api.images
         case ["clones"]:

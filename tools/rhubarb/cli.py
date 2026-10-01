@@ -354,8 +354,11 @@ def cmd_serve(a) -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    from . import __version__
+
     ap = argparse.ArgumentParser(prog="rhubarb", description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--version", action="version", version=f"rhubarb {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("images").set_defaults(fn=cmd_images)
     sub.add_parser("list").set_defaults(fn=cmd_list)

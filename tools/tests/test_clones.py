@@ -694,3 +694,16 @@ def test_api_pure() -> None:
                        VerifyError, lambda v=bad_vm: api.provenance(v))
     finally:
         api.ROOT = saved_root
+
+
+def test_version() -> None:
+    """#138: one version, SemVer, shown by `rhubarb --version`."""
+    import re
+
+    from rhubarb import __version__
+
+    check("__version__ is MAJOR.MINOR.PATCH", re.fullmatch(r"\d+\.\d+\.\d+", __version__) is not None)
+    res = subprocess.run([sys.executable, str(ROOT / "tools" / "rhubarb_cli.py"), "--version"],
+                         capture_output=True, text=True, timeout=60)
+    check("rhubarb --version prints 'rhubarb <version>' and exits 0",
+          res.returncode == 0 and res.stdout.strip() == f"rhubarb {__version__}")

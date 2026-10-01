@@ -1,6 +1,6 @@
 <div align="center">
 
-# RhubarbTart
+# 🍎 RhubarbTart
 
 **Security-research VMs for Apple silicon, built from verified vendor installers.**
 <br/>Describe a guest in a short JSON profile: an OS (macOS 26 or 27, NixOS or Kali) and the tools

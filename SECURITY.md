@@ -15,7 +15,7 @@ chain, or how secrets and clone state are handled is a serious bug. Reports are 
 Please include:
 
 - What the issue is and which component (a `tools/` module, a Packer template, a `guest/` script,
-  the `rhubarb` CLI, the provenance/verification logic, secret handling, or the network model).
+  the `rhubarbtart` CLI, the provenance/verification logic, secret handling, or the network model).
 - How to reproduce it, and what an attacker gains.
 - The commit or version you're looking at, and your host OS.
 
@@ -37,13 +37,13 @@ The things this project promises, and therefore wants to hear about if they brea
 - **Secret leaks:** a path where a VM password, VPN token, or enrollment secret reaches an image,
   a log, a committed file, `argv`, or another clone. Secrets should only move keychain →
   subprocess stdin → shred.
-- **Clone-record integrity:** a way to make the `rhubarb` CLI act on the wrong VM or keychain
+- **Clone-record integrity:** a way to make the `rhubarbtart` CLI act on the wrong VM or keychain
   entry via a crafted record (see the record model in `tools/rhubarb/clones.py`).
 - **Isolation gaps:** a clone reaching another clone without a declared engagement link, or a lab
   target reaching the internet or the host (see
   [Host-side boundaries](docs/trust-model.md#host-side-boundaries)).
 - **Evidence and vault integrity:** a way to change, drop or reorder evidence journal entries, or
-  alter a sealed vault, without `rhubarb evidence verify` or `rhubarb vault verify` noticing.
+  alter a sealed vault, without `rhubarbtart evidence verify` or `rhubarbtart vault verify` noticing.
 - **Control-plane and agent boundaries:** a way to reach the control-plane socket without file
   permission to it, to make `rbt-range` act on a clone other than its assigned one, or to run a
   tiered command without a single-use approval.

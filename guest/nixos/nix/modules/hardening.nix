@@ -41,7 +41,7 @@ in
     };
   };
 
-  # `rhubarb new` rotates each clone's password: it writes a fresh yescrypt hash to the
+  # `rhubarbtart new` rotates each clone's password: it writes a fresh yescrypt hash to the
   # hashedPasswordFile above (see tools/rhubarb/hostops.py), which needs mkpasswd.
   environment.systemPackages = [ pkgs.mkpasswd ];
 

@@ -60,5 +60,5 @@ def handle(ctx: ActionContext) -> ActionOutcome:
     return ActionOutcome(
         ok=True,
         summary=f"created {res.name} from {res.image} ({res.password_mode} password){note}; "
-                f"ready: rhubarb run {res.name}",
+                f"ready: rhubarbtart run {res.name}",
     )

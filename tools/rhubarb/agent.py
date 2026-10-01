@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> None:
         if not notified:
             sys.stderr.write(f"rbt-range: APPROVAL REQUIRED for this command on clone {clone!r} "
                              f"(request {res['request_id']}). A reviewer must run: "
-                             f"rhubarb herdr approve <engagement> {res['request_id']}\n")
+                             f"rhubarbtart herdr approve <engagement> {res['request_id']}\n")
             sys.stderr.flush()
             notified = True
         if wait_total <= 0 or time.time() >= deadline:

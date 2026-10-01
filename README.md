@@ -22,8 +22,8 @@ CTFs, with each command they run recorded as evidence on the host (early stage).
 ![Toolchain](https://img.shields.io/badge/toolchain-no%20Homebrew-2b2d42)
 ![Provenance](https://img.shields.io/badge/inputs-pinned%20%2B%20verified-2b2d42)
 
-![The rhubarb-tui dashboard listing built images with their profile, status and clone count](docs/images/tui-images.webp)
-<br/><sub>The <code>./rhubarb-tui</code> dashboard, here running inside herdr.</sub>
+![The rhubarbtart-tui dashboard listing built images with their profile, status and clone count](docs/images/tui-images.webp)
+<br/><sub>The <code>./rhubarbtart-tui</code> dashboard, here running inside herdr.</sub>
 
 </div>
 
@@ -118,7 +118,7 @@ outside the VMs. You can:
   [engagement](docs/using.md#engagements);
 - record the commands run in its clones and the files they produce as hash-chained evidence, and
   seal that evidence into a signed, portable vault;
-- start the engagement's agents under herdr with `rhubarb herdr arm`. Each agent reaches only its
+- start the engagement's agents under herdr with `rhubarbtart herdr arm`. Each agent reaches only its
   assigned clone, through the `rbt-range` client, and commands that match a configured pattern
   wait for your approval.
 
@@ -145,7 +145,7 @@ ssh-add ~/.ssh/id_ed25519
 RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
 
 # 4. Make a clone and start it; don't use the image directly
-./rhubarb new web-1 --profile kali-research && ./rhubarb run web-1
+./rhubarbtart new web-1 --profile kali-research && ./rhubarbtart run web-1
 ```
 
 <details>
@@ -163,13 +163,13 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
    copy and tests it from the outside. Only if those tests pass does the image get its final name.
    A build is a full OS install and can take 15 to 45 minutes, so run it in a separate terminal.
    `./scripts/build.sh --list` lists the available profiles.
-4. **`rhubarb new`** creates a clone and sets its own password, which is stored in your keychain.
-   `rhubarb run` starts it. [Using your VMs](docs/using.md) covers `ssh`, `enroll`, `reset`, `rm`,
-   engagements and the `./rhubarb-tui` dashboard.
+4. **`rhubarbtart new`** creates a clone and sets its own password, which is stored in your keychain.
+   `rhubarbtart run` starts it. [Using your VMs](docs/using.md) covers `ssh`, `enroll`, `reset`, `rm`,
+   engagements and the `./rhubarbtart-tui` dashboard.
 
 </details>
 
-The same actions are available in `./rhubarb-tui`, a keyboard-driven dashboard with tabs for
+The same actions are available in `./rhubarbtart-tui`, a keyboard-driven dashboard with tabs for
 images, clones, provenance and logs.
 
 ## Choose a guest

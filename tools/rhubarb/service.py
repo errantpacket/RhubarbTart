@@ -101,7 +101,7 @@ def _get_route(parts: list[str]) -> Callable[[], object] | None:
     match parts:
         case ["health"]:
             from . import __version__
-            return lambda: {"ok": True, "service": "rhubarb", "version": __version__}
+            return lambda: {"ok": True, "service": "rhubarbtart", "version": __version__}
         case ["images"]:
             return api.images
         case ["clones"]:

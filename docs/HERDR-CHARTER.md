@@ -51,9 +51,9 @@ long as the boundary below holds.
 
 **Integration model: A now, C as a later manifest option, B never as the action path.**
 
-- **A: herdr supervises; `rhubarb` is the only way into a range (default).** herdr runs each agent
+- **A: herdr supervises; `rhubarbtart` is the only way into a range (default).** herdr runs each agent
   CLI in a host PTY, unmodified. The agent's *sole* tool for acting in a range is a thin
-  `rhubarb exec` wrapper (a control-plane session), so every command is journaled as evidence
+  `rhubarbtart exec` wrapper (a control-plane session), so every command is journaled as evidence
   (#85) and scope is enforced below the guest (#30). We **do not** use herdr's own "SSH a pane
   into a machine" feature to reach ranges. That would hand the agent the clone credential and a
   raw route, and bypass host-side journaling (**option B**, rejected as an action path; allowed at
@@ -69,7 +69,7 @@ agent state for the interface (working / blocked / idle), (2) **pause a pane for
 approval** and inject the operator-approved command, and (3) subscribe to events so the run folds
 into evidence. Every approval is itself an evidence entry. As built (#111), the seam moved to the
 control plane: the exec path holds a tiered command, and the operator approves it with
-`rhubarb herdr approve` (see "Approval UX" below). `arm` drives herdr through its CLI.
+`rhubarbtart herdr approve` (see "Approval UX" below). `arm` drives herdr through its CLI.
 
 ## Architecture and the trust boundary
 
@@ -88,7 +88,7 @@ control plane: the exec path holds a tiered command, and the operator approves i
 Three boundaries, each already built or specified:
 
 1. **Agent → range.** The agent runs on the host inside herdr and reaches its engagement's VMs
-   **only through a control-plane session**: an `rhubarb`-issued handle to "the Kali box in
+   **only through a control-plane session**: a `rhubarbtart`-issued handle to "the Kali box in
    engagement N". It never receives host credentials, the clone's password, or raw network access.
    The untrusted part stays one layer removed from both the host and the targets. On the host the
    agent runs as the operator, so this is the sanctioned and recorded path, not a kernel sandbox
@@ -96,11 +96,11 @@ Three boundaries, each already built or specified:
 2. **Range → everything else.** The plan was host-enforced per-engagement default-deny egress: a
    range reaches only the manifest's in-scope targets and the evidence sink. As built (#30, #95),
    Tart's default NAT keeps clones from reaching each other, and attacker-to-target paths exist
-   only as explicit manifest `links` opened by `rhubarb engagement connect`. Lab targets have no
+   only as explicit manifest `links` opened by `rhubarbtart engagement connect`. Lab targets have no
    egress. SSH into clones is pinned to the host (`from="192.168.64.1"`). Softnet, which would
    give per-VM egress policy, was evaluated and rejected for now (reasons on #30).
 3. **herdr → host.** The control plane that herdr talks to binds **no network interface**: it is
-   a Unix socket at 0600 owned by the operator (`rhubarb serve`, #104). It is the layer that may
+   a Unix socket at 0600 owned by the operator (`rhubarbtart serve`, #104). It is the layer that may
    drive VMs and touch the keychain *by asking the core*, so it gets its own security review.
 
 ## Invariants herdr inherits (non-negotiable)
@@ -161,7 +161,7 @@ define → provision → [arm → run] → collect → seal → teardown
 ```
 
 - **arm:** herdr attaches the permitted agents to an engagement's ranges and hands each a scoped
-  session plus its capability grant. Nothing runs yet. Built as `rhubarb herdr arm ID` (#110),
+  session plus its capability grant. Nothing runs yet. Built as `rhubarbtart herdr arm ID` (#110),
   which reads `engagements/<id>.herdr.json` and records an `arm` lifecycle entry in the evidence.
 - **run:** the agents work; herdr supervises, tiered commands wait for approval, and budgets are
   meant to be enforced (not built yet).
@@ -195,7 +195,7 @@ with a note where the build differs.
 
 - **Agent runtime. DECIDED: herdr.dev, integration model A now, C later.** See
   "Using herdr.dev as the runtime" above. We adopt herdr.dev unmodified; the agent reaches a range
-  only through a `rhubarb exec` control-plane session (A), with the per-engagement driver VM (C) as
+  only through a `rhubarbtart exec` control-plane session (A), with the per-engagement driver VM (C) as
   a later manifest-selectable option and herdr's direct-SSH-into-clone path (B) excluded as an
   action path.
 - **Service shape. DECIDED: Unix domain socket, 0600.** A service over the typed core, bound to
@@ -204,7 +204,7 @@ with a note where the build differs.
   It never binds a network interface by default. Remote access (TCP + token) would be a later,
   separately reviewed step, not part of this phase. The plan named FastAPI/ASGI; the build (#104)
   uses stdlib HTTP instead, so there is no web framework to pin (`tools/rhubarb/service.py`,
-  `rhubarb serve [--socket PATH]`). It serves read-only views (#105), guarded actions (#106) and
+  `rhubarbtart serve [--socket PATH]`). It serves read-only views (#105), guarded actions (#106) and
   an NDJSON evidence event stream (#107).
 - **AI gateway. DECIDED: direct Claude-subscription access now; gateway support later.** Model
   access is a Claude subscription (OAuth), so the agent CLI authenticates itself and there is no
@@ -219,8 +219,8 @@ with a note where the build differs.
   command, and subscribe to events into evidence, with each approval an evidence entry. As built
   (#111, `tools/rhubarb/approvals.py`), the control-plane exec path holds a tiered command instead
   of running it and journals a request. `rbt-range` shows the request in the agent's pane and
-  waits. The operator lists holds with `rhubarb herdr pending` and releases one run with
-  `rhubarb herdr approve`. Grants are single-use, and request, grant and use are all evidence
+  waits. The operator lists holds with `rhubarbtart herdr pending` and releases one run with
+  `rhubarbtart herdr approve`. Grants are single-use, and request, grant and use are all evidence
   entries. herdr's CLI has no way to post a notification, so the hold is not pushed to its
   sidebar.
 - **Per-engagement driver VM. DECIDED: host-first, driver VM later (model C).** Ship with the

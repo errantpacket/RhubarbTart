@@ -99,8 +99,8 @@ your change: Setup Assistant timing, the macOS 27 provisioning path, real instal
 ## Releases
 
 The repository is versioned as a whole (SemVer, 0.x for now). The version lives in one place,
-`__version__` in `tools/rhubarb/__init__.py`; `rhubarb --version`, the control-plane `/health`
-endpoint and every new provenance record report it. It covers the `rhubarb` CLI, the profile,
+`__version__` in `tools/rhubarb/__init__.py`; `rhubarbtart --version`, the control-plane `/health`
+endpoint and every new provenance record report it. It covers the `rhubarbtart` CLI, the profile,
 engagement and lock file formats, and provenance records, not the internals of `api.py`. Image
 names don't depend on it: they come from the inputs.
 

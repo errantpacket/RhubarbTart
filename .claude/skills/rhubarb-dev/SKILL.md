@@ -1,6 +1,6 @@
 ---
 name: rhubarb-dev
-description: Safely change RhubarbTart's code (resolvers and verification, Packer templates, in-guest install and seal scripts, NixOS modules, Kali preseed, build/smoke-test/enroll scripts, the rhubarb CLI and typed core, engagements, evidence and vaults, the control-plane service, herdr agents and approvals, the TUI, check.sh) without breaking its security and provenance guarantees. Explains the invariants and why they exist, where each concern lives, per-family pitfalls (macOS bash 3.2, `! cmd` under set -e, password handling, seal ordering) and how to validate a change (check.sh, self-tests, Docker NixOS evaluation, stub simulations). Use this for any code edit, bug fix, refactor or new feature in this repo, for hardening changes, adapting to a new macOS/NixOS/Kali release, fixing a failing check, or reviewing someone's diff or doing a security review of the pipeline, even for small changes.
+description: Safely change RhubarbTart's code (resolvers and verification, Packer templates, in-guest install and seal scripts, NixOS modules, Kali preseed, build/smoke-test/enroll scripts, the rhubarbtart CLI and typed core, engagements, evidence and vaults, the control-plane service, herdr agents and approvals, the TUI, check.sh) without breaking its security and provenance guarantees. Explains the invariants and why they exist, where each concern lives, per-family pitfalls (macOS bash 3.2, `! cmd` under set -e, password handling, seal ordering) and how to validate a change (check.sh, self-tests, Docker NixOS evaluation, stub simulations). Use this for any code edit, bug fix, refactor or new feature in this repo, for hardening changes, adapting to a new macOS/NixOS/Kali release, fixing a failing check, or reviewing someone's diff or doing a security review of the pipeline, even for small changes.
 ---
 
 # Changing RhubarbTart safely
@@ -45,7 +45,7 @@ present it to the user as a trade-off, not an implementation detail.
 8. **Secrets for enrollment never touch the repo, a profile or an image.** They go host keychain
    → SSH stdin → 0600 temp file → shred.
 9. **Clone records hold no secrets and are trusted only when safe** (StrictModes-style: 0700
-   dir, 0600 regular file, owned by you, strict schema, name matches file). `rhubarb` acts only
+   dir, 0600 regular file, owned by you, strict schema, name matches file). `rhubarbtart` acts only
    on clones it recorded, never on `rbt-…` images, and passwords only move keychain →
    subprocess stdin. Keep new commands inside those rules, and add a case to `test_records` /
    `test_cli_lifecycle` for each.

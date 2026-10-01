@@ -12,7 +12,7 @@ from dataclasses import dataclass
 class Image:
     """A local Tart VM that is a RhubarbTart image (or a vanilla/unverified precursor).
 
-    Mirrors one row of ``rhubarb images``.
+    Mirrors one row of ``rhubarbtart images``.
 
     name:    the Tart VM name (e.g. ``rbt-macos-research-ab12cd34ef56``, or a
              ``*-vanilla`` / ``*-unverified`` precursor name).
@@ -32,7 +32,7 @@ class Image:
 
 @dataclass(frozen=True)
 class Clone:
-    """A research clone created by ``rhubarb new``. Mirrors one row of ``rhubarb list``,
+    """A research clone created by ``rhubarbtart new``. Mirrors one row of ``rhubarbtart list``,
     plus the underlying record fields a frontend needs. Holds no secrets.
 
     name:             the clone's Tart VM name and record filename stem.
@@ -77,7 +77,7 @@ class CloneList:
 
     clones:   valid, StrictModes-trusted clone records, one ``Clone`` each.
     problems: human-readable reasons records were ignored (bad mode/owner, schema, or
-              name mismatch). Mirrors the ``IGNORED ...`` lines ``rhubarb list`` prints;
+              name mismatch). Mirrors the ``IGNORED ...`` lines ``rhubarbtart list`` prints;
               never silently dropped.
     """
 
@@ -279,7 +279,7 @@ class Tunnel:
     dst_ip:    the target clone's current vmnet address (the host connects to it).
     ports:     the TCP ports forwarded (same number on both ends).
     argv:      the ``ssh -N -R 127.0.0.1:P:dst_ip:P …`` invocation into ``src``, over the
-               clone's pinned host key and the operator's key, like ``rhubarb ssh``.
+               clone's pinned host key and the operator's key, like ``rhubarbtart ssh``.
     """
 
     src: str

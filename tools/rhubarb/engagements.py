@@ -7,7 +7,7 @@ Phase 1 Stage 1A (this module): load + STRICTLY validate a manifest into a stabl
 dataclass, mirroring profiles.py. No `tart`, no keychain, no network — stdlib only.
 
 Only *identity*, *ranges* and *links* are acted on (Stage 1B: provision/teardown a range set;
-#30: `rhubarb engagement connect` opens each link's ports).
+#30: `rhubarbtart engagement connect` opens each link's ports).
 *targets*, *agent_budget* and *evidence* are validated syntactically and stored now; they are
 enforced in later phases (targets → Phase 2 network isolation, evidence → Phase 4 vault,
 agent_budget → Phase 5 agents). Validating the whole schema now keeps it stable ("no manifest,

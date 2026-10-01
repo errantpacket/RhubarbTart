@@ -13,7 +13,7 @@ is wrong for a new macOS build, fix it with the same strictness (see the `rhubar
 - [NixOS](#nixos)
 - [Kali](#kali)
 - [Enrollment](#enrollment)
-- [rhubarb CLI](#rhubarb-cli)
+- [rhubarbtart CLI](#rhubarbtart-cli)
 - [Smoke test](#smoke-test)
 - [Inspecting a failed image](#inspecting)
 
@@ -164,23 +164,23 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 | Tailscale on macOS doesn't connect | System extension not approved | The user approves it in the VM (System Settings > General > Login Items & Extensions) |
 | WARP doesn't register | Service token lacks Service Auth enrollment rights, or wrong `--org` | Fix it in the Cloudflare dashboard; re-run enroll |
 
-## rhubarb CLI
+## rhubarbtart CLI
 
 | Message | Cause | Fix |
 |---|---|---|
-| `no rhubarb clone named …` | Not created by `rhubarb new`, or its record was removed | `rhubarb list`; create clones with `rhubarb new`. It deliberately won't manage VMs it didn't create |
-| `… is not built on this Mac (./scripts/build.sh P)` | The profile's current image (from its committed lock) doesn't exist | Build it; or `rhubarb new NAME --image` an existing verified image |
+| `no rhubarb clone named …` | Not created by `rhubarbtart new`, or its record was removed | `rhubarbtart list`; create clones with `rhubarbtart new`. It deliberately won't manage VMs it didn't create |
+| `… is not built on this Mac (./scripts/build.sh P)` | The profile's current image (from its committed lock) doesn't exist | Build it; or `rhubarbtart new NAME --image` an existing verified image |
 | `no keychain password for rbt-…` | Image built on another Mac, or its entry was deleted | Rebuild here |
 | `… must be a regular file owned by you with mode 0600; refusing it` | Record permissions loosened, or a symlink | Check nobody else wrote it; `chmod 600` only if you're sure it's yours, otherwise delete the record and the VM (`tart delete`) |
 | `… is not owned by you` / `must be a real directory` (state dir) | State dir is a symlink or owned by another user | Investigate before changing anything. Point `RHUBARB_STATE_DIR` at a directory you own |
 | `name … does not match its file` / `unexpected keys` / `invalid …` | Corrupted or hand-edited record | Delete the record (`rm ~/Library/Application Support/RhubarbTart/clones/NAME.json`) and the VM; re-create |
-| `SSH refused our key …; keeping the image's password` | Key not loaded in `ssh-agent`, or the image was built for other keys | `ssh-add`, then `rhubarb reset NAME --same-image` |
-| `SSH not reachable after 2 boots …; keeping the image's password` | The clone's first boot was slow, or an image with no recorded SSH mode has sshd off | Raise `RHUBARB_SSH_WAIT` and `rhubarb reset NAME --same-image`; if the image has no SSH keys, rebuild with `RHUBARB_SSH_PUBKEYS` |
+| `SSH refused our key …; keeping the image's password` | Key not loaded in `ssh-agent`, or the image was built for other keys | `ssh-add`, then `rhubarbtart reset NAME --same-image` |
+| `SSH not reachable after 2 boots …; keeping the image's password` | The clone's first boot was slow, or an image with no recorded SSH mode has sshd off | Raise `RHUBARB_SSH_WAIT` and `rhubarbtart reset NAME --same-image`; if the image has no SSH keys, rebuild with `RHUBARB_SSH_PUBKEYS` |
 | `image … was built with SSH disabled (RHUBARB_SSH_PUBKEYS unset) …` | The image's provenance records no authorized keys, so sshd is off. Rotation is refused up front (no boot) | Rebuild the image with `RHUBARB_SSH_PUBKEYS=<pubkey file>`; a retry can't help |
-| `… ssh failed on the host side, not waiting for it: …` | A client-side ssh problem (bad `RHUBARB_SSH_IDENTITY`, a broken `-sk`/`SecurityKeyProvider`, or a host-key mismatch), not the guest still booting | Fix the reported ssh issue; `rhubarb` surfaces it immediately instead of waiting out the full timeout |
+| `… ssh failed on the host side, not waiting for it: …` | A client-side ssh problem (bad `RHUBARB_SSH_IDENTITY`, a broken `-sk`/`SecurityKeyProvider`, or a host-key mismatch), not the guest still booting | Fix the reported ssh issue; `rhubarbtart` surfaces it immediately instead of waiting out the full timeout |
 | `password rotation failed: …` | Rotation script error in the guest (see the message) | The clone keeps its old password and the new keychain entry is removed. Retry with `reset NAME --same-image` |
 | `a VM named … already exists` | Name collision with any Tart VM | Pick another name |
-| `engagement … has no clones; run: rhubarb engagement provision …` (`herdr arm`) | Agents need provisioned clones | Provision first |
-| `control-plane service not running at …; start it: rhubarb serve` | `herdr arm` needs the service socket | Run `./rhubarb serve` in another terminal (same `--socket` if you passed one) |
+| `engagement … has no clones; run: rhubarbtart engagement provision …` (`herdr arm`) | Agents need provisioned clones | Provision first |
+| `control-plane service not running at …; start it: rhubarbtart serve` | `herdr arm` needs the service socket | Run `./rhubarbtart serve` in another terminal (same `--socket` if you passed one) |
 | `socket path is too long …` / `… exists and is not a socket; refusing to replace it` | `--socket` path over ~100 bytes, or a file already sits at that path | Pass a shorter `--socket`; investigate the existing file before removing it |
 | `… evidence does not verify …` (`evidence verify`, `vault seal`) | The journal or an item changed after it was written (edit, reorder, deletion) | Treat as tampering or corruption. Don't rewrite the journal; report the listed problems |

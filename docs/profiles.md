@@ -35,7 +35,7 @@ in a target profile such as `juiceshop-target`, never on a machine you attack fr
 | `username` | 3–16 characters, lowercase letters and digits, starting with a letter (default `admin`). Kali rejects names its installer reserves, including `admin`, so a Kali profile must set one |
 | `vm` | `cpu` 2–64, `memory_gb` 4–256, `disk_gb` 40–2048 (defaults come from the base) |
 | `options.desktop` | NixOS/Kali: `"none"` or `"xfce"` |
-| `options.rosetta` | NixOS/Kali: run x86_64 binaries (`rhubarb run` then starts clones with `--rosetta=rosetta`) |
+| `options.rosetta` | NixOS/Kali: run x86_64 binaries (`rhubarbtart run` then starts clones with `--rosetta=rosetta`) |
 | `options.kali_metapackages` | Kali: a list of Kali packages, for example `kali-linux-default` or `kali-linux-headless` |
 
 Unknown keys, options for the wrong OS, bad values and unsupported tools are all rejected. Check with

@@ -1,4 +1,4 @@
-"""Host-side operations for the `rhubarb` CLI: tart, keychain, SSH, password rotation.
+"""Host-side operations for the `rhubarbtart` CLI: tart, keychain, SSH, password rotation.
 
 Secrets (VM passwords) only ever travel: keychain -> this process -> subprocess stdin.
 They are never placed in argv, environment variables, files, or log output.

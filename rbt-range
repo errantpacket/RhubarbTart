@@ -1,7 +1,7 @@
 #!/bin/bash
 # rbt-range: the scoped range client an agent uses to run a command in its one assigned clone,
 # through the control-plane socket. Clone + socket come from RBT_RANGE_CLONE / RBT_SERVICE_SOCKET
-# (set by `rhubarb herdr arm`). Thin client of the service; never touches tart/keychain.
+# (set by `rhubarbtart herdr arm`). Thin client of the service; never touches tart/keychain.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 if [[ -d "$ROOT/.toolchain" ]]; then

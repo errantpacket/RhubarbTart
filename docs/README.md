@@ -10,7 +10,7 @@ the plan.
 |---|---|
 | [Key concepts](concepts.md) | The terms used throughout: profile, input, lock, image, clone, seal, provenance, engagement, evidence, vault, stacked clone |
 | [How it works](how-it-works.md) | The four build stages (Define, Resolve, Build, Prove) from start to finish |
-| [Using your VMs](using.md) | The `rhubarb` CLI and dashboard, SSH, VPN sign-in, engagements, evidence and vaults, the control-plane service and herdr agents |
+| [Using your VMs](using.md) | The `rhubarbtart` CLI and dashboard, SSH, VPN sign-in, engagements, evidence and vaults, the control-plane service and herdr agents |
 | [Define your own guest](profiles.md) | Writing a profile: the format, which tools each OS supports, validation rules |
 | [Publishing and stacked clones](publishing.md) | Signing and publishing images to a registry, and making stacked macOS clones from them |
 | [macOS guests and containers](macos-and-containers.md) | Why macOS runs as a VM, what OCI packaging and clones give you, and containers inside guests |

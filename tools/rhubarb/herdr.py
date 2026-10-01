@@ -151,7 +151,7 @@ def arm(engagement: str, socket_path: str | None = None, progress=None) -> ArmRe
     eng = _engagements.load_engagement(engagement)
     tagged = {c.name: c for c in api.engagement_clones(eng.id)}
     if not tagged:
-        raise VerifyError(f"engagement {eng.id} has no clones; run: rhubarb engagement provision {eng.id}")
+        raise VerifyError(f"engagement {eng.id} has no clones; run: rhubarbtart engagement provision {eng.id}")
     agents = load_config(eng.id)
     for a in agents:
         if a["clone"] not in tagged:
@@ -160,7 +160,7 @@ def arm(engagement: str, socket_path: str | None = None, progress=None) -> ArmRe
 
     socket = Path(socket_path) if socket_path else default_socket_path()
     if not socket.exists():
-        raise VerifyError(f"control-plane service not running at {socket}; start it: rhubarb serve")
+        raise VerifyError(f"control-plane service not running at {socket}; start it: rhubarbtart serve")
     herdr_bin()   # fail early if herdr is missing
 
     def envargs(clone: str) -> list[str]:

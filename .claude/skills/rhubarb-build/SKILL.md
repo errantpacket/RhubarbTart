@@ -1,6 +1,6 @@
 ---
 name: rhubarb-build
-description: Build, run, enroll and troubleshoot RhubarbTart guest VMs (Tart + Packer) from their profiles (macOS 26/27, NixOS and Kali). Covers bootstrapping the pinned toolchain, preflight, scripts/build.sh PROFILE, the smoke test, managing clones with the rhubarb CLI (new, run, stop, ssh, exec, enroll, list, reset, rm, per-clone passwords, outdated clones), engagements (define, provision, connect, teardown, evidence, vaults), finding passwords in the keychain, Rosetta, VPN/ZTNA enrollment (Tailscale, Cloudflare WARP), and diagnosing failures (Setup Assistant or provisioning hangs, Kali preseed/GRUB, NixOS install, finalize or smoke-test errors, hash/signature/Team ID mismatches, -unverified images). Use this whenever someone wants to make, rebuild, run, clone, reset, remove, connect to or enroll a research VM, or says a build, bootstrap, enrollment or smoke test failed, even if they don't mention Tart or Packer. For designing a guest use rhubarb-profiles; for refreshing versions use rhubarb-update-inputs.
+description: Build, run, enroll and troubleshoot RhubarbTart guest VMs (Tart + Packer) from their profiles (macOS 26/27, NixOS and Kali). Covers bootstrapping the pinned toolchain, preflight, scripts/build.sh PROFILE, the smoke test, managing clones with the rhubarbtart CLI (new, run, stop, ssh, exec, enroll, list, reset, rm, per-clone passwords, outdated clones), engagements (define, provision, connect, teardown, evidence, vaults), finding passwords in the keychain, Rosetta, VPN/ZTNA enrollment (Tailscale, Cloudflare WARP), and diagnosing failures (Setup Assistant or provisioning hangs, Kali preseed/GRUB, NixOS install, finalize or smoke-test errors, hash/signature/Team ID mismatches, -unverified images). Use this whenever someone wants to make, rebuild, run, clone, reset, remove, connect to or enroll a research VM, or says a build, bootstrap, enrollment or smoke test failed, even if they don't mention Tart or Packer. For designing a guest use rhubarb-profiles; for refreshing versions use rhubarb-update-inputs.
 ---
 
 # Building and running RhubarbTart guests
@@ -64,30 +64,30 @@ blocking.
   non-default vmnet subnet. Kali also binds its preseed server to that address, so it must be
   the vmnet host IPv4. Softnet is not supported: it moves each VM to a random subnet (#30).
 
-## Using built images: the `rhubarb` CLI
+## Using built images: the `rhubarbtart` CLI
 
-Built images are templates. All work happens in clones managed by `./rhubarb` (on the Mac):
+Built images are templates. All work happens in clones managed by `./rhubarbtart` (on the Mac):
 
 ```sh
-./rhubarb images                              # built images, current vs outdated per profile
-./rhubarb new web-1 --profile kali-research   # clone + per-clone password rotation (--no-rotate keeps the image's)
-./rhubarb new web-2 --image rbt-<profile>-<sha>   # clone a specific verified image
-./rhubarb new mac-1 --profile tahoe-research --from-registry  # macOS only: stacked on the verified registry copy (#31)
-./rhubarb run web-1 [--headless] [--detach]   # applies Rosetta etc. from the record
-./rhubarb stop web-1                          # stop a running clone (VM and record stay)
-./rhubarb ssh web-1 [-- CMD]
-./rhubarb exec web-1 -- CMD                   # run one command; journaled as evidence if the clone is in an engagement
-./rhubarb enroll web-1 tailscale              # or: warp --org TEAM (only these two services)
-./rhubarb list                                # state, outdated/deleted image, password mode, enrollment
-./rhubarb reset web-1 [--same-image] [--no-rotate]   # destroy + re-clone (drops identity and enrollment)
-./rhubarb rm web-1 [--yes]
+./rhubarbtart images                              # built images, current vs outdated per profile
+./rhubarbtart new web-1 --profile kali-research   # clone + per-clone password rotation (--no-rotate keeps the image's)
+./rhubarbtart new web-2 --image rbt-<profile>-<sha>   # clone a specific verified image
+./rhubarbtart new mac-1 --profile tahoe-research --from-registry  # macOS only: stacked on the verified registry copy (#31)
+./rhubarbtart run web-1 [--headless] [--detach]   # applies Rosetta etc. from the record
+./rhubarbtart stop web-1                          # stop a running clone (VM and record stay)
+./rhubarbtart ssh web-1 [-- CMD]
+./rhubarbtart exec web-1 -- CMD                   # run one command; journaled as evidence if the clone is in an engagement
+./rhubarbtart enroll web-1 tailscale              # or: warp --org TEAM (only these two services)
+./rhubarbtart list                                # state, outdated/deleted image, password mode, enrollment
+./rhubarbtart reset web-1 [--same-image] [--no-rotate]   # destroy + re-clone (drops identity and enrollment)
+./rhubarbtart rm web-1 [--yes]
 ```
 
-`./rhubarb-tui` is a terminal dashboard over the same core (Images, Clones, Provenance and Logs
+`./rhubarbtart-tui` is a terminal dashboard over the same core (Images, Clones, Provenance and Logs
 tabs, plus the clone actions and Build). Its Build action writes
 `logs/build-<profile>-<UTC>.log` (0600, VNC password redacted) in the state dir.
 
-- **Prefer `rhubarb` over raw `tart`/`scripts/*.sh`** for clones. It records lineage
+- **Prefer `rhubarbtart` over raw `tart`/`scripts/*.sh`** for clones. It records lineage
   (profile, image, username, Rosetta), so the right flags, user and keychain entry are used.
   It only acts on clones it created, and never on built `rbt-…` images or other VMs.
 - **`new` gives each clone its own random password** (keychain account = clone name), proven
@@ -97,7 +97,7 @@ tabs, plus the clone actions and Build). Its Build action writes
   provenance records SSH *disabled* is refused up front with a rebuild hint. Suggest
   `reset NAME --same-image` once the key is loaded.
 - **`outdated`** in `list` means the profile's lock has moved on since that clone was made.
-  Offer `rhubarb reset NAME` (a fresh clone of the current image); warn that it discards the
+  Offer `rhubarbtart reset NAME` (a fresh clone of the current image); warn that it discards the
   clone's state and enrollment.
 - **Passwords:** `security find-generic-password -s RhubarbTart -a CLONE -w` (or the image name
   when `inherited`). Don't print passwords or enrollment secrets unless asked.
@@ -106,7 +106,7 @@ tabs, plus the clone actions and Build). Its Build action writes
   extension once per clone, then removes the auth-key policy (the script prints how).
 - **Records** live in `~/Library/Application Support/RhubarbTart/` (or `RHUBARB_STATE_DIR`),
   together with `events.log`, run and build logs (`logs/`), evidence (`evidence/`) and the
-  service socket. If `rhubarb` refuses a record (bad permissions, symlink, schema), don't loosen
+  service socket. If `rhubarbtart` refuses a record (bad permissions, symlink, schema), don't loosen
   the check: see the troubleshooting guide.
 
 ## Engagements, evidence and agents
@@ -117,25 +117,25 @@ reach each other on Tart's default NAT; a manifest's `links` are the only path. 
 `docs/using.md` (Engagements).
 
 ```sh
-./rhubarb engagement define lab               # strictly validate engagements/lab.json (a path is reduced to its id)
-./rhubarb engagement list                     # defined engagements and their clone counts
-./rhubarb engagement provision lab            # create its clones from verified images (existing names are skipped)
-./rhubarb engagement connect lab              # open its links (ssh -R) until Ctrl-C
-./rhubarb evidence collect|list|verify lab    # pull ~/evidence from its clones; show; check the hash chain
-./rhubarb vault seal lab [--out DIR]          # signed, read-only evidence bundle (default: vaults/ in the repo)
-./rhubarb vault verify DIR [--pub KEY]        # check a vault's cosign signature and every hash
-./rhubarb engagement teardown lab [--yes] [--no-collect]   # collect evidence, then remove its clones
+./rhubarbtart engagement define lab               # strictly validate engagements/lab.json (a path is reduced to its id)
+./rhubarbtart engagement list                     # defined engagements and their clone counts
+./rhubarbtart engagement provision lab            # create its clones from verified images (existing names are skipped)
+./rhubarbtart engagement connect lab              # open its links (ssh -R) until Ctrl-C
+./rhubarbtart evidence collect|list|verify lab    # pull ~/evidence from its clones; show; check the hash chain
+./rhubarbtart vault seal lab [--out DIR]          # signed, read-only evidence bundle (default: vaults/ in the repo)
+./rhubarbtart vault verify DIR [--pub KEY]        # check a vault's cosign signature and every hash
+./rhubarbtart engagement teardown lab [--yes] [--no-collect]   # collect evidence, then remove its clones
 ```
 
 - `teardown` collects evidence first unless `--no-collect`. Confirm with the user before
   `--no-collect` or `--yes`.
 - `vault seal` signs with the offline cosign key in the keychain (service
   `RhubarbTart-signing`, created by `scripts/signing-key.sh init`).
-- Agents: `./rhubarb serve [--socket PATH]` runs the control-plane service on a 0600 Unix
-  socket. `./rhubarb herdr arm ID` then launches the agents listed in
+- Agents: `./rhubarbtart serve [--socket PATH]` runs the control-plane service on a 0600 Unix
+  socket. `./rhubarbtart herdr arm ID` then launches the agents listed in
   `engagements/<id>.herdr.json` under herdr, each pinned to one clone through `rbt-range`.
   Commands matching the config's `tiered` patterns wait for the operator:
-  `./rhubarb herdr pending ID`, then `./rhubarb herdr approve ID REQUEST` (one grant allows one
+  `./rhubarbtart herdr pending ID`, then `./rhubarbtart herdr approve ID REQUEST` (one grant allows one
   run). Never approve on the user's behalf.
 
 ## When something fails

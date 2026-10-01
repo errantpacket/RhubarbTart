@@ -3,7 +3,7 @@
 An engagement's herdr config (``engagements/<id>.herdr.json``) may mark commands **tiered** with
 a list of regexes. When an agent runs a matching command through the control-plane exec path, it
 is **held for approval** instead of running: a ``requested`` entry lands in the engagement's
-evidence, and the operator releases it with ``rhubarb herdr approve``. Each grant is **single-use**
+evidence, and the operator releases it with ``rhubarbtart herdr approve``. Each grant is **single-use**
 — one approval authorizes one run — and the whole exchange (request, grant, consume) is evidence,
 so a sealed vault shows exactly which sensitive actions were permitted and when.
 

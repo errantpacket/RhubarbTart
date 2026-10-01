@@ -2,7 +2,7 @@
 # requires-python = ">=3.12"
 # dependencies = ["textual==8.2.8"]
 # ///
-"""Launcher for the RhubarbTart TUI (``./rhubarb-tui``).
+"""Launcher for the RhubarbTart TUI (``./rhubarbtart-tui``).
 
 The app lives in ``rhubarb.tui.app`` (layout, polling, provenance routing) with action dispatch
 in ``rhubarb.tui.dispatch``; this file only carries the pinned, hash-locked Textual dependency

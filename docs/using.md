@@ -1,8 +1,8 @@
 # Using your VMs
 
 Built images are templates: you work in disposable **clones** of them (see
-[Key concepts](concepts.md#what-you-work-in)). Clones are managed by the `rhubarb` CLI, or by the
-`./rhubarb-tui` Textual dashboard, which drives the same actions over the same audited core:
+[Key concepts](concepts.md#what-you-work-in)). Clones are managed by the `rhubarbtart` CLI, or by the
+`./rhubarbtart-tui` Textual dashboard, which drives the same actions over the same audited core:
 browse images, clones, provenance and logs; run, ssh, enroll, reset, rm, new and build, with a
 confirmation before anything destructive. For stacked macOS clones from a registry, see
 [Publishing and stacked clones](publishing.md).
@@ -19,22 +19,22 @@ redacted) and `events.log`. It follows a growing log while you're at its end, an
 while you scroll back. `B` runs `scripts/build.sh`, so like any build it needs the Mac's GUI login
 session; it refuses to start over SSH.
 
-Inside herdr it leaves the mouse to herdr; use `./rhubarb-tui --mouse` (or `RHUBARB_TUI_MOUSE=1`)
+Inside herdr it leaves the mouse to herdr; use `./rhubarbtart-tui --mouse` (or `RHUBARB_TUI_MOUSE=1`)
 to capture it anyway, or `--no-mouse` to turn it off elsewhere. It also takes herdr's colour theme:
 the `[theme]` in herdr's `config.toml`, including `auto_switch` (dark or light follows the Mac's
 appearance) and any `[theme.custom]` colours. Use `--theme NAME` (or `RHUBARB_TUI_THEME=NAME`) to
 pick a Textual theme instead, for example `nord` or `catppuccin-latte`.
 
 ```sh
-./rhubarb images                              # built images; which one is current per profile
-./rhubarb new web-1 --profile kali-research   # clone the current image; give it its OWN password
-./rhubarb new mac-1 --profile tahoe-research --from-registry   # macOS: stack on the verified registry copy
-./rhubarb run web-1                           # GUI (Rosetta applied if the profile uses it)
-./rhubarb ssh web-1                           # key-only SSH, host key pinned per clone
-./rhubarb enroll web-1 tailscale              # VPN identity for this clone only
-./rhubarb list                                # clones: state, outdated image?, password, enrollment
-./rhubarb reset web-1                         # destroy + fresh clone of the current image
-./rhubarb rm web-1                            # delete the clone (+ keychain entry if it had a unique password)
+./rhubarbtart images                              # built images; which one is current per profile
+./rhubarbtart new web-1 --profile kali-research   # clone the current image; give it its OWN password
+./rhubarbtart new mac-1 --profile tahoe-research --from-registry   # macOS: stack on the verified registry copy
+./rhubarbtart run web-1                           # GUI (Rosetta applied if the profile uses it)
+./rhubarbtart ssh web-1                           # key-only SSH, host key pinned per clone
+./rhubarbtart enroll web-1 tailscale              # VPN identity for this clone only
+./rhubarbtart list                                # clones: state, outdated image?, password, enrollment
+./rhubarbtart reset web-1                         # destroy + fresh clone of the current image
+./rhubarbtart rm web-1                            # delete the clone (+ keychain entry if it had a unique password)
 ```
 
 | Command | What it does |
@@ -50,10 +50,10 @@ pick a Textual theme instead, for example `nord` or `catppuccin-latte`.
 | `rm NAME [--yes]` | Stops and deletes the clone, its keychain entry (only if it had a unique/rotated password) and its pinned host key |
 
 > [!NOTE]
-> `rhubarb` only touches clones it created. It never modifies built images (`rbt-…`) or VMs
+> `rhubarbtart` only touches clones it created. It never modifies built images (`rbt-…`) or VMs
 > made some other way, and clone names can't start with `rbt-`. Per-clone rotation needs key
 > SSH (images built with `RHUBARB_SSH_PUBKEYS`, with the key in `ssh-agent` or `RHUBARB_SSH_IDENTITY`
-> pointing at it). Without it the clone keeps the image's password, and `rhubarb list` says
+> pointing at it). Without it the clone keeps the image's password, and `rhubarbtart list` says
 > `inherited`. For an image built with SSH disabled, `new` skips the rotation without booting the
 > clone and prints a hint to rebuild with `RHUBARB_SSH_PUBKEYS`.
 
@@ -77,9 +77,9 @@ attacker linked to a Juice Shop target).
 **Evidence.** Each engagement keeps a record on your Mac, under
 `~/Library/Application Support/RhubarbTart/evidence/<id>/`, never in the clones:
 
-- **Commands.** `rhubarb exec` (and agents, through the same API) records the command, user,
+- **Commands.** `rhubarbtart exec` (and agents, through the same API) records the command, user,
   exit code, times and full output of each command run in an engagement clone. Interactive
-  `rhubarb ssh` sessions are not recorded.
+  `rhubarbtart ssh` sessions are not recorded.
 - **Files.** Anything a clone puts in its user's `~/evidence/` folder (scan output, notes,
   findings) is pulled by `evidence collect` and hashed as it arrives. The folder comes over as a
   tar stream that is read, never unpacked, so symlinks and paths outside the folder are refused.
@@ -97,7 +97,7 @@ Every entry is one line of `journal.jsonl` and includes the hash of the entry be
 outputs and files are stored by their sha256. `evidence verify` recomputes all of it and reports
 an edited, reordered or deleted entry or an altered file.
 
-**Control-plane service.** `rhubarb serve` runs a small HTTP service over a **Unix domain socket**
+**Control-plane service.** `rhubarbtart serve` runs a small HTTP service over a **Unix domain socket**
 (0600, `service.sock` in the state directory by default, or `--socket PATH`). herdr agents reach
 their range through it ([charter](HERDR-CHARTER.md)). There is no TCP port and no token: filesystem
 permissions on the socket are the boundary, like the clone records. Every endpoint is a call into the same
@@ -124,7 +124,7 @@ This is the sanctioned, recorded path, not a sandbox: an agent on the host runs 
 isolation of an agent from other clones on the same host is the per-engagement driver VM
 ([charter](HERDR-CHARTER.md) model C), and the network limits what each clone can reach (#30).
 
-**Arming agents (`rhubarb herdr arm ID`).** With an engagement provisioned and `rhubarb serve`
+**Arming agents (`rhubarbtart herdr arm ID`).** With an engagement provisioned and `rhubarbtart serve`
 running, `arm` launches its configured agents under [herdr](https://herdr.dev): it creates a herdr
 workspace, gives each agent its own pane pinned to one range clone (`RBT_RANGE_CLONE`) and the
 control-plane socket, puts the repo on the pane's `PATH` so `rbt-range` resolves, and starts the
@@ -140,13 +140,13 @@ regexes (`"tiered": ["curl\\s.*://…", "rm\\s+-rf"]`). When a matching command 
 the engagement's clones, it is **held**: the command does not run, a request lands in the
 engagement's evidence, and the call returns exit code 126 (`approval_required`). `rbt-range`
 prints the request id and retries until the command is approved, for up to 10 minutes by default
-(`RBT_APPROVAL_WAIT`, in seconds). The operator sees held commands with `rhubarb herdr pending <id>`
-and releases one run with `rhubarb herdr approve <id> <request>`; the agent's command then
+(`RBT_APPROVAL_WAIT`, in seconds). The operator sees held commands with `rhubarbtart herdr pending <id>`
+and releases one run with `rhubarbtart herdr approve <id> <request>`; the agent's command then
 proceeds. Each grant is single-use, and the whole exchange (request, grant, use, run) is evidence,
 so a sealed vault shows which sensitive actions were permitted. This is a workflow guardrail on
 the sanctioned `rbt-range` path, not a kernel boundary (charter model A).
 
-**Sealing a vault.** `rhubarb vault seal ID` turns the evidence store into a signed, sealed,
+**Sealing a vault.** `rhubarbtart vault seal ID` turns the evidence store into a signed, sealed,
 portable bundle you can hand off:
 
 | Command | What it does |
@@ -227,10 +227,10 @@ sequenceDiagram
     autonumber
     actor You
     participant KC as 🔑 Host keychain
-    participant EN as rhubarb enroll
+    participant EN as rhubarbtart enroll
     participant VM as Clone · web-1
     You->>KC: store the token once<br/>(prompted, never in argv)
-    You->>EN: rhubarb enroll web-1 tailscale
+    You->>EN: rhubarbtart enroll web-1 tailscale
     EN->>KC: read the clone password + token
     EN->>VM: send both over SSH stdin
     Note over VM: secret → 0600 temp file<br/>enroll → shred
@@ -239,11 +239,11 @@ sequenceDiagram
 
 | Service | Command | Secret (keychain service `RhubarbTart-enroll`) | Notes |
 |---|---|---|---|
-| Tailscale | `rhubarb enroll web-1 tailscale` | account `tailscale-authkey` | Use a one-off, pre-approved, *tagged* key (ephemeral for throwaway clones). macOS: approve the system extension once per clone |
-| Cloudflare WARP | `rhubarb enroll web-1 warp --org TEAM` | `warp-client-id`, `warp-client-secret` | A service token allowed to enroll devices; dashboard version pushes are disabled |
+| Tailscale | `rhubarbtart enroll web-1 tailscale` | account `tailscale-authkey` | Use a one-off, pre-approved, *tagged* key (ephemeral for throwaway clones). macOS: approve the system extension once per clone |
+| Cloudflare WARP | `rhubarbtart enroll web-1 warp --org TEAM` | `warp-client-id`, `warp-client-secret` | A service token allowed to enroll devices; dashboard version pushes are disabled |
 
 Store a secret once with `security add-generic-password -s RhubarbTart-enroll -a tailscale-authkey -w`
-(it prompts, so the secret never lands in your shell history). `rhubarb enroll` wraps
+(it prompts, so the secret never lands in your shell history). `rhubarbtart enroll` wraps
 `scripts/enroll.sh` and records which services each clone is enrolled in.
 
 ← back to the [README](../README.md)

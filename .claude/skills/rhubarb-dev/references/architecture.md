@@ -207,7 +207,7 @@ hash-locked in `tools/rhubarb_tui.py.lock` (check.sh verifies the pin and the lo
   N=nixos/nix@sha256:85169a7ff4ac6928b70b15ced20c74770e07e8fbc7f97e92f64c1fca47ea9486
   mkdir -p /tmp/np /tmp/cfg && tar -xzf cache/artifacts/*/nixpkgs-*.tar.gz -C /tmp/np --strip-components=1
   cp -r guest/nixos/nix/. /tmp/cfg/ && cp cache/stage/nixos-research/{profile.json,lock.json} /tmp/cfg/
-  echo '{"from":"192.168.64.1"}' > /tmp/cfg/ssh.json && cp ~/.ssh/id_ed25519.pub /tmp/cfg/authorized_keys
+  echo '{"from":"192.168.64.1"}' > /tmp/cfg/ssh.json && cp ~/.ssh/rhubarbtart_ed25519.pub /tmp/cfg/authorized_keys
   mkdir -p /tmp/cfg/artifacts   # a profile whose module builds from a staged file (juice-shop) needs it here
   docker run --rm -v /tmp/np:/nixpkgs:ro -v /tmp/cfg:/cfg $N nix-instantiate \
     -I nixpkgs=/nixpkgs -I nixos-config=/cfg/configuration.nix '<nixpkgs/nixos>' -A system

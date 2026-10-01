@@ -33,8 +33,8 @@ hold.
 ./tools/bootstrap.sh                                   # 1. pinned toolchain -> .toolchain/
 source scripts/env.sh && uv run tools/resolve.py preflight  # 2. right binaries, versions, signer
 uv run tools/resolve.py resolve <profile>              # 3. only when refreshing inputs
-ssh-add ~/.ssh/id_ed25519                              # 4. the smoke test logs in with it
-RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh <profile>   # 5.
+ssh-add --apple-use-keychain ~/.ssh/rhubarbtart_ed25519   # 4. the smoke test logs in with it
+RHUBARB_SSH_PUBKEYS=~/.ssh/rhubarbtart_ed25519.pub ./scripts/build.sh <profile>   # 5.
 ```
 
 1. Run **bootstrap** once, and again whenever `config/toolchain.env` changes.
@@ -42,7 +42,11 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh <profile>   # 5.
 3. **resolve** rewrites `locks/<profile>.lock.json`, which is what gets built. Don't run it just to
    build: a committed lock plus `cache/` is enough. Refreshing means reviewing the diff and
    committing before building; use the `rhubarb-update-inputs` skill for that.
-4. Without the key in the agent, the smoke test can't prove key login works.
+4. Without the key in the agent, the smoke test can't prove key login works. If the user has no
+   VM key yet, they create one with a passphrase, `ssh-keygen -t ed25519 -a 100 -C rhubarbtart -f
+   ~/.ssh/rhubarbtart_ed25519`. It prompts for the passphrase, so ask them to run it themselves
+   (`! <command>`) rather than creating it for them. After a restart, `ssh-add
+   --apple-load-keychain` reloads it. Details: `docs/using.md` ("Your SSH key").
 5. **build.sh** verifies the cache against the lock (hash plus signer), installs by family, builds
    `rbt-<profile>-<sha>-unverified`, smoke-tests a throwaway clone, renames on success, and writes
    `out/<vm>.provenance.json`.

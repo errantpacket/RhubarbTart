@@ -56,6 +56,36 @@ pick a Textual theme instead, for example `nord` or `catppuccin-latte`.
 > `inherited`. For an image built with SSH disabled, `new` skips the rotation without booting the
 > clone and prints a hint to rebuild with `RHUBARB_SSH_PUBKEYS`.
 
+### Your SSH key
+
+`rhubarbtart` reaches clones over SSH with a key, never a password. The public key goes into the
+image when you build it (`RHUBARB_SSH_PUBKEYS`). The private key stays on your Mac.
+
+- **Use a key only for your VMs.** Don't reuse the key you use for GitHub or servers. If a VM key
+  leaks, nothing else is exposed, and you can replace it on its own.
+- **Create it with a passphrase.** This command asks for one:
+
+  ```sh
+  ssh-keygen -t ed25519 -a 100 -C rhubarbtart -f ~/.ssh/rhubarbtart_ed25519
+  ```
+
+  `ed25519` keys are short and fast, and the build accepts them. `-a 100` makes a passphrase much
+  slower to guess if someone copies the private key file.
+- **Keep the passphrase in your keychain.** `ssh-add --apple-use-keychain ~/.ssh/rhubarbtart_ed25519`
+  loads the key into `ssh-agent` and stores the passphrase in your macOS keychain. After a
+  restart, `ssh-add --apple-load-keychain` loads it again without asking. The build's smoke test
+  and `rhubarbtart` use the key from the agent.
+- **Use one key file instead of the agent** by setting `RHUBARB_SSH_IDENTITY` to the private key's
+  path. `rhubarbtart` then uses only that key. The build's smoke test still uses the agent.
+- **Authorize several keys** by listing their public keys in one file, one per line, and passing
+  that file as `RHUBARB_SSH_PUBKEYS`. The build accepts `ed25519` and `ecdsa` keys and refuses RSA.
+- **Hardware security keys** (`ed25519-sk`, for example a YubiKey) are accepted by the build, but
+  macOS's built-in `ssh` can't use them without a separate FIDO2 provider. A passphrase-protected
+  key in the keychain is the simpler choice.
+- **Changing the key** means rebuilding: each image holds the public keys it was built with. Build
+  again with the new `RHUBARB_SSH_PUBKEYS`, then `rhubarbtart reset NAME` moves a clone to the new
+  image.
+
 ### Engagements
 
 An **engagement** is a committed scope manifest (`engagements/<id>.json`) naming a set of ranges

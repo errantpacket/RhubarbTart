@@ -1,7 +1,7 @@
 #!/bin/bash
 # Build a RhubarbTart guest from its profile and reviewed lock.
 #
-#   RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh <profile>
+#   RHUBARB_SSH_PUBKEYS=~/.ssh/rhubarbtart_ed25519.pub ./scripts/build.sh <profile>
 #   REBUILD_VANILLA=1 ./scripts/build.sh <macos-profile>   reinstall macOS from the IPSW
 #   ./scripts/build.sh --list                               available profiles
 #

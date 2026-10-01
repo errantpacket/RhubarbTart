@@ -215,38 +215,17 @@ flowchart TD
 
 ## Documentation
 
-| Page | Covers |
-|---|---|
-| **[Key concepts](docs/concepts.md)** | The terms used throughout: profile, input, lock, image, clone, seal, provenance, engagement, evidence, vault, stacked clone |
-| **[How it works](docs/how-it-works.md)** | The four build stages (Define, Resolve, Build, Prove) from start to finish |
-| **[Using your VMs](docs/using.md)** | Working with clones: the `rhubarb` CLI and dashboard, SSH, VPN sign-in, engagements, evidence and vaults, the control-plane service and herdr agents |
-| **[Define your own guest](docs/profiles.md)** | Writing a profile: the format, which tools each OS supports, validation rules |
-| **[Trust model and security posture](docs/trust-model.md)** | How each input is verified, and which security settings each OS applies and tests |
-| **[Publishing and stacked clones](docs/publishing.md)** | Signing and publishing images to a registry, and making stacked macOS clones from them |
-| **[macOS guests and containers](docs/macos-and-containers.md)** | Why macOS runs as a VM (not a container), what OCI packaging and clones give you, and running containers or devcontainers inside guests |
-| **[Testing macOS and iOS apps](docs/testing-apple-apps.md)** | The challenges of testing Apple software and how each part of the tool addresses them |
-| **[herdr charter](docs/HERDR-CHARTER.md)** | What the agent interface may and may not do, and where its trust boundary lies |
-| **[Reference](docs/reference.md)** | Updating inputs, configuration variables, host requirements and the toolchain |
-| **[Development](docs/development.md)** | Changing the code safely: `check.sh`, testing without a Mac, the Claude Code skills |
+The [documentation index](docs/README.md) lists every page: guides, reference pages and the
+design records. If you're new, start with [Key concepts](docs/concepts.md), then
+[Using your VMs](docs/using.md).
 
-Roadmap: [`docs/PLAN.md`](docs/PLAN.md). All pages, including the design records:
-[`docs/README.md`](docs/README.md). Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md).
-Reporting security issues: [`SECURITY.md`](SECURITY.md).
+Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). Reporting security issues:
+[`SECURITY.md`](SECURITY.md).
 
 ## Open issues
 
-Open work is tracked in the [issue tracker](https://github.com/errantpacket/RhubarbTart/issues):
-
-| Type | Issue |
-|---|---|
-| Bug | [#63](https://github.com/errantpacket/RhubarbTart/issues/63) macOS 26 builds: the automated Setup Assistant step sometimes fails and the build times out; running it again usually works |
-| Bug | [#98](https://github.com/errantpacket/RhubarbTart/issues/98) Kali clones can boot with a read-only root file system |
-| Enhancement | [#74](https://github.com/errantpacket/RhubarbTart/issues/74) Publishing to remote registries that require a login |
-| Enhancement | [#100](https://github.com/errantpacket/RhubarbTart/issues/100) Encrypting sealed evidence vaults at rest |
-| Enhancement | [#94](https://github.com/errantpacket/RhubarbTart/issues/94) Moving lab targets onto Tart's native host-only network once it ships |
-| On hold | [#28](https://github.com/errantpacket/RhubarbTart/issues/28) A standard (non-admin) account for daily use; the design options are in the issue |
-| Roadmap | [#126](https://github.com/errantpacket/RhubarbTart/issues/126) herdr agent platform: budget enforcement, prompt capture and a per-engagement agent VM (the service and integration shipped in #104 and #108) |
-| Roadmap | [#37](https://github.com/errantpacket/RhubarbTart/issues/37) A published documentation site |
+Open bugs, enhancements and the roadmap are in the
+[issue tracker](https://github.com/errantpacket/RhubarbTart/issues).
 
 ## License
 

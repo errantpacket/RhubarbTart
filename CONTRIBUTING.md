@@ -72,7 +72,8 @@ your change: Setup Assistant timing, the macOS 27 provisioning path, real instal
 
 ## Workflow: issues, branches, pull requests
 
-`main` is the only long-lived branch. It must always pass `./tools/check.sh`.
+`main` is the only long-lived branch. It must always pass `./tools/check.sh`, which CI
+(`.github/workflows/check.yml`) also runs on every pull request and push to `main`.
 
 1. **Start from an issue.** Every change, including docs and validation runs, has an issue on the
    board. Use the existing labels (`bug`, `enhancement`, `task`, `validation`, `kind:*`, `stage:*`).

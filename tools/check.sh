@@ -55,8 +55,12 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   else bad "scripts with a shebang but no execute bit (git update-index --chmod=+x):$notexec"; fi
 else skip "script list and execute-bit checks (not a git checkout)"; fi
 
-if command -v shellcheck >/dev/null; then SC=(shellcheck)
-elif command -v uvx >/dev/null; then SC=(uvx --quiet --from shellcheck-py shellcheck)
+# Linters are pinned so every machine (the Mac, CI) gets the same findings (#137): a newer or
+# older shellcheck on PATH can disagree. Bump these deliberately, like any other pin.
+SHELLCHECK_PY="shellcheck-py==0.11.0.1"
+RUFF="ruff==0.16.9"
+if command -v uvx >/dev/null; then SC=(uvx --quiet --from "$SHELLCHECK_PY" shellcheck)
+elif command -v shellcheck >/dev/null; then SC=(shellcheck)   # unpinned fallback without uv
 else SC=(); fi
 if ((${#SC[@]})); then
   if "${SC[@]}" -s bash -x "${SH_FILES[@]}"; then ok shellcheck; else bad shellcheck; fi
@@ -73,18 +77,21 @@ else skip "packer (run tools/bootstrap.sh)"; fi
 if command -v uv >/dev/null; then
   if uv run --quiet --no-project python -m py_compile tools/*.py tools/tests/*.py tools/rhubarb/*.py tools/rhubarb/tui/*.py tools/rhubarb/tui/actions/*.py
   then ok "python sources compile"; else bad "python syntax"; fi
-  if uv run --quiet --no-project python tools/test_rhubarb.py >/dev/null
+  # On failure, show which checks failed (CI has no other way to see them).
+  if out="$(uv run --quiet --no-project python tools/test_rhubarb.py 2>&1)"
   then ok "self-tests (verification, clone records, CLI, core API, engagements, evidence, service)"
-  else bad "self-tests (run: uv run tools/test_rhubarb.py)"; fi
+  else bad "self-tests (run: uv run tools/test_rhubarb.py)"
+       grep -E "FAIL|Error|Traceback" <<<"$out" | head -40 | sed 's/^/          /'; fi
   # Headless TUI render test: mounts the Textual app with a mocked core API (no Mac/
   # tart/keychain) and asserts each pane renders. Runs via `uv run --script` under the
   # hash-locked script lockfile, like ./rhubarb-tui. See docs/INTERFACE-PLAN.md, Gate B.
-  if uv run --quiet --script tools/test_rhubarb_tui.py >/dev/null
+  if out="$(uv run --quiet --script tools/test_rhubarb_tui.py 2>&1)"
   then ok "TUI test (headless Textual Pilot, mocked core API)"
-  else bad "TUI render test (run: uv run --script tools/test_rhubarb_tui.py)"; fi
+  else bad "TUI render test (run: uv run --script tools/test_rhubarb_tui.py)"
+       grep -E "FAIL|Error|Traceback" <<<"$out" | head -40 | sed 's/^/          /'; fi
   if out="$(uv run --quiet --no-project python tools/resolve.py list)" && ! grep -q INVALID <<<"$out"
   then ok "all profiles load ($(wc -l <<<"$out" | tr -d ' '))"; else bad "profile config"; echo "$out"; fi
-  if uvx --quiet ruff check --quiet --no-cache --select F,B,E7,E9 tools/; then ok "ruff (F,B,E7,E9)"; else bad ruff; fi
+  if uvx --quiet "$RUFF" check --quiet --no-cache --select F,B,E7,E9 tools/; then ok "ruff (F,B,E7,E9)"; else bad ruff; fi
 else skip "python checks (need uv)"; fi
 
 echo "== invariants"

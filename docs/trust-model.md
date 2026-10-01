@@ -143,7 +143,9 @@ so it never holds either.
 | **VPN identity** | Wiped; enrolled per clone | Not created; enrolled per clone | Stopped + wiped; enrolled per clone |
 
 Every row is asserted during the build's seal step (or declared in `guest/nixos/nix/`), and every observable
-row is re-checked from outside by `scripts/smoke-test.sh`.
+row is re-checked from outside by `scripts/smoke-test.sh`. For Linux images the smoke test also
+reboots its clone once and checks, on both boots, that `/` is read-write and the fstab mounts
+came up (#98).
 
 Where a tool forces a password onto a command line (Apple's provisioning API, the Kali
 installer), RhubarbTart uses a throwaway **bootstrap** password and rotates it away:

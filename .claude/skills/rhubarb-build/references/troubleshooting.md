@@ -105,6 +105,8 @@ The smoke test runs on a throwaway clone (`<vm>-smoke-<pid>`), which is deleted 
 | `unexpected auth methods: …` | Server still offers password/keyboard-interactive | The drop-in isn't effective. See `sshd -T` above |
 | `key login failed (key in agent? RHUBARB_SSH_FROM correct?)` | Key not in agent, or the host's vmnet address ≠ `from=` | `ssh-add -l`; on the host `ifconfig bridge100` shows the vmnet address. Set `RHUBARB_SSH_FROM` and rebuild |
 | `in-guest posture checks failed` | macOS: passwordless sudo, auto-login, SIP/Gatekeeper/firewall/stealth off, missing `/Library/RhubarbTart` records. Linux: passwordless sudo, LightDM auto-login, firewall inactive (`nftables` on Kali, `firewall` on NixOS), empty `/etc/machine-id`, missing `/var/lib/rhubarbtart/installed.txt`, missing Rosetta binfmt, or (lab target) `juice-shop egress not denied` | Run the matching heredoc lines from `scripts/smoke-test.sh` one by one over SSH |
+| `mount checks failed on the first boot` / `… on the second boot` (message starts `mounts:`) | Linux only (#98). `root filesystem is not read-write`, `home directory not writable`, `fstab generator did not link systemd-remount-fs`, `mount units failed: …` or `rosetta binfmt not registered`. The smoke test boots the clone, flushes, stops and boots it again, and checks both boots; a Kali image once failed only on the second | Keep the `-unverified` image and boot it twice; on the bad boot read `journalctl -b` for the generator and `systemctl --failed`. Kali installs from the live rolling archive, so a new package state is the first suspect: rebuild, and report it if it repeats |
+| `host key changed across a reboot of the same clone` | The guest regenerated its SSH host keys on the second boot (they must be generated once per clone) | Code change in the family's first-boot key generation |
 | `SSH reachable but should be disabled` | `launchctl disable system/com.openssh.sshd` didn't persist | Code change in finalize.sh |
 | `declared service port <p> not reachable` | A package's service (e.g. Juice Shop on 3000) didn't come up within about 3 minutes | Log in and check `systemctl status <service>` |
 | `Screen Sharing (5900) reachable` | Screen Sharing still enabled | Same |
@@ -134,6 +136,7 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 | Download/signature errors during install | cache.nixos.org unreachable or a path not signed | Retry. Never set `require-sigs = false` or add substituters |
 | Clone hangs at boot | Rosetta mount without the share | The mount is `nofail`; if it still hangs, start with `--rosetta=rosetta` and report it |
 | `tart ip` finds nothing | DHCP client-id | networkd is set to `ClientIdentifier=mac`; the smoke test, `ssh.sh` and `enroll.sh` fall back to `--resolver arp` |
+| Juice Shop target never answers on 3000; `systemctl status juice-shop` shows `start-limit-hit` and the journal shows `rm: cannot remove … Permission denied` | An image built before the #98 fix: a stop during the service's app copy left a read-only partial tree that the next start could not delete | Rebuild the image (fixed). On a running clone: `sudo chmod -R u+w /var/lib/juice-shop/app && sudo systemctl reset-failed juice-shop && sudo systemctl start juice-shop` |
 
 ## Kali
 
@@ -148,6 +151,7 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 | `hash mismatch inside guest` | Stage/lock mismatch | Re-run build |
 | apt install fails on a vendor `.deb` | Dependency not in the current Kali rolling | Report it; re-resolve (newer vendor build) or drop the package from the profile |
 | `kali-grant-root … installed` / `NOPASSWD in sudoers: <file:line:rule>` | A package pulled passwordless sudo. `kali-grant-root` comes with the XFCE desktop and is purged and pinned out by `install.sh` (#59) | The message names the file and rule. If a `kali_metapackages` entry brought it, remove that entry. Never widen the seal's single OpenVAS allowance |
+| A running clone has `/` read-only (`Read-only file system`), and `/media/rosetta` is missing (#98) | The fstab generator's units were missing on that boot, so `systemd-remount-fs` never ran. Seen once on a clone of an image built from an earlier rolling-archive state; the smoke test now fails such an image | Restore every fstab mount, not only `/`: `sudo systemctl daemon-reload && sudo systemctl start local-fs.target` (re-runs the generators, then remounts `/` read-write and mounts the rest). `sudo mount -o remount,rw /` fixes `/` alone. Rebuild the image if new clones keep doing it |
 | `_gvm (NOPASSWD for openvas) has a login shell / usable password` or `ospd-openvas is not root:root 0440` | The one allowed NOPASSWD rule's conditions don't hold (#59) | Investigate the package change; don't relax the condition |
 
 ## Enrollment

@@ -43,7 +43,9 @@ def test_control_plane_service() -> None:
             check("socket is created 0600", (sock.stat().st_mode & 0o777) == 0o600)
 
             st, body = service.request(sock, "GET", "/health")
-            check("GET /health -> 200 ok", st == 200 and body["ok"] and body["service"] == "rhubarb")
+            from rhubarb import __version__
+            check("GET /health -> 200 ok with the version", st == 200 and body["ok"]
+                  and body["service"] == "rhubarb" and body["version"] == __version__)
 
             st, body = service.request(sock, "GET", "/images")
             check("GET /images serializes the dataclass list",

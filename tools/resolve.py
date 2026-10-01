@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from rhubarb import distsign, macos, nar  # noqa: E402
+from rhubarb import __version__, distsign, macos, nar  # noqa: E402
 from rhubarb.bases import PLANNERS  # noqa: E402
 from rhubarb.common import CACHE, ROOT, VerifyError, download, get_bytes, log, sha256_file  # noqa: E402
 from rhubarb.packages import plan_package  # noqa: E402
@@ -254,7 +254,7 @@ def cmd_provenance(args) -> None:
     git = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True)
     dirty = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain"], capture_output=True, text=True)
     record = {
-        "vm": args.vm, "profile": prof["id"],
+        "vm": args.vm, "profile": prof["id"], "rhubarbtart_version": __version__,
         "built_at": dt.datetime.now(dt.UTC).isoformat(timespec="seconds"),
         "git_commit": git.stdout.strip() or None, "git_dirty": bool(dirty.stdout.strip()),
         "toolchain": toolchain(),

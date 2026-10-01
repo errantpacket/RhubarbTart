@@ -188,6 +188,14 @@ if compgen -G ".github/workflows/*.yml" >/dev/null; then
   else bad "CI uv '$ci_uv' != UV_VERSION '$uv_pin' (.github/workflows/check.yml)"; fi
 fi
 
+# Version (#138): one SemVer in tools/rhubarb/__init__.py, with a matching CHANGELOG.md section.
+ver="$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' tools/rhubarb/__init__.py)"
+if [[ ! "$ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  bad "tools/rhubarb/__init__.py: __version__ '$ver' is not MAJOR.MINOR.PATCH"
+elif ! grep -qE "^## \[$ver\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+  bad "CHANGELOG.md has no '## [$ver] - YYYY-MM-DD' section for __version__ $ver"
+else ok "version $ver has a CHANGELOG entry"; fi
+
 # Textual is the TUI's only third-party dep (the repo's first). It must be pinned
 # to an exact version in tools/rhubarb_tui.py and hash-locked in the adjacent uv
 # script lockfile (uv lock --script), which `./rhubarb-tui` runs under with

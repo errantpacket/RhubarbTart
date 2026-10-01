@@ -84,6 +84,7 @@ if [[ "$SSH_ENABLED" == 1 ]]; then
   log "ok: password auth refused, server offers publickey only"
 
   # 2. Key login works (also proves from= matches the host address).
+  for _ in $(seq 1 30); do "${SSH[@]}" true >/dev/null 2>&1 && break; sleep 1; done
   "${SSH[@]}" true || fail "key login failed (key in agent? RHUBARB_SSH_FROM correct?)"
   log "ok: key login"
 
@@ -155,6 +156,9 @@ EOF
       || fail "host key changed across a reboot of the same clone"
     cp "$WORK/known_hosts2" "$WORK/known_hosts"
     SSH=(ssh "${SSH_OPTS[@]}" "$USER_NAME@$IP")
+    # Wait for user sessions to be allowed: systemd removes /run/nologin late in the boot,
+    # and pam_nologin rejects non-root logins until then, which can race with sshd opening port 22.
+    for _ in $(seq 1 30); do "${SSH[@]}" true >/dev/null 2>&1 && break; sleep 1; done
     "${SSH[@]}" "ROSETTA=${RHUBARB_ROSETTA:-false} bash -c '$LINUX_MOUNTS'" >/dev/null \
       || fail "mount checks failed on the second boot"
     log "ok: second boot: root read-write, fstab mounts up, host key unchanged"

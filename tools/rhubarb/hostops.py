@@ -103,7 +103,38 @@ def vm_ip(name: str, family: str, wait: int = 180) -> str:
     raise VerifyError(f"{name}: no IP address (is it running?)")
 
 
+# The Virtualization framework's view of Rosetta for Linux VMs: 0 unsupported, 1 not installed,
+# 2 installed. Not `arch -x86_64`, which fails on macOS 27 even when Linux Rosetta works (#158).
+_ROSETTA_JS = ('ObjC.import("Foundation"); '
+               '$.NSBundle.bundleWithPath("/System/Library/Frameworks/Virtualization.framework").load; '
+               '$.NSClassFromString("VZLinuxRosettaDirectoryShare").availability')
+
+
+def rosetta_availability() -> str:
+    """"installed", "not-installed", "unsupported", or "unknown" if it can't be checked."""
+    try:
+        res = subprocess.run(["osascript", "-l", "JavaScript", "-e", _ROSETTA_JS],
+                             capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+    return {"2": "installed", "1": "not-installed", "0": "unsupported"}.get(res.stdout.strip(),
+                                                                         "unknown")
+
+
+def require_rosetta(name: str) -> None:
+    """Refuse to start a Rosetta clone on a Mac without Rosetta: `tart run --rosetta` would fail
+    and the clone would never get an IP. Unknown is let through (the check itself may not work)."""
+    state = rosetta_availability()
+    if state == "not-installed":
+        raise VerifyError(f"{name} uses Rosetta, which isn't installed on this Mac. Install it, then "
+                          "try again: softwareupdate --install-rosetta --agree-to-license")
+    if state == "unsupported":
+        raise VerifyError(f"{name} uses Rosetta, which this Mac doesn't support")
+
+
 def start_vm(name: str, rosetta: bool, headless: bool, log: Path | None = None) -> subprocess.Popen:
+    if rosetta:
+        require_rosetta(name)
     args = ["tart", "run", *(["--rosetta=rosetta"] if rosetta else []),
             *(["--no-graphics"] if headless else []), name]
     out = open(log, "ab") if log else subprocess.DEVNULL  # noqa: SIM115 (handed to the child)

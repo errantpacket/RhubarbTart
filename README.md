@@ -137,7 +137,8 @@ and running each engagement's agents in their own VM instead of on your Mac. The
 
 ## Quick start
 
-On an Apple silicon Mac running macOS 26 or later:
+On an Apple silicon Mac running macOS 26 or later. The Kali and NixOS profiles also need
+Rosetta; if it isn't installed, run `softwareupdate --install-rosetta --agree-to-license` first.
 
 ```sh
 # 1. Install the pinned tools into ./.toolchain (no Homebrew, no sudo)

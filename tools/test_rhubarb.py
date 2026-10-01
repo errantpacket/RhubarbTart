@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from tests.support import FAILS  # noqa: E402
 from tests.test_verification import test_content_addressed_cache, test_dpkg, test_ed25519, test_github_release_resolver, test_nar, test_pgp_ed25519, test_toolchain_gpg  # noqa: E402
 from tests.test_build import test_build_cleanup_trap, test_chrome_update_policy, test_guest_sync, test_kali_nopasswd_allowlist, test_packages_tsv_readers, test_profile_usernames, test_publish_offline_signing, test_rotation_script, test_sshd_T_normalization  # noqa: E402
-from tests.test_clones import test_api_pure, test_cli_lifecycle, test_cli_progress_stream, test_confirm_prompt, test_fs_vms, test_hostops_resilience, test_reap_run, test_records, test_reset_keeps_engagement, test_shutdown_reaps_boot_process, test_ssh_client, test_ssh_provenance, test_stacked_clones, test_version  # noqa: E402
+from tests.test_clones import test_api_pure, test_cli_lifecycle, test_cli_progress_stream, test_confirm_prompt, test_fs_vms, test_hostops_resilience, test_reap_run, test_records, test_reset_keeps_engagement, test_rosetta_check, test_shutdown_reaps_boot_process, test_ssh_client, test_ssh_provenance, test_stacked_clones, test_version  # noqa: E402
 from tests.test_engagements import test_engagement_links, test_engagement_ops, test_engagements  # noqa: E402
 from tests.test_evidence import test_evidence_exec_collect, test_evidence_store, test_vault_seal_verify  # noqa: E402
 from tests.test_control_plane import test_control_plane_service, test_herdr_arm, test_range_client_waits_for_approval, test_scoped_range_client, test_tiered_approvals  # noqa: E402
@@ -68,6 +68,7 @@ TESTS = (
     test_range_client_waits_for_approval,
     test_logs_api,
     test_version,
+    test_rosetta_check,
 )
 
 

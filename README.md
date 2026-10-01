@@ -146,9 +146,11 @@ On an Apple silicon Mac running macOS 26 or later:
 # 2. Resolve a guest's inputs into its lock file, then review the changes
 uv run tools/resolve.py resolve kali-research && git diff locks/
 
-# 3. Build and test the image (the SSH key is optional; without one, SSH is disabled)
-ssh-add ~/.ssh/id_ed25519
-RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
+# 3. Create an SSH key for your VMs (first time only; set a passphrase when asked),
+#    keep its passphrase in your keychain, then build and test the image
+[ -f ~/.ssh/rhubarbtart_ed25519 ] || ssh-keygen -t ed25519 -a 100 -C rhubarbtart -f ~/.ssh/rhubarbtart_ed25519
+ssh-add --apple-use-keychain ~/.ssh/rhubarbtart_ed25519
+RHUBARB_SSH_PUBKEYS=~/.ssh/rhubarbtart_ed25519.pub ./scripts/build.sh kali-research
 
 # 4. Make a clone and start it; don't use the image directly
 ./rhubarbtart new web-1 --profile kali-research && ./rhubarbtart run web-1
@@ -164,7 +166,15 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/id_ed25519.pub ./scripts/build.sh kali-research
 2. **Resolve** looks up the newest versions of the profile's inputs, verifies them, and writes
    `locks/kali-research.lock.json`. The included profiles already have committed locks, so you
    only need this step when you want newer versions.
-3. **Build** installs the OS from the vendor's installer, adds the tools, and **seals** the guest:
+3. **Your SSH key** gets you into your VMs. Use a key only for them, not the one you use for
+   GitHub or servers. The first line creates it only if it doesn't exist yet. `ssh-add
+   --apple-use-keychain` loads it and stores its passphrase in your macOS keychain; after a
+   restart, run `ssh-add --apple-load-keychain` to load it again without typing the passphrase.
+   The public key is built into the image, so a new key means rebuilding your images. Hardware
+   security keys and other options: [Your SSH key](docs/using.md#your-ssh-key). Without a key,
+   the image is built with SSH turned off.
+
+   **Build** installs the OS from the vendor's installer, adds the tools, and **seals** the guest:
    it applies the hardening and checks that each setting took effect. It then starts a temporary
    copy and tests it from the outside. Only if those tests pass does the image get its final name.
    A build is a full OS install and can take 15 to 45 minutes, so run it in a separate terminal.

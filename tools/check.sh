@@ -178,7 +178,8 @@ else ok "plugin version pinned consistently ($pin)"; fi
 # Prose style (#145): no em dashes in tracked Markdown (README, docs, skills, changelog). The
 # full writing rules are in the rhubarb-dev skill, "Writing docs and skills".
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  md_dashes="$(git ls-files -z '*.md' | xargs -0 grep -n '—' 2>/dev/null || true)"
+  # docs/history-rewrite.md quotes old commit subjects verbatim, so it is exempt.
+  md_dashes="$(git ls-files -z '*.md' ':!docs/history-rewrite.md' | xargs -0 grep -n '—' 2>/dev/null || true)"
   if [[ -z "$md_dashes" ]]; then ok "no em dashes in tracked Markdown"
   else bad "em dashes in tracked Markdown (use . , : ; or parentheses):"; echo "$md_dashes" | head -20 | sed 's/^/          /'; fi
 fi

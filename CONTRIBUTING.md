@@ -96,6 +96,26 @@ your change: Setup Assistant timing, the macOS 27 provisioning path, real instal
 - Describe what you verified and how, and what still needs a real build on a Mac.
 - Small, focused commits with a clear message are easier to review than one large one.
 
+## Releases
+
+The repository is versioned as a whole (SemVer, 0.x for now). The version lives in one place,
+`__version__` in `tools/rhubarb/__init__.py`; `rhubarb --version`, the control-plane `/health`
+endpoint and every new provenance record report it. It covers the `rhubarb` CLI, the profile,
+engagement and lock file formats, and provenance records, not the internals of `api.py`. Image
+names don't depend on it: they come from the inputs.
+
+To release:
+
+1. Move the `[Unreleased]` notes in `CHANGELOG.md` under a new `## [X.Y.Z] - YYYY-MM-DD` heading,
+   set `__version__` to match (`check.sh` checks they agree), and merge that through a PR.
+2. Tag `main` with an annotated, signed tag `vX.Y.Z`.
+3. Publish a GitHub release with a `git archive` tarball of the tag, its `SHA256SUMS`, and a cosign
+   signature made with the project's offline signing key (`scripts/signing-key.sh`), and the
+   changelog section as the notes.
+
+There is no Python package on PyPI: the code needs the repository's profiles, locks, templates and
+scripts around it.
+
 ## Reporting security issues
 
 Not through public issues or PRs. See [`SECURITY.md`](SECURITY.md).

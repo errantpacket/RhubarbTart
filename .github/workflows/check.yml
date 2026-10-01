@@ -1,0 +1,39 @@
+# Runs ./tools/check.sh (lint, invariants, self-tests, TUI tests) on every pull request and on
+# pushes to main (#137). check.sh is built to run on Linux; Packer validation is reported as
+# SKIPPED here (the pinned Packer is the macOS build) and still runs on the Mac.
+#
+# Supply chain, in the spirit of the rest of the repo: actions are pinned to commit SHAs, uv to
+# the version in config/toolchain.env (setup-uv verifies its download checksum), the token is
+# read-only, and the job has no secrets.
+name: check
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # The same Python the Mac uses (scripts/env.sh): uv-managed 3.13 only.
+      UV_PYTHON: "3.13"
+      UV_PYTHON_PREFERENCE: only-managed
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          version: "0.12.19"   # keep equal to UV_VERSION in config/toolchain.env (check.sh asserts it)
+          enable-cache: false
+      - name: check.sh
+        run: ./tools/check.sh

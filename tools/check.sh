@@ -168,6 +168,19 @@ if grep -L "version = \"= $pin\"" "${HCL_FILES[@]}" | grep -q .; then
   bad "required_plugins in packer/*/*.pkr.hcl != PACKER_PLUGIN_TART_VERSION ($pin)"
 else ok "plugin version pinned consistently ($pin)"; fi
 
+# CI (#137): every action is pinned to a full commit SHA (a tag can be moved), and the workflow's
+# uv is the version config/toolchain.env pins.
+if compgen -G ".github/workflows/*.yml" >/dev/null; then
+  unpinned="$(grep -hnE '^[[:space:]]*-?[[:space:]]*uses:' .github/workflows/*.yml \
+              | grep -vE 'uses:[[:space:]]*[^@[:space:]]+@[0-9a-f]{40}([[:space:]]|$)' || true)"
+  if [[ -z "$unpinned" ]]; then ok "workflow actions pinned to commit SHAs"
+  else bad "workflow actions not pinned to a commit SHA:"; echo "          $unpinned"; fi
+  uv_pin="$(sed -n 's/^UV_VERSION=//p' config/toolchain.env)"
+  ci_uv="$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\{0,1\}\([0-9.]*\)"\{0,1\}.*/\1/p' .github/workflows/check.yml | head -1)"
+  if [[ "$ci_uv" == "$uv_pin" ]]; then ok "CI uv matches config/toolchain.env ($uv_pin)"
+  else bad "CI uv '$ci_uv' != UV_VERSION '$uv_pin' (.github/workflows/check.yml)"; fi
+fi
+
 # Textual is the TUI's only third-party dep (the repo's first). It must be pinned
 # to an exact version in tools/rhubarb_tui.py and hash-locked in the adjacent uv
 # script lockfile (uv lock --script), which `./rhubarb-tui` runs under with

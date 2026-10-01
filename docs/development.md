@@ -6,6 +6,11 @@ How to validate a change: `check.sh`, the off-Mac paths, and the project skills 
 ./tools/check.sh    # before every commit; also runs on Linux
 ```
 
+CI runs the same `check.sh` on Linux for every pull request and push to `main`
+(`.github/workflows/check.yml`). There, Packer checks show as SKIPPED, because the pinned Packer is
+the macOS build; they still run on the Mac. `check.sh` also checks that the workflow's actions are
+pinned to commit SHAs and that its uv matches `config/toolchain.env`.
+
 `check.sh` runs shell, Packer and Python checks, the offline self-tests, a headless Textual TUI
 render test, and profile validation. The self-tests cover Ed25519 RFC 8032 vectors, NAR hash vs
 real Nix, Debian version ordering, clone records, the `rhubarb` CLI lifecycle, password rotation,

@@ -192,9 +192,14 @@ if compgen -G ".github/workflows/*.yml" >/dev/null; then
   if [[ -z "$unpinned" ]]; then ok "workflow actions pinned to commit SHAs"
   else bad "workflow actions not pinned to a commit SHA:"; echo "          $unpinned"; fi
   uv_pin="$(sed -n 's/^UV_VERSION=//p' config/toolchain.env)"
-  ci_uv="$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\{0,1\}\([0-9.]*\)"\{0,1\}.*/\1/p' .github/workflows/check.yml | head -1)"
-  if [[ "$ci_uv" == "$uv_pin" ]]; then ok "CI uv matches config/toolchain.env ($uv_pin)"
-  else bad "CI uv '$ci_uv' != UV_VERSION '$uv_pin' (.github/workflows/check.yml)"; fi
+  uv_bad=""
+  for wf in .github/workflows/*.yml; do
+    grep -q 'astral-sh/setup-uv@' "$wf" || continue
+    ci_uv="$(sed -n 's/^[[:space:]]*version:[[:space:]]*"\{0,1\}\([0-9.]*\)"\{0,1\}.*/\1/p' "$wf" | head -1)"
+    [[ "$ci_uv" == "$uv_pin" ]] || uv_bad="$uv_bad $wf=$ci_uv"
+  done
+  if [[ -z "$uv_bad" ]]; then ok "CI uv matches config/toolchain.env ($uv_pin) in every workflow"
+  else bad "CI uv != UV_VERSION '$uv_pin':$uv_bad"; fi
 fi
 
 # Version (#138): one SemVer in tools/rhubarb/__init__.py, with a matching CHANGELOG.md section.
@@ -231,6 +236,25 @@ elif ! grep -q "specifier = \"==$tui_pin\"" tools/test_rhubarb_tui.py.lock; then
 elif ! grep -q 'hash = "sha256:' tools/test_rhubarb_tui.py.lock; then
   bad "tools/test_rhubarb_tui.py.lock carries no sha256 hashes"
 else ok "TUI render test pinned + hash-locked (textual==$tui_pin)"; fi
+
+# Docs site (#37): Zensical is pinned in tools/docs_site.py and hash-locked in its uv script
+# lockfile, like Textual; the site must build with --strict, so a broken link in docs/ fails.
+zen_pin="$(sed -n 's/.*"zensical==\([0-9A-Za-z.-]*\)".*/\1/p' tools/docs_site.py)"
+if [[ -z "$zen_pin" ]]; then
+  bad "tools/docs_site.py does not pin zensical to an exact version (zensical==X.Y.Z)"
+elif [[ ! -f tools/docs_site.py.lock ]]; then
+  bad "tools/docs_site.py.lock missing (run: uv lock --script tools/docs_site.py)"
+elif ! grep -q "specifier = \"==$zen_pin\"" tools/docs_site.py.lock; then
+  bad "tools/docs_site.py.lock out of sync with zensical==$zen_pin (run: uv lock --script tools/docs_site.py)"
+elif ! grep -q 'hash = "sha256:' tools/docs_site.py.lock; then
+  bad "tools/docs_site.py.lock carries no sha256 hashes"
+else ok "docs site pinned + hash-locked (zensical==$zen_pin)"; fi
+if command -v uv >/dev/null; then
+  if out="$(NO_COLOR=1 uv run --quiet --script tools/docs_site.py build --strict 2>&1)"
+  then ok "docs site builds with --strict (no broken links)"
+  else bad "docs site build (run: uv run --script tools/docs_site.py build --strict)"
+       grep -vE '^\s*$' <<<"$out" | tail -20 | sed 's/^/          /'; fi
+else skip "docs site build (need uv)"; fi
 
 echo
 if ((failures)); then echo "check: $failures failure(s), $skipped skipped"; exit 1; fi

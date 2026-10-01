@@ -86,4 +86,4 @@ keychain for next time. The same key also signs sealed evidence vaults
 `RHUBARB_REGISTRY` can point at another registry, but the digest lookup after pushing doesn't
 authenticate yet, and `--from-registry` assumes the image was built on this Mac.
 
-← back to the [README](../README.md)
+← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

@@ -21,3 +21,6 @@ engagements/nixos-demo-build.json
 
 # Local backups (e.g. the pre-rewrite git bundle, #147); never committed
 archive/
+
+# The documentation site build output (#37)
+site/

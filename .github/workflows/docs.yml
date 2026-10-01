@@ -1,0 +1,59 @@
+# Builds the documentation site from docs/ with the pinned Zensical (tools/docs_site.py) and
+# publishes it to GitHub Pages (#37). Pages needs a public repository on GitHub Free, so the
+# deploy job is skipped while the repository is private (the build still checks every link). The build job has a read-only token; only the deploy job may
+# write to Pages, and it gets nothing else. Actions are pinned to commit SHAs like check.yml.
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "zensical.toml"
+      - "tools/docs_site.py"
+      - "tools/docs_site.py.lock"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      UV_PYTHON: "3.13"
+      UV_PYTHON_PREFERENCE: only-managed
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          version: "0.12.19"   # keep equal to UV_VERSION in config/toolchain.env (check.sh asserts it)
+          enable-cache: false
+      - name: build the site (strict)
+        run: uv run --quiet --script tools/docs_site.py build --strict
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: ${{ !github.event.repository.private }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5.0.1

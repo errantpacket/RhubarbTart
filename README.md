@@ -223,7 +223,8 @@ flowchart TD
 ## Documentation
 
 The [documentation index](docs/README.md) lists every page: guides, reference pages and the
-design records. If you're new, start with [Key concepts](docs/concepts.md), then
+design records. The same pages are published as a searchable site at
+[errantpacket.github.io/RhubarbTart](https://errantpacket.github.io/RhubarbTart/). If you're new, start with [Key concepts](docs/concepts.md), then
 [Using your VMs](docs/using.md).
 
 Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). Reporting security issues:

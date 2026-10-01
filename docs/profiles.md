@@ -43,11 +43,10 @@ Unknown keys, options for the wrong OS, bad values and unsupported tools are all
 Adding a tool that isn't in the catalog needs a trustworthy source first; see
 [Keeping inputs fresh](reference.md#keeping-inputs-fresh).
 
-> [!NOTE]
-> A tool with no public download (for example a licensed agent from a vendor's admin console) can
+> **Note:** A tool with no public download (for example a licensed agent from a vendor's admin console) can
 > still be added to a macOS guest as a **local** package (`resolver: "local"`, a `.pkg` or `.dmg`):
 > its installer is placed under the git-ignored `vendor/` directory and pinned by hash on first
-> resolve. See [`vendor/README.md`](../vendor/README.md). An image containing one is
+> resolve. See [`vendor/README.md`](https://github.com/errantpacket/RhubarbTart/blob/main/vendor/README.md). An image containing one is
 > tenant-specific, so share it only through a private registry.
 
-← back to the [README](../README.md)
+← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

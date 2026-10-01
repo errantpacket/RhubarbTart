@@ -52,9 +52,9 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 - An Apple silicon Mac on macOS 26 or later. macOS 27 guests need a **macOS 27 host**.
 - About 100–150 GB free per built profile: OS images are 3–20 GB and VM disks 60–80 GB (sparse).
 - `gpg` on whichever machine resolves NixOS/Kali profiles or runs `toolchain-pin`. Any OS works.
-- Licensing: RhubarbTart is FSL-1.1-ALv2 ([LICENSE.md](../LICENSE.md)). Tart 2.38.0 is also
+- Licensing: RhubarbTart is FSL-1.1-ALv2 ([LICENSE.md](https://github.com/errantpacket/RhubarbTart/blob/main/LICENSE.md)). Tart 2.38.0 is also
   FSL-1.1-ALv2 (© OpenAI), so check your use is a "Permitted Purpose". Chrome and WARP are
-  proprietary; NixOS allows them only by name. See [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md).
+  proprietary; NixOS allows them only by name. See [THIRD-PARTY-NOTICES.md](https://github.com/errantpacket/RhubarbTart/blob/main/THIRD-PARTY-NOTICES.md).
 
 </details>
 
@@ -131,6 +131,7 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 | `guest/nixos/nix/` | The NixOS system definition (reads the staged profile), installed as `/etc/nixos` |
 | `scripts/` | `build.sh` · `smoke-test.sh` · `ssh.sh` · `enroll.sh` · `env.sh` · `registry.sh` (localhost OCI registry) · `signing-key.sh` (cosign key pair) · `publish.sh` (publish + verify signed images) · `vault.sh` (sign + verify a vault's root manifest) |
 | `docs/` | These pages; [`docs/README.md`](README.md) indexes guides, reference and design records, and `docs/images/` holds screenshots |
+| `zensical.toml` · `tools/docs_site.py` (+ `.lock`) · `.github/workflows/docs.yml` | The documentation site: its config, the pinned Zensical launcher, and the GitHub Pages workflow |
 | `docs/history-rewrite.md` | The one-time history rewrite before going public: old to new commit hashes |
 | `CHANGELOG.md` | Release notes; its newest version must match `__version__` in `tools/rhubarb/__init__.py` |
 | `LICENSE.md` · `THIRD-PARTY-NOTICES.md` | FSL-1.1-ALv2 licence · licences of the tools RhubarbTart runs and of Textual |
@@ -138,4 +139,4 @@ uv run tools/resolve.py toolchain-pin --latest   # host tools; the Mac (toolchai
 
 </details>
 
-← back to the [README](../README.md)
+← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

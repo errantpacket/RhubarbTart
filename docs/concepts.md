@@ -150,4 +150,4 @@ disappears, and `rhubarbtart rm` frees it once no clone uses it. See
 
 </details>
 
-← back to the [README](../README.md)
+← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

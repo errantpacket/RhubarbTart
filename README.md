@@ -45,6 +45,10 @@ RhubarbTart is built to answer those questions:
 | **Secrets on the host** | Passwords are stored in your macOS keychain. Every copy gets its own password, and VPN sign-in happens per copy, never inside the image |
 | **Configured in JSON** | A guest is defined by a short profile: an OS, a list of tools and a few options |
 
+![The rhubarbtart-tui Provenance tab for an image: build commit, input and lock hashes, the pinned toolchain and the locked base](docs/images/tui-provenance.webp)
+<sub>Every image records what went into it. The dashboard's Provenance tab shows the build commit,
+the input and lock hashes, the pinned toolchain and the locked base.</sub>
+
 ## How it fits together
 
 There are four main parts:

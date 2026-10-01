@@ -20,7 +20,9 @@ Describe a guest in a short JSON profile: an OS (macOS 26 or 27, NixOS or Kali) 
 you need. RhubarbTart downloads the vendor installers and checks each one against a pinned hash
 and, where one exists, the vendor's signature. It then builds a hardened [Tart](https://tart.run)
 VM image from them and tests a temporary copy from outside the VM. You work in disposable clones
-of the image, each with its own password, and delete them when you're done.
+of the image, each with its own password, and delete them when you're done. In an engagement, the
+commands you run and the files you collect are kept as evidence on your Mac. You can seal that
+evidence into a signed vault to hand over.
 
 Use it for security work where you need to know what was on the machine. Examples are testing
 macOS and iOS apps, analysing malware, client engagements, and AI agents working on scoped

@@ -488,7 +488,7 @@ def run(name: str, headless: bool = False, detach: bool = False) -> RunResult:
         log = logs / f"{rec['name']}.log"
         hostops.start_vm(rec["name"], rec["rosetta"], headless, log)
         return RunResult(name=rec["name"], detached=True, argv=None, log_path=str(log))
-    argv = ["tart", "run", *(["--rosetta=rosetta"] if rec["rosetta"] else []),
+    argv = ["tart", "run", *hostops.RUN_FLAGS, *(["--rosetta=rosetta"] if rec["rosetta"] else []),
             *(["--no-graphics"] if headless else []), rec["name"]]
     return RunResult(name=rec["name"], detached=False, argv=argv, log_path=None)
 

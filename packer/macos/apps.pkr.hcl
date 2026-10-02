@@ -73,15 +73,16 @@ variable "password" {
 }
 
 source "tart-cli" "apps" {
-  vm_base_name = var.base_vm
-  vm_name      = var.vm_name
-  cpu_count    = var.cpu_count
-  memory_gb    = var.memory_gb
-  disk_size_gb = var.disk_gb
-  headless     = true
-  ssh_username = var.username
-  ssh_password = var.password
-  ssh_timeout  = "300s"
+  vm_base_name   = var.base_vm
+  vm_name        = var.vm_name
+  cpu_count      = var.cpu_count
+  memory_gb      = var.memory_gb
+  disk_size_gb   = var.disk_gb
+  run_extra_args = ["--no-audio", "--no-clipboard"] # no host microphone or clipboard (#170)
+  headless       = true
+  ssh_username   = var.username
+  ssh_password   = var.password
+  ssh_timeout    = "300s"
 }
 
 locals {

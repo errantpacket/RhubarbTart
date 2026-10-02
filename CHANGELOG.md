@@ -13,6 +13,10 @@ release that built it (`rhubarbtart_version`).
 ## [Unreleased]
 
 ### Fixed
+- Clones no longer get the Mac's microphone or a clipboard channel. Tart's defaults pass the host's
+  microphone input to the guest and attach a clipboard channel a guest could use with its own
+  agent; every VM RhubarbTart starts now uses `--no-audio --no-clipboard`, and `check.sh`
+  enforces it (#170).
 - Starting a third macOS VM (a Mac runs at most two) now fails at once with Tart's message and
   how to fix it. Before, a clone's password rotation reported "SSH not reachable after 2 boots",
   `run --detach` reported success, and a macOS build's smoke test waited out "no IP within

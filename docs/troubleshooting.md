@@ -25,6 +25,8 @@ code change that keeps it as strict; see [Development](development.md).
 | `tart.app signature invalid` / `URL not on the allow-list: …` | Corrupt or unexpected download; `toolchain.env` points somewhere new | Retry once; a URL change must come from `toolchain-pin` plus a reviewed diff, never a hand edit |
 | preflight: `tart X != pinned Y` / `packer … != pinned …` / `could not verify Tart.app signature` | Toolchain out of date, or a non-repo binary first on PATH | Re-run `./tools/bootstrap.sh`; `source scripts/env.sh` |
 | `… uses Rosetta, which isn't installed on this Mac` (build or `rhubarbtart run`/`new`) | The profile boots with `--rosetta`, and Rosetta for Linux VMs is missing on this host (common on a new Mac). | `softwareupdate --install-rosetta --agree-to-license`, then run again |
+| `a Mac runs at most two macOS VMs at once, and two are running: …` (build) / `… can't start: a Mac runs at most two macOS VMs at once (…)` (`run`, `new`, `reset`, provisioning, smoke test) | Two macOS VMs are already running. The limit counts every macOS VM on the Mac, including other apps' (UTM, Parallels); Linux VMs don't count | Stop one (`rhubarbtart stop NAME`, or `tart stop NAME`), then try again. A clone made by `new` keeps the image's password until `rhubarbtart reset NAME --same-image` |
+| `… can't start: tart run exited at once (…)` | `tart run` failed before the VM started; the text in brackets is Tart's | Act on Tart's message |
 | `plugin not registered at v…` | `packer plugins install` layout changed | Check `PACKER_PLUGIN_PATH=.toolchain/packer-plugins packer plugins installed` |
 
 ## Profiles and locks

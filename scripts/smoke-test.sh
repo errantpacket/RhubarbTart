@@ -34,9 +34,22 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Start the clone. A `tart run` that can't start the VM exits at once (for example a third macOS
+# VM: a Mac runs at most two, #166), so report its output instead of waiting out the IP timeout.
+boot() {
+  tart run "${RUN_ARGS[@]}" "$SMOKE" >>"$WORK/run.log" 2>&1 &
+  RUN_PID=$!
+  sleep 6   # the limit error took 2.7 s on an M1
+  kill -0 "$RUN_PID" 2>/dev/null && return 0
+  local said; said="$(grep -v '^[[:space:]]*$' "$WORK/run.log" | tail -1)"
+  if grep -q "exceeds the system limit" "$WORK/run.log"; then
+    fail "a Mac runs at most two macOS VMs at once ($said). Stop one, then build again"
+  fi
+  fail "tart run exited at once: ${said:-no output}"
+}
+
 tart clone "$VM" "$SMOKE"
-tart run "${RUN_ARGS[@]}" "$SMOKE" >"$WORK/run.log" 2>&1 &
-RUN_PID=$!
+boot
 IP="$(vm_ip "$SMOKE")" || fail "no IP within 300s"
 log "clone $SMOKE booted at $IP"
 
@@ -146,8 +159,7 @@ EOF
     "${SSH[@]}" sync || true
     tart stop "$SMOKE" >/dev/null 2>&1 || true
     wait "$RUN_PID" 2>/dev/null || true
-    tart run "${RUN_ARGS[@]}" "$SMOKE" >>"$WORK/run.log" 2>&1 &
-    RUN_PID=$!
+    boot
     IP="$(vm_ip "$SMOKE")" || fail "no IP within 300s on the second boot"
     for _ in $(seq 1 40); do port_open 22 && break; sleep 3; done
     port_open 22 || fail "SSH port not reachable on the second boot"

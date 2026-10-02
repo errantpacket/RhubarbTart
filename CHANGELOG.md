@@ -13,6 +13,10 @@ release that built it (`rhubarbtart_version`).
 ## [Unreleased]
 
 ### Fixed
+- Starting a third macOS VM (a Mac runs at most two) now fails at once with Tart's message and
+  how to fix it. Before, a clone's password rotation reported "SSH not reachable after 2 boots",
+  `run --detach` reported success, and a macOS build's smoke test waited out "no IP within
+  300s". `build.sh` checks for a free macOS slot before it starts (#166).
 - Kali (and other Linux) smoke test: wait for logins to be allowed before the login checks on
   both boots. On a fast boot sshd listened before `/run/nologin` was removed, so `pam_nologin`
   rejected the login and the second-boot check failed (#158, #160). Diagnosis, reproduction and

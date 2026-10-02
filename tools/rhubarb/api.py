@@ -173,7 +173,11 @@ def _rotate(rec: dict, progress: ProgressFn | None = None) -> tuple[bool, str | 
     for attempt in range(2):
         _emit(progress, f"{name}: booting headless to rotate its password"
               + (" (retry)" if attempt else ""))
-        proc = hostops.start_vm(name, rec["rosetta"], headless=True)
+        try:
+            proc = hostops.start_vm(name, rec["rosetta"], headless=True)
+        except VerifyError as e:
+            raise VerifyError(f"{e}. {name} was created and keeps the image's password until "
+                              f"then: rhubarbtart reset {name} --same-image") from e
         try:
             try:
                 ip = hostops.vm_ip(name, rec["family"])

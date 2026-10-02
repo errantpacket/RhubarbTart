@@ -110,6 +110,19 @@ if [[ "$ROSETTA" == true ]]; then
     *) log "WARNING: couldn't check whether Rosetta is installed (got '$rosetta'); if it isn't, the smoke test will time out" ;;
   esac
 fi
+# A Mac runs at most two macOS VMs at once (Apple's licence, enforced by the Virtualization
+# framework); Linux VMs don't count. A macOS build runs one at a time (the install, then the smoke
+# test's clone), so it needs a free slot; otherwise tart fails deep into the build (#166).
+if [[ "$FAMILY" == macos ]]; then
+  running_macos="" n_macos=0
+  for vm in $(ps -axo command= | awk '$0 ~ /(^|\/)tart run / {print $NF}'); do
+    os="$(plutil -extract os raw "$HOME/.tart/vms/$vm/config.json" 2>/dev/null || true)"
+    if [[ "$os" == darwin ]]; then running_macos="$running_macos $vm"; n_macos=$((n_macos + 1)); fi
+  done
+  if ((n_macos >= 2)); then
+    die "a Mac runs at most two macOS VMs at once, and two are running:$running_macos. Stop one (rhubarbtart stop NAME, or tart stop NAME), then build again"
+  fi
+fi
 export PKR_VAR_username PKR_VAR_cpu_count PKR_VAR_memory_gb PKR_VAR_disk_gb
 PKR_VAR_username="$(json_field username "$info")"
 PKR_VAR_cpu_count="$(json_field cpu "$info")"

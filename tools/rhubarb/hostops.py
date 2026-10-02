@@ -10,6 +10,7 @@ import os
 import secrets
 import string
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -132,14 +133,54 @@ def require_rosetta(name: str) -> None:
         raise VerifyError(f"{name} uses Rosetta, which this Mac doesn't support")
 
 
+# A Mac runs at most two macOS VMs at once (Apple's licence, enforced by the Virtualization
+# framework); Linux VMs don't count. A third `tart run` exits at once with this text (#166).
+VM_LIMIT_TEXT = "exceeds the system limit"
+START_GRACE = 6.0   # seconds: a `tart run` that can't start the VM exits within this (2.7 s measured on an M1)
+
+
+def start_failure(name: str, output: str) -> str:
+    """The error for a `tart run` that exited at once, from its output."""
+    lines = [ln.strip() for ln in output.splitlines() if ln.strip()]
+    said = lines[-1] if lines else "no output"
+    if VM_LIMIT_TEXT in output:
+        return (f"{name} can't start: a Mac runs at most two macOS VMs at once ({said}). "
+                "Stop one with `rhubarbtart stop NAME` (or `tart stop NAME`), then try again")
+    return f"{name} can't start: tart run exited at once ({said})"
+
+
 def start_vm(name: str, rosetta: bool, headless: bool, log: Path | None = None) -> subprocess.Popen:
+    """Start ``tart run`` detached and return it once it has outlived START_GRACE.
+
+    A `tart run` that fails (the macOS VM limit, a missing VM, a locked disk) exits at once.
+    Its output would otherwise be lost (rotation boots discard it) or sit in a log while callers
+    wait minutes for an IP, so it is raised as a VerifyError here instead (#166)."""
     if rosetta:
         require_rosetta(name)
     args = ["tart", "run", *(["--rosetta=rosetta"] if rosetta else []),
             *(["--no-graphics"] if headless else []), name]
-    out = open(log, "ab") if log else subprocess.DEVNULL  # noqa: SIM115 (handed to the child)
-    return subprocess.Popen(args, stdout=out, stderr=out, stdin=subprocess.DEVNULL,
-                            start_new_session=True)
+    start = log.stat().st_size if log and log.exists() else 0
+    # The child keeps its own copy of the descriptor, so ours can be closed (and a temp file
+    # removed) once we know the VM started.
+    out = open(log, "ab") if log else tempfile.TemporaryFile()  # noqa: SIM115
+    with out:
+        proc = subprocess.Popen(args, stdout=out, stderr=out, stdin=subprocess.DEVNULL,
+                                start_new_session=True)
+        try:
+            code = proc.wait(timeout=START_GRACE)
+        except subprocess.TimeoutExpired:
+            return proc   # still running: the VM started
+        if code == 0:
+            return proc   # ran and ended cleanly (stubs, or an instant guest shutdown)
+        if log:
+            out.flush()
+            with open(log, "rb") as f:
+                f.seek(start)
+                text = f.read()
+        else:
+            out.seek(0)
+            text = out.read()
+    raise VerifyError(start_failure(name, text.decode(errors="replace")))
 
 
 def sync_guest(name: str, username: str) -> bool:

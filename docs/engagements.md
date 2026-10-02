@@ -65,7 +65,11 @@ A typical run of the Juice Shop lab:
 
 `targets`, `agent_budget` and `evidence` are checked for shape only; nothing enforces them yet.
 A sealed vault records the `label`, `operator` and `authorization`. Unknown keys anywhere are
-rejected. Engagement clones are ordinary clones, so `run`, `ssh`, `list`
+rejected.
+
+A Mac runs at most two macOS VMs at once ([Requirements](reference.md#requirements)).
+Provisioning boots its clones one at a time, so a range of more macOS clones can be provisioned,
+but only two of them can run together. Linux ranges have no such limit. Engagement clones are ordinary clones, so `run`, `ssh`, `list`
 and `stop` work on them too.
 
 ## Evidence

@@ -25,6 +25,9 @@ release that built it (`rhubarbtart_version`).
   install command instead of a smoke-test timeout on a Mac without Rosetta (#158, #160).
 
 ### Changed
+- Testing macOS and iOS apps: says what works for iOS today (backend testing, inspecting app
+  bundles), that Xcode and the Simulator aren't part of RhubarbTart yet, and Apple's limits for
+  iOS work (two macOS VMs, Xcode download and licence, Simulator builds, Apple Account, USB) (#167).
 - Documentation site reorganised (#164): a Quick start and a Troubleshooting page (moved from the
   build skill, so there is one copy), engagements and herdr agents on pages of their own, the
   guest table on Guests and profiles, and the design records kept in the repository but off the

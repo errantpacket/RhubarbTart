@@ -61,14 +61,15 @@ variable "password" {
 }
 
 source "tart-cli" "vanilla" {
-  from_ipsw    = var.ipsw_path
-  vm_name      = var.vm_name
-  cpu_count    = var.cpu_count
-  memory_gb    = var.memory_gb
-  disk_size_gb = var.disk_gb
-  ssh_username = var.username
-  ssh_password = var.password
-  ssh_timeout  = "300s"
+  from_ipsw      = var.ipsw_path
+  vm_name        = var.vm_name
+  cpu_count      = var.cpu_count
+  memory_gb      = var.memory_gb
+  disk_size_gb   = var.disk_gb
+  run_extra_args = ["--no-audio", "--no-clipboard"] # no host microphone or clipboard (#170)
+  ssh_username   = var.username
+  ssh_password   = var.password
+  ssh_timeout    = "300s"
 
   boot_command = [
     # hello, hola, bonjour, etc.

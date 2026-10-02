@@ -133,6 +133,15 @@ def require_rosetta(name: str) -> None:
         raise VerifyError(f"{name} uses Rosetta, which this Mac doesn't support")
 
 
+# Flags on every `tart run` (#170). The guest is under test, so it gets no path to the Mac's devices:
+# - Tart's default audio passes the Mac's microphone input (VZHostAudioInputStreamSource); once
+#   macOS has granted Tart the microphone, any clone could record it. --no-audio leaves an
+#   output-only sound device.
+# - Tart always attaches the clipboard channel (com.redhat.spice.0). The images have no agent,
+#   but a guest could install spice-vdagent and read or set the Mac's clipboard. --no-clipboard.
+# check.sh fails on a `tart run` without them.
+RUN_FLAGS = ("--no-audio", "--no-clipboard")
+
 # A Mac runs at most two macOS VMs at once (Apple's licence, enforced by the Virtualization
 # framework); Linux VMs don't count. A third `tart run` exits at once with this text (#166).
 VM_LIMIT_TEXT = "exceeds the system limit"
@@ -157,7 +166,7 @@ def start_vm(name: str, rosetta: bool, headless: bool, log: Path | None = None) 
     wait minutes for an IP, so it is raised as a VerifyError here instead (#166)."""
     if rosetta:
         require_rosetta(name)
-    args = ["tart", "run", *(["--rosetta=rosetta"] if rosetta else []),
+    args = ["tart", "run", *RUN_FLAGS, *(["--rosetta=rosetta"] if rosetta else []),
             *(["--no-graphics"] if headless else []), name]
     start = log.stat().st_size if log and log.exists() else 0
     # The child keeps its own copy of the descriptor, so ours can be closed (and a temp file

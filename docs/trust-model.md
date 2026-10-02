@@ -101,6 +101,14 @@ so it never holds either.
   connect` opens an SSH remote forward (`ssh -R`) for each declared port, and the path closes when
   `connect` exits. Softnet was evaluated and rejected
   ([#30](https://github.com/errantpacket/RhubarbTart/issues/30)).
+- **Host devices.** Every VM RhubarbTart starts (clones, builds, the smoke test) gets
+  `tart run --no-audio --no-clipboard`. By default Tart passes the Mac's microphone input to the
+  guest, so once macOS had granted Tart the microphone, any clone could record it. Tart also
+  attaches a clipboard channel; the images have no agent for it, but a guest could install one
+  and read or set the Mac's clipboard. With both flags the guest has an output-only sound device
+  and no clipboard channel, and `check.sh` fails on a `tart run` without them. No folders are
+  shared, and USB devices aren't passed through
+  ([Testing macOS and iOS apps](testing-apple-apps.md#ios-apps-today)).
 - **Evidence journal.** Each engagement's evidence lives in the host state dir as
   `evidence/<id>/journal.jsonl` plus content-addressed `items/<sha256>`, in 0700 directories and
   0600 files. Each entry commits to the previous entry and to its own content, so an edit,

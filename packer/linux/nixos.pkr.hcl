@@ -68,15 +68,16 @@ variable "headless" {
 }
 
 source "tart-cli" "nixos" {
-  from_iso     = [var.iso_path]
-  vm_name      = var.vm_name
-  cpu_count    = var.cpu_count
-  memory_gb    = var.memory_gb
-  disk_size_gb = var.disk_gb
-  headless     = var.headless
-  ssh_username = "nixos"
-  ssh_password = var.bootstrap_password
-  ssh_timeout  = "15m"
+  from_iso       = [var.iso_path]
+  vm_name        = var.vm_name
+  cpu_count      = var.cpu_count
+  memory_gb      = var.memory_gb
+  disk_size_gb   = var.disk_gb
+  run_extra_args = ["--no-audio", "--no-clipboard"] # no host microphone or clipboard (#170)
+  headless       = var.headless
+  ssh_username   = "nixos"
+  ssh_password   = var.bootstrap_password
+  ssh_timeout    = "15m"
 
   # The ISO auto-logs in as `nixos` (passwordless sudo) after ~40s. Give margin, wake the
   # console with Enter, then set the SSH password and ensure sshd is up — one action per line

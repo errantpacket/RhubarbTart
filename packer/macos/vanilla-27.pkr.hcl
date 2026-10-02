@@ -74,6 +74,7 @@ source "tart-cli" "vanilla" {
   ssh_timeout  = "900s"
   # No boot_command: the provisioning API performs Setup Assistant on first boot.
   run_extra_args = [
+    "--no-audio", "--no-clipboard", # no host microphone or clipboard (#170)
     "--provisioning-opts=${join(",", [
       "fullName=RhubarbTart",
       "username=${var.username}",

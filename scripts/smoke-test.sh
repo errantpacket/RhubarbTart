@@ -17,7 +17,7 @@ VM="${1:?vm name}"
 USER_NAME="${RHUBARB_USER:-admin}"
 SSH_ENABLED="${RHUBARB_SSH_ENABLED:?set to 1 or 0}"
 FAMILY="${RHUBARB_FAMILY:?set to macos, nixos or kali}"
-RUN_ARGS=(--no-graphics)
+RUN_ARGS=(--no-graphics --no-audio --no-clipboard)   # no host microphone or clipboard in the guest (#170)
 [[ "$FAMILY" != macos && "${RHUBARB_ROSETTA:-false}" == true ]] && RUN_ARGS+=(--rosetta=rosetta)
 # Default resolver (DHCP leases, MAC-matched) is stable; arp cache is volatile, so only fall back to it.
 vm_ip() { tart ip --wait 300 "$1" 2>/dev/null || tart ip --wait 60 --resolver arp "$1"; }

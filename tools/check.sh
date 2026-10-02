@@ -159,6 +159,25 @@ check "control-plane service touches only the typed core (no direct tart/keychai
 check "herdr driver reaches tart/keychain only through the core (no direct hostops/tart/security)" \
   '(^|[^a-zA-Z_.])(hostops|find-generic-password|/usr/bin/security|[\"\x27]tart[\"\x27 ])' tools/rhubarb/herdr.py
 
+# No host microphone or clipboard in a guest (#170): Tart's defaults pass the Mac's microphone input
+# and attach a clipboard channel, so every way RhubarbTart starts a VM must pass both flags.
+mic_bad=""
+for f in packer/*/*.pkr.hcl; do
+  n_src="$(grep -c '^source "tart-cli"' "$f" || true)"
+  for flag in --no-audio --no-clipboard; do
+    n_flag="$(grep -c -- "\"$flag\"" "$f" || true)"
+    ((n_flag >= n_src)) || mic_bad="$mic_bad $f:$flag"
+  done
+done
+grep -q '^RUN_FLAGS = ("--no-audio", "--no-clipboard")' tools/rhubarb/hostops.py || mic_bad="$mic_bad tools/rhubarb/hostops.py:RUN_FLAGS"
+mic_bad="$mic_bad $(grep -nE '[=(][[:space:]]*\["tart", "run",' tools/rhubarb/*.py | grep -v 'RUN_FLAGS' | cut -d: -f1,2 | tr '\n' ' ' || true)"
+for flag in --no-audio --no-clipboard; do
+  grep -qE "^RUN_ARGS=\\([^)]*${flag}[^)]*\\)" scripts/smoke-test.sh || mic_bad="$mic_bad scripts/smoke-test.sh:RUN_ARGS:$flag"
+done
+mic_bad="$mic_bad $(grep -nE '^[[:space:]]*tart run ' scripts/*.sh | grep -v 'RUN_ARGS' | cut -d: -f1,2 | tr '\n' ' ' || true)"
+if [[ -z "${mic_bad// /}" ]]; then ok "every tart run passes --no-audio --no-clipboard (no host microphone or clipboard)"
+else bad "tart run without --no-audio/--no-clipboard (host microphone or clipboard reaches the guest):$mic_bad"; fi
+
 # Evidence pulled from a guest is parsed, never unpacked onto the host (#85): the guest is under
 # test, and its archive could plant symlinks or ../ paths.
 check "guest evidence is never extracted onto the host (no tarfile extract/extractall)" \

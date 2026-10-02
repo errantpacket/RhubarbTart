@@ -63,7 +63,7 @@ flowchart LR
 | ZAP (macOS) | GitHub release | GitHub asset digest | **Unsigned** (no Apple signature exists); integrity is the pinned digest, enforced on the host and again in-guest (`SHA256SUMS`) |
 | WARP (macOS) | Versioned pkg from Cloudflare's feed | First use (no vendor hash exists) | Developer ID + notarized, Team `68WVV388M8` |
 | Tailscale (macOS) | `pkgs.tailscale.com` | Vendor `.sha256` | **distsign** Ed25519 chain from a pinned root, plus Team `W5364U7YZB` |
-| Textual (TUI dep) | PyPI (`files.pythonhosted.org`) | `tools/rhubarb_tui.py.lock` (uv script lockfile; per-file sha256) | None. Pinned to an exact version and hash-verified by uv, which also hash-verifies its transitive deps. The repo's only directly declared third-party Python dependency |
+| Textual (TUI dep) | PyPI (`files.pythonhosted.org`) | `tools/rhubarb_tui.py.lock` (uv script lockfile; per-file sha256) | None. Pinned to an exact version and hash-verified by uv, which also hash-verifies its transitive deps. The only third-party Python dependency of the tools you run (the docs site's Zensical is locked the same way) |
 
 </details>
 
@@ -126,7 +126,7 @@ so it never holds either.
   single-use, and request, grant and use are all recorded in the evidence journal. This is the
   sanctioned, recorded path, not a sandbox: an agent runs as the operator on the host, so one that
   escapes its shell could reach the socket directly. See the
-  [herdr charter](HERDR-CHARTER.md) for the stronger per-engagement driver VM model.
+  [herdr charter](https://github.com/errantpacket/RhubarbTart/blob/main/docs/HERDR-CHARTER.md) for the stronger per-engagement driver VM model.
 
 ## Security posture
 
@@ -136,7 +136,7 @@ so it never holds either.
 | **How it gets there** | Typed over VNC (26); bootstrap → rotate → proven dead (27) | yescrypt hash from a 0600 upload, outside the Nix store | Bootstrap → `chpasswd` from stdin |
 | **Login** | No auto-login | No auto-login | No auto-login |
 | **sudo** | Password required; no `NOPASSWD` | Password required; `execWheelOnly` | Password required; `kali-grant-root` purged and pinned out. One scoped exception: OpenVAS's locked, nologin `_gvm` may run `/usr/sbin/openvas` (#59) |
-| **SSH** | Key-only, `from=` host, no forwarding; off without keys | same, declared in Nix | same |
+| **SSH** | Key-only, `from=` host, no agent or X11 forwarding (TCP forwarding stays on for engagement links); off without keys | same, declared in Nix | same |
 | **Identity** | Host keys wiped, regenerated per clone | Never generated in the image | Host keys + machine-id wiped, regenerated per clone |
 | **Firewall** | Application firewall + stealth | NixOS firewall | nftables inbound default-deny |
 | **Integrity** | SIP + Gatekeeper on | Signed binary cache only | Signed Kali archive only |
@@ -163,5 +163,3 @@ sequenceDiagram
     Note over G: rotate bootstrap → final<br/>prove bootstrap is rejected<br/>shred the file
     G-->>BS: seal & power off
 ```
-
-← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

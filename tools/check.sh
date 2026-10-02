@@ -254,6 +254,11 @@ if command -v uv >/dev/null; then
   then ok "docs site builds with --strict (no broken links)"
   else bad "docs site build (run: uv run --script tools/docs_site.py build --strict)"
        grep -vE '^\s*$' <<<"$out" | tail -20 | sed 's/^/          /'; fi
+  # README and site share the Quick start and the guest table; every docs page is on the site
+  # or deliberately excluded (#164).
+  if out="$(uv run --quiet --no-project python tools/docs_sync.py 2>&1)"
+  then ok "README and docs site in step (Quick start, guest table, every page placed)"
+  else bad "README and docs site out of step:"; printf '%s\n' "$out" | sed 's/^/          /'; fi
 else skip "docs site build (need uv)"; fi
 
 echo

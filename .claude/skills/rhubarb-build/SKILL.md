@@ -111,7 +111,7 @@ tabs, plus the clone actions and Build). Its Build action writes
 - **Records** live in `~/Library/Application Support/RhubarbTart/` (or `RHUBARB_STATE_DIR`),
   together with `events.log`, run and build logs (`logs/`), evidence (`evidence/`) and the
   service socket. If `rhubarbtart` refuses a record (bad permissions, symlink, schema), don't loosen
-  the check: see the troubleshooting guide.
+  the check: see `docs/troubleshooting.md`.
 
 ## Engagements, evidence and agents
 
@@ -144,7 +144,8 @@ reach each other on Tart's default NAT; a manifest's `links` are the only path. 
 
 ## When something fails
 
-Read `references/troubleshooting.md`. It maps each message to its cause and fix, per family.
+Read `docs/troubleshooting.md` (also published on the docs site). It maps each message to its
+cause and fix, in build order, then clones and enrollment.
 The general rules exist because the quick fix is usually the insecure one:
 
 - **Never hand-edit a hash, Team ID, key fingerprint or check to get past a failure.** A

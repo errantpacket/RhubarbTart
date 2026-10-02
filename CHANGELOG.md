@@ -21,6 +21,14 @@ release that built it (`rhubarbtart_version`).
   install command instead of a smoke-test timeout on a Mac without Rosetta (#158, #160).
 
 ### Changed
+- Documentation site reorganised (#164): a Quick start and a Troubleshooting page (moved from the
+  build skill, so there is one copy), engagements and herdr agents on pages of their own, the
+  guest table on Guests and profiles, and the design records kept in the repository but off the
+  site. Pages were checked against the code and corrected; `check.sh` now keeps the README and
+  the site in step (`tools/docs_sync.py`).
+- Enrollment docs now say which secrets stay in a clone (WARP's token; the macOS Tailscale key
+  until removed) and how to remove the Tailscale key.
+- `vendor/**/*.dmg` is git-ignored, like `.pkg` and `.cer` (#164).
 - `kali-research`: Chrome 154.0.8037.57 to 154.0.8037.92, validated on hardware as
   `rbt-kali-research-30560117767a` (#159, #161).
 - README Quick start: refreshing inputs (resolve) is optional, `rhubarbtart run --detach` is

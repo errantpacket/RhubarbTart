@@ -74,7 +74,7 @@ extra virtualization. This works on any Apple silicon Mac, including M1 and M2.
 This is the natural home for devcontainers in RhubarbTart: the container runs inside a hardened,
 provenance-pinned, disposable Linux clone. The package catalog has no container runtime today. To
 add one, create a catalog entry in `config/packages/` with a `kali` (`distro`) or `nixos` (`nix`)
-variant, list it in a Linux profile, and rebuild (see [Define your own guest](profiles.md)). On
+variant, list it in a Linux profile, and rebuild (see [Define your own guest](profiles.md#define-your-own-guest)). On
 NixOS, Docker and Podman are enabled through `virtualisation.*` options, which the package mapping
 in `guest/nixos/nix/modules/packages.nix` does not cover yet, so that part is a build-code change.
 

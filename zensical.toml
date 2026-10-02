@@ -4,6 +4,9 @@
 #   uv run --script tools/docs_site.py build --strict  # what check.sh and CI run
 # docs/ stays the source; GitHub renders the same files. The site is published to GitHub Pages
 # by .github/workflows/docs.yml.
+#
+# The design records (uppercase names) and the history-rewrite record stay in the repository for
+# contributors but are left out of the site; public pages link to them on GitHub instead.
 
 [project]
 site_name = "🍎 RhubarbTart"
@@ -18,26 +21,27 @@ copyright = "RhubarbTart is licensed under FSL-1.1-ALv2."
 
 nav = [
   { "Home" = "README.md" },
-  { "Guides" = [
+  { "Get started" = [
+    { "Quick start" = "quickstart.md" },
     { "Key concepts" = "concepts.md" },
     { "How it works" = "how-it-works.md" },
+  ] },
+  { "Guides" = [
+    { "Guests and profiles" = "profiles.md" },
     { "Using your VMs" = "using.md" },
-    { "Define your own guest" = "profiles.md" },
+    { "Engagements and evidence" = "engagements.md" },
+    { "Agents with herdr" = "agents.md" },
     { "Publishing and stacked clones" = "publishing.md" },
-    { "macOS guests and containers" = "macos-and-containers.md" },
+  ] },
+  { "Topics" = [
     { "Testing macOS and iOS apps" = "testing-apple-apps.md" },
+    { "macOS guests and containers" = "macos-and-containers.md" },
+    { "Trust model and security posture" = "trust-model.md" },
   ] },
   { "Reference" = [
-    { "Trust model and security posture" = "trust-model.md" },
     { "Reference" = "reference.md" },
+    { "Troubleshooting" = "troubleshooting.md" },
     { "Development" = "development.md" },
-    { "History rewrite" = "history-rewrite.md" },
-  ] },
-  { "Design records" = [
-    { "Plan" = "PLAN.md" },
-    { "Interface plan" = "INTERFACE-PLAN.md" },
-    { "Engagement plan" = "ENGAGEMENT-PLAN.md" },
-    { "herdr charter" = "HERDR-CHARTER.md" },
   ] },
 ]
 
@@ -85,3 +89,8 @@ pymdownx.inlinehilite = {}
 pymdownx.superfences.custom_fences = [
   { name = "mermaid", class = "mermaid", format = "pymdownx.superfences.fence_code_format" },
 ]
+
+# Zensical doesn't support MkDocs' exclude_docs yet; its own exclude plugin drops these from the
+# site and the search index.
+[project.plugins.exclude]
+glob = ["PLAN.md", "INTERFACE-PLAN.md", "ENGAGEMENT-PLAN.md", "HERDR-CHARTER.md", "history-rewrite.md"]

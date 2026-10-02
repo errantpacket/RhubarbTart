@@ -89,11 +89,11 @@ contents are recorded, and each clone is separate and disposable. So you can sta
 machine contained, repeat a test from the same starting point, and keep one client's data out of
 the next engagement.
 
-The macOS guest is a workstation for Apple work, such as simulators, intercepting proxies and
-analysis tools. It isn't an iOS VM: Tart runs macOS and Linux guests.
+It isn't an iOS VM: Tart runs macOS and Linux guests. For iOS apps, RhubarbTart covers backend
+testing and inspecting app bundles today. Xcode and the iOS Simulator are not part of it yet.
 
-Why Apple app testing is hard, and what each part of the tool does about it:
-[Testing macOS and iOS apps](docs/testing-apple-apps.md).
+Why Apple app testing is hard, what each part of the tool does about it, and Apple's limits for
+iOS work: [Testing macOS and iOS apps](docs/testing-apple-apps.md).
 
 </details>
 

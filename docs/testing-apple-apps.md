@@ -111,7 +111,7 @@ offer the iOS toolchain, it has to be pinned, verified and proven like every oth
 | Xcode's licence forbids **redistributing** it | An image that contains Xcode must never be published to a public registry ([Xcode and Apple SDKs Agreement](https://www.apple.com/legal/sla/docs/xcode.pdf)) |
 | App Store and device builds **don't run in the Simulator** | Running an app in the Simulator needs a Simulator build of it, usually from the developer. An App Store `.ipa` can only be examined, not run |
 | **Apple Account sign-in** inside a VM | Works only when the host and guest run macOS 15 or later and the VM was installed fresh; the Mac App Store still doesn't work in a VM. RhubarbTart images never contain an account |
-| No **USB passthrough** of an iPhone or iPad yet | macOS 27 added USB passthrough to the Virtualization framework, for a macOS 27 host and guest. Tart doesn't support it yet ([tart#139](https://github.com/cirruslabs/tart/issues/139)), so a physical device can't be attached to a clone |
+| No **USB passthrough** of an iPhone or iPad | macOS 27 added USB passthrough to the Virtualization framework, but the framework refuses devices with isochronous endpoints, and iPhones have them. Parallels, which uses it, lists iPhones as unsupported ([KB 128867](https://kb.parallels.com/en/128867)). Tart doesn't support passthrough at all yet ([tart#139](https://github.com/openai/tart/issues/139)). The likely route to a physical device is Xcode's wireless debugging, which needs the clone on the device's network; it is being evaluated in [#172](https://github.com/errantpacket/RhubarbTart/issues/172) |
 
 ## Scope
 

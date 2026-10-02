@@ -52,11 +52,12 @@ flowchart TB
    image. Inside the guest, every staged file is checked again before install. The guest then
    hardens itself, removes build residue and identity, and powers off.
 4. **Prove.** `smoke-test.sh` boots a disposable clone and tests it from outside. For a key-SSH
-   image (`RHUBARB_SSH_PUBKEYS` set), password login must be refused and key login must work. For
-   an SSH-disabled image, port 22 must refuse connections. In both cases auto-login, passwordless
-   sudo and open Screen Sharing fail the test. A key-SSH Linux image is also rebooted once, and
-   on both boots `/` must be read-write with its fstab mounts up. Only then is the image renamed to
+   image (`RHUBARB_SSH_PUBKEYS` set), password login must be refused and key login must work.
+   It then logs in and checks the hardening: passwordless sudo, auto-login or a disabled firewall
+   fails the test. A key-SSH Linux image is also rebooted once, and on both boots `/` must be
+   read-write with its fstab mounts up. For an SSH-disabled image, port 22 must refuse
+   connections; nothing inside can be checked, because there is no way in. Every image must keep
+   Screen Sharing closed, and any port a package declares (Juice Shop's 3000) must answer. Only
+   then is the image renamed to
    `rbt-<profile>-<inputs-sha>`. The name is derived from the inputs, so identical inputs give an
    identical name, and `out/<vm>.provenance.json` records exactly what went in.
-
-← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

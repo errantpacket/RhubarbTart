@@ -24,7 +24,7 @@ flowchart LR
 
 **Profile.** A small JSON file (`profiles/<name>.json`) describing one kind of guest. It names an
 OS **base**, a list of **packages** (tools), and a few options such as the desktop, VM size,
-username or Rosetta. It's the only file you normally write. See [Define your own guest](profiles.md).
+username or Rosetta. It's the only file you normally write. See [Define your own guest](profiles.md#define-your-own-guest).
 
 **Base.** The operating system a profile starts from: macOS 26, macOS 27, NixOS or Kali
 (`config/bases/*.json`). A base says where the vendor's installer comes from and how it's verified.
@@ -41,22 +41,26 @@ collection (`nixpkgs`). Inputs are the things RhubarbTart refuses to trust blind
 
 **Lock file.** `locks/<profile>.lock.json` records the **exact** inputs for one profile: every URL,
 version, SHA-256 hash and, where the vendor signs, the signer. The lock is produced by
-**resolving**, reviewed by a person, and committed. A build uses what the lock says and nothing
-else, so the same lock always means the same inputs, even months later.
+**resolving**, reviewed by a person, and committed. A build uses what the lock says, so the same
+lock means the same inputs, even months later. The exception is Kali's own packages (the
+`kali-linux-*` sets and ZAP on Kali): they come from Kali's signed archive as it is on the day of
+the build. Their signatures are checked, and the image records the exact versions installed.
 
 <details>
 <summary><b>Resolve vs verify, and the download cache</b></summary>
 
 - **Resolve** (`resolve.py resolve <profile>`) looks upstream for the newest suitable versions,
-  downloads them, checks them against at least two independent sources (for example a signed
-  checksum file *and* a published digest), and **writes a new lock**. You review its diff before
+  downloads them, checks them against two independent sources where the vendor publishes them
+  (for example a signed checksum file *and* a published digest), and **writes a new lock**. Some
+  inputs have a single source, such as a GitHub release digest (ZAP on macOS, Juice Shop). You review its diff before
   committing, like code.
 - **Verify** (run automatically by every build) re-checks the downloaded files against the
   **existing** lock. It never picks new versions.
 - **The cache** (`cache/artifacts/<sha256>/<file>`) holds the downloads, filed by their hash. Two
   profiles can therefore pin different builds of a file with the same name (Chrome's installer
   URL is unversioned) without overwriting each other.
-- **Trust on first use (TOFU).** A few vendors publish no hash at all (Chrome and WARP on macOS).
+- **Trust on first use (TOFU).** A few vendors publish no hash at all (Chrome and WARP on macOS),
+  and a local installer you add under `vendor/` has none either.
   For those, the hash is recorded the first time it's downloaded, and the macOS signature and
   **Team ID** (the vendor's Apple developer identity, pinned in config) are still checked every
   time. The lock marks these as `tofu:`, so they get a closer look in review.
@@ -101,14 +105,15 @@ work. On macOS's file system (APFS) a clone is **copy-on-write**: it shares the 
 only stores what changes, so it's fast and cheap. Delete it when you're done; the image is
 untouched and the next clone starts identical.
 
-**Per-clone password.** Every clone is rotated to its **own** random password as it's created,
-stored in your macOS keychain under the clone's name. `rhubarbtart` proves the old (image) password
-no longer works, so no two clones share a credential. VPN/ZTNA enrollment also happens per
+**Per-clone password.** By default each clone is rotated to its **own** random password as it's
+created, stored in your macOS keychain under the clone's name. `rhubarbtart` proves the old (image)
+password no longer works, so no two clones share a credential. Rotation needs key SSH: a clone of
+an image built without SSH keys, or one made with `--no-rotate`, keeps the image's password. VPN/ZTNA enrollment also happens per
 clone and is never baked into an image.
 
 **Engagement.** A named scope (`engagements/<id>.json`) that stands up a whole **set** of tagged
 clones at once, and tears exactly that set down again. Its clones can't reach each other unless
-the manifest declares a **link** between them. See [Engagements](using.md#engagements).
+the manifest declares a **link** between them. See [Engagements and evidence](engagements.md).
 
 **Evidence.** The record of what happened in an engagement, kept on your Mac and never in the
 clones: the commands run through `rhubarbtart exec`, files pulled from each clone's `~/evidence`
@@ -149,5 +154,3 @@ disappears, and `rhubarbtart rm` frees it once no clone uses it. See
 [Publishing and stacked clones](publishing.md).
 
 </details>
-
-← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

@@ -1,6 +1,7 @@
 cache/
 out/
 vendor/**/*.pkg
+vendor/**/*.dmg
 vendor/**/*.cer
 *.part
 __pycache__/

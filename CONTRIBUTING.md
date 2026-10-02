@@ -54,7 +54,7 @@ your change: Setup Assistant timing, the macOS 27 provisioning path, real instal
 | Add a tool or an OS base | `config/packages` / `config/bases`; see [`rhubarb-update-inputs`](.claude/skills/rhubarb-update-inputs/SKILL.md) |
 | Refresh versions / pins / keys | `resolve.py resolve` / `toolchain-pin`, then review the lock diff |
 | Change build code, the CLI, core API, TUI, service or herdr integration | the [`rhubarb-dev`](.claude/skills/rhubarb-dev/SKILL.md) skill |
-| Define an engagement | `engagements/<id>.json` (and `<id>.herdr.json` for agents); see [Using your VMs](docs/using.md#engagements) |
+| Define an engagement | `engagements/<id>.json` (and `<id>.herdr.json` for agents); see [Engagements and evidence](docs/engagements.md#the-manifest) |
 
 ## Style
 

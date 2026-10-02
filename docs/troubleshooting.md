@@ -1,28 +1,20 @@
-# Troubleshooting RhubarbTart builds (all families)
+# Troubleshooting
 
-Find the failing message below (they're quoted as the scripts print them). Each entry gives the
-likely cause, how to confirm it, and the fix. Fixes never loosen a check. If a check itself
-is wrong for a new macOS build, fix it with the same strictness (see the `rhubarb-dev` skill).
+Find the failing message below; each is quoted as the scripts print it. Each entry gives the
+likely cause, how to confirm it, and the fix. The sections follow the order of a build, then
+clones and enrollment.
 
-## Contents
-- [Toolchain: bootstrap / env.sh / preflight](#toolchain)
-- [Profiles and locks](#profiles-and-locks)
-- [Inputs: resolve / verify](#inputs)
-- [Stage 1: vanilla install](#stage-1) (macOS 26 keystrokes, macOS 27 provisioning)
-- [Stage 2: install.sh / finalize.sh](#stage-2) (macOS)
-- [NixOS](#nixos)
-- [Kali](#kali)
-- [Enrollment](#enrollment)
-- [rhubarbtart CLI](#rhubarbtart-cli)
-- [Smoke test](#smoke-test)
-- [Inspecting a failed image](#inspecting)
+A fix never loosens a check: every message means a guarantee didn't hold. Don't edit a hash,
+Team ID or key fingerprint to get past a failure, and don't rename a `-unverified` image by hand.
+If a check itself is wrong, for example because a new macOS release changed an output, it needs a
+code change that keeps it as strict; see [Development](development.md).
 
-## Toolchain
+## Toolchain and host
 
 | Message | Cause | Fix |
 |---|---|---|
 | `toolchain missing; run ./tools/bootstrap.sh` | `.toolchain/` absent (fresh clone) | Run bootstrap |
-| `tart resolves to …, not …/.toolchain/bin/tart` | env.sh not sourced; Homebrew or other install first on PATH | `source scripts/env.sh` in the same command |
+| `tart resolves to …, not …/.toolchain/bin/tart` | env.sh not sourced; Homebrew or other install first on PATH | `source scripts/env.sh` in this terminal, then run the command again |
 | `config/toolchain.env changed since the last tools/bootstrap.sh` | Pins bumped (e.g. after a pull) | Re-run bootstrap |
 | `the Xcode Command Line Tools are required to build gpg` (bootstrap) | GnuPG is built from pinned source | `xcode-select --install`, then re-run bootstrap |
 | `building <component> failed` / `gpg links non-system libraries` (bootstrap) | A compiler/SDK change broke the build, or a non-system library leaked in | The log tail shows the step. Bootstrap's build is hermetic (minimal PATH, no pkg-config), so report a leak as a bug. Never skip the check |
@@ -32,13 +24,14 @@ is wrong for a new macOS build, fix it with the same strictness (see the `rhubar
 | `tart.app is not notarized` | Wrong/partial download or unsigned build | As for sha mismatch |
 | `tart.app signature invalid` / `URL not on the allow-list: …` | Corrupt or unexpected download; `toolchain.env` points somewhere new | Retry once; a URL change must come from `toolchain-pin` plus a reviewed diff, never a hand edit |
 | preflight: `tart X != pinned Y` / `packer … != pinned …` / `could not verify Tart.app signature` | Toolchain out of date, or a non-repo binary first on PATH | Re-run `./tools/bootstrap.sh`; `source scripts/env.sh` |
+| `… uses Rosetta, which isn't installed on this Mac` (build or `rhubarbtart run`/`new`) | The profile boots with `--rosetta`, and Rosetta for Linux VMs is missing on this host (common on a new Mac). | `softwareupdate --install-rosetta --agree-to-license`, then run again |
 | `plugin not registered at v…` | `packer plugins install` layout changed | Check `PACKER_PLUGIN_PATH=.toolchain/packer-plugins packer plugins installed` |
 
 ## Profiles and locks
 
 | Message | Cause | Fix |
 |---|---|---|
-| `resolve.py list` shows `INVALID: …` | Profile schema violation (unknown key/option, wrong family, bad value, duplicate, missing variant) | Fix the profile as reported (`rhubarb-profiles` skill has the schema) |
+| `resolve.py list` shows `INVALID: …` | Profile schema violation (unknown key/option, wrong family, bad value, duplicate, missing variant) | Fix the profile as reported; [Guests and profiles](profiles.md#define-your-own-guest) has the rules |
 | ``locks/<profile>.lock.json missing; run `resolve <profile>` first`` | New profile or lock not committed | Resolve on the right host, review, commit |
 | `profiles/<id>.json changed since <lock> was written; re-resolve` | Profile edited after resolving (its hash is part of the image identity) | Re-resolve and review; don't revert the check |
 | `unsupported lock schema; re-resolve` | Lock written by an older resolver | Re-resolve |
@@ -55,9 +48,9 @@ is wrong for a new macOS build, fix it with the same strictness (see the `rhubar
 | HTTP 403 from api.github.com | Rate limit | `export GITHUB_TOKEN=…` |
 | `macOS profiles must be resolved on macOS …` (resolve) / `signature verification needs macOS …` (verify) | A macOS profile's resolve/verify ran on Linux | Run it on the Mac. Linux profiles resolve on the Mac (toolchain gpg) or anywhere with gpg |
 
-## Stage 1
+## macOS stage 1: vanilla install
 
-Stage 1 runs with a visible VNC window (not headless), so ask the user what screen it's stuck on.
+Stage 1 (macOS) runs with a visible VNC window, not headless. Look at it to see which screen it's stuck on.
 
 - **Hangs or times out waiting for SSH**: the Setup Assistant `boot_command` fell out of sync.
   Usual causes are a slow host (a `<waitNNs>` too short) or Apple changing a screen in a new build.
@@ -72,7 +65,7 @@ Stage 1 runs with a visible VNC window (not headless), so ask the user what scre
   changed the security posture. Investigate; don't remove the assertion.
 
 ### macOS 27 (provisioning API)
-- Tart's `--provisioning-opts requires the host to be running macOS 27` / build.sh `<base> needs a macOS 27 host`:
+- `<base> needs a macOS 27 host (this host: …)` (build.sh), or Tart's own error about `--provisioning-opts`:
   the host is older, and there's no workaround. Use a `macos-26` profile or upgrade the host.
 - SSH never comes up: the provisioning API didn't create the account. Check `tart run` output in
   the Packer log; confirm Tart ≥ 2.33 (`tart --version`).
@@ -81,7 +74,7 @@ Stage 1 runs with a visible VNC window (not headless), so ask the user what scre
 - Hang at the end of stage 1: the self-shutdown step failed. The plugin's own shutdown can't work
   after rotation, by design. Check that `/tmp/rhubarb-password` was uploaded.
 
-## Stage 2
+## macOS stage 2: install and seal
 
 | Message | Cause | Fix |
 |---|---|---|
@@ -93,48 +86,13 @@ Stage 1 runs with a visible VNC window (not headless), so ask the user what scre
 | `Screen Sharing not disabled` | `launchctl print-disabled` format changed | Same approach as above |
 | `guest did not power off within 300s` | finalize.sh failed before its shutdown, or the shutdown hung | Read the Packer output above it |
 
-## Smoke test
-
-The smoke test runs on a throwaway clone (`<vm>-smoke-<pid>`), which is deleted afterwards.
-
-| Message | Cause | Fix |
-|---|---|---|
-| `… uses Rosetta, which isn't installed on this Mac` (build or `rhubarbtart run`/`new`) | The profile boots with `--rosetta`, and Rosetta for Linux VMs is missing on this host (common on a new Mac). Checked through the Virtualization framework, not `arch -x86_64`, which fails on macOS 27 even when Linux Rosetta works | `softwareupdate --install-rosetta --agree-to-license`, then run again |
-| `no IP within 300s` | Guest didn't boot, or slow DHCP | Retry; `tart run` the `-unverified` image manually. The smoke test already falls back to `--resolver arp` |
-| `SSH port not reachable` | sshd not starting (e.g. host keys not regenerated), or firewall blocking it | Log in via GUI: `sudo launchctl print system/com.openssh.sshd`, `ls /etc/ssh/ssh_host_*` |
-| `no ed25519 host key offered (host keys not regenerated?)` | macOS didn't recreate the host keys deleted at seal time | Code change: regenerate them at first boot (e.g. `ssh-keygen -A` via a launchd job). Never ship shared keys |
-| `unexpected auth methods: …` | Server still offers password/keyboard-interactive | The drop-in isn't effective. See `sshd -T` above |
-| `System is booting up. Unprivileged users are not permitted to log in yet` in the smoke log | sshd listened before systemd removed `/run/nologin` (pam_nologin). The smoke test retries the login for up to 30 s on each boot (#158); if it still fails, the guest's `systemd-user-sessions` is stuck | Boot the `-unverified` image and check `systemctl status systemd-user-sessions` |
-| `key login failed (key in agent? RHUBARB_SSH_FROM correct?)` | Key not in agent, or the host's vmnet address ≠ `from=` | `ssh-add -l`; on the host `ifconfig bridge100` shows the vmnet address. Set `RHUBARB_SSH_FROM` and rebuild |
-| `in-guest posture checks failed` | macOS: passwordless sudo, auto-login, SIP/Gatekeeper/firewall/stealth off, missing `/Library/RhubarbTart` records. Linux: passwordless sudo, LightDM auto-login, firewall inactive (`nftables` on Kali, `firewall` on NixOS), empty `/etc/machine-id`, missing `/var/lib/rhubarbtart/installed.txt`, missing Rosetta binfmt, or (lab target) `juice-shop egress not denied` | Run the matching heredoc lines from `scripts/smoke-test.sh` one by one over SSH |
-| `mount checks failed on the first boot` / `… on the second boot` (message starts `mounts:`) | Linux only (#98). `root filesystem is not read-write`, `home directory not writable`, `fstab generator did not link systemd-remount-fs`, `mount units failed: …` or `rosetta binfmt not registered`. The smoke test boots the clone, flushes, stops and boots it again, and checks both boots; a Kali image once failed only on the second | Keep the `-unverified` image and boot it twice; on the bad boot read `journalctl -b` for the generator and `systemctl --failed`. Kali installs from the live rolling archive, so a new package state is the first suspect: rebuild, and report it if it repeats |
-| `host key changed across a reboot of the same clone` | The guest regenerated its SSH host keys on the second boot (they must be generated once per clone) | Code change in the family's first-boot key generation |
-| `SSH reachable but should be disabled` | `launchctl disable system/com.openssh.sshd` didn't persist | Code change in finalize.sh |
-| `declared service port <p> not reachable` | A package's service (e.g. Juice Shop on 3000) didn't come up within about 3 minutes | Log in and check `systemctl status <service>` |
-| `Screen Sharing (5900) reachable` | Screen Sharing still enabled | Same |
-
-## Inspecting
-
-A failed build leaves `rbt-<profile>-<sha>-unverified`. To look inside:
-
-```sh
-tart clone rbt-<profile>-<sha>-unverified debug-1   # keep the evidence untouched
-tart run debug-1                                     # Linux+Rosetta: add --rosetta=rosetta
-# password: Linux -> the final image name's entry (stored before the build)
-security find-generic-password -s RhubarbTart -a rbt-<profile>-<sha> -w
-# macOS -> the vanilla VM's entry
-security find-generic-password -s RhubarbTart -a rbt-<base>-<build>-vanilla -w
-```
-
-Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces the `-unverified` image.
-
 ## NixOS
 
 | Symptom | Cause | Fix |
 |---|---|---|
 | Packer times out waiting for SSH | `boot_command` typed before the live console was ready | Raise the initial `<wait75s>` in `packer/linux/nixos.pkr.hcl` |
 | `nixpkgs NAR hash … != locked …` | Staged tarball doesn't match the lock | Re-run build (verify restages). If it persists, re-resolve and compare. Never edit the hash |
-| `nixos-install` evaluation error | Profile/config mismatch (option or package name changed in this nixpkgs) | Reproduce off-Mac with the Docker eval recipe in the `rhubarb-dev` skill |
+| `nixos-install` evaluation error | Profile/config mismatch (option or package name changed in this nixpkgs) | Reproduce off the Mac with the Docker evaluation recipe in the [`rhubarb-dev` skill's architecture notes](https://github.com/errantpacket/RhubarbTart/blob/main/.claude/skills/rhubarb-dev/references/architecture.md) |
 | Download/signature errors during install | cache.nixos.org unreachable or a path not signed | Retry. Never set `require-sigs = false` or add substituters |
 | Clone hangs at boot | Rosetta mount without the share | The mount is `nofail`; if it still hangs, start with `--rosetta=rosetta` and report it |
 | `tart ip` finds nothing | DHCP client-id | networkd is set to `ClientIdentifier=mac`; the smoke test, `ssh.sh` and `enroll.sh` fall back to `--resolver arp` |
@@ -156,26 +114,50 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 | A running clone has `/` read-only (`Read-only file system`), and `/media/rosetta` is missing (#98) | The fstab generator's units were missing on that boot, so `systemd-remount-fs` never ran. Seen once on a clone of an image built from an earlier rolling-archive state; the smoke test now fails such an image | Restore every fstab mount, not only `/`: `sudo systemctl daemon-reload && sudo systemctl start local-fs.target` (re-runs the generators, then remounts `/` read-write and mounts the rest). `sudo mount -o remount,rw /` fixes `/` alone. Rebuild the image if new clones keep doing it |
 | `_gvm (NOPASSWD for openvas) has a login shell / usable password` or `ospd-openvas is not root:root 0440` | The one allowed NOPASSWD rule's conditions don't hold (#59) | Investigate the package change; don't relax the condition |
 
-## Enrollment
+## Smoke test
+
+The smoke test runs on a throwaway clone (`<vm>-smoke-<pid>`), which is deleted afterwards.
 
 | Message | Cause | Fix |
 |---|---|---|
-| `unsupported key type …` (build) | RSA or other key in `RHUBARB_SSH_PUBKEYS` | Use ed25519/ecdsa (optionally a hardware `-sk` key) |
-| `no keychain item RhubarbTart-enroll/…` | Secret not stored | Add it as shown in `scripts/enroll.sh` (the `-w` prompt keeps it out of argv) |
-| `no keychain password for <name> (for a clone, pass --image …)` | Enrolling a clone: its password lives under the image name | `enroll.sh <clone> <service> --image rbt-<profile>-<sha>` |
-| Tailscale on macOS doesn't connect | System extension not approved | The user approves it in the VM (System Settings > General > Login Items & Extensions) |
-| WARP doesn't register | Service token lacks Service Auth enrollment rights, or wrong `--org` | Fix it in the Cloudflare dashboard; re-run enroll |
+| `no IP within 300s` | Guest didn't boot, or slow DHCP | Retry; `tart run` the `-unverified` image manually. The smoke test already falls back to `--resolver arp` |
+| `SSH port not reachable` | sshd not starting (e.g. host keys not regenerated), or firewall blocking it | Log in via GUI: `sudo launchctl print system/com.openssh.sshd`, `ls /etc/ssh/ssh_host_*` |
+| `no ed25519 host key offered (host keys not regenerated?)` | macOS didn't recreate the host keys deleted at seal time | Code change: regenerate them at first boot (e.g. `ssh-keygen -A` via a launchd job). Never ship shared keys |
+| `unexpected auth methods: …` | Server still offers password/keyboard-interactive | The drop-in isn't effective. See `sshd -T` above |
+| `System is booting up. Unprivileged users are not permitted to log in yet` (from the guest) in the smoke log | sshd listened before systemd removed `/run/nologin` (pam_nologin). The smoke test retries the login for up to 30 s on each boot (#158); if it still fails, the guest's `systemd-user-sessions` is stuck | Boot the `-unverified` image and check `systemctl status systemd-user-sessions` |
+| `key login failed (key in agent? RHUBARB_SSH_FROM correct?)` | Key not in agent, or the host's vmnet address ≠ `from=` | `ssh-add -l`; on the host `ifconfig bridge100` shows the vmnet address. Set `RHUBARB_SSH_FROM` and rebuild |
+| `in-guest posture checks failed` | macOS: passwordless sudo, auto-login, SIP/Gatekeeper/firewall/stealth off, missing `/Library/RhubarbTart` records. Linux: passwordless sudo, LightDM auto-login, firewall inactive (`nftables` on Kali, `firewall` on NixOS), empty `/etc/machine-id`, missing `/var/lib/rhubarbtart/installed.txt`, missing Rosetta binfmt, or (lab target) `juice-shop egress not denied` | Run the matching heredoc lines from `scripts/smoke-test.sh` one by one over SSH |
+| `mount checks failed on the first boot` / `… on the second boot` (message starts `mounts:`) | Linux only (#98). `root filesystem is not read-write`, `home directory not writable`, `fstab generator did not link systemd-remount-fs`, `mount units failed: …` or `rosetta binfmt not registered`. The smoke test boots the clone, flushes, stops and boots it again, and checks both boots; a Kali image once failed only on the second | Keep the `-unverified` image and boot it twice; on the bad boot read `journalctl -b` for the generator and `systemctl --failed`. Kali installs from the live rolling archive, so a new package state is the first suspect: rebuild, and report it if it repeats |
+| `host key changed across a reboot of the same clone` | The guest regenerated its SSH host keys on the second boot (they must be generated once per clone) | Code change in the family's first-boot key generation |
+| `SSH reachable but should be disabled` | `launchctl disable system/com.openssh.sshd` didn't persist | Code change in finalize.sh |
+| `declared service port <p> not reachable` | A package's service (e.g. Juice Shop on 3000) didn't come up within about 3 minutes | Log in and check `systemctl status <service>` |
+| `Screen Sharing (5900) reachable` | Screen Sharing still enabled | Same |
 
-## rhubarbtart CLI
+## Inspecting a failed image
+
+A failed build leaves `rbt-<profile>-<sha>-unverified`. To look inside:
+
+```sh
+tart clone rbt-<profile>-<sha>-unverified debug-1   # keep the evidence untouched
+tart run debug-1                                     # Linux+Rosetta: add --rosetta=rosetta
+# password: Linux -> the final image name's entry (stored before the build)
+security find-generic-password -s RhubarbTart -a rbt-<profile>-<sha> -w
+# macOS -> the vanilla VM's entry
+security find-generic-password -s RhubarbTart -a rbt-<base>-<build>-vanilla -w
+```
+
+Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces the `-unverified` image.
+
+## Clones (rhubarbtart)
 
 | Message | Cause | Fix |
 |---|---|---|
-| `no rhubarb clone named …` | Not created by `rhubarbtart new`, or its record was removed | `rhubarbtart list`; create clones with `rhubarbtart new`. It deliberately won't manage VMs it didn't create |
+| `no rhubarbtart clone named '…' (see `rhubarbtart list`)` | Not created by `rhubarbtart new`, or its record was removed | `rhubarbtart list`; create clones with `rhubarbtart new`. It deliberately won't manage VMs it didn't create |
 | `… is not built on this Mac (./scripts/build.sh P)` | The profile's current image (from its committed lock) doesn't exist | Build it; or `rhubarbtart new NAME --image` an existing verified image |
 | `no keychain password for rbt-…` | Image built on another Mac, or its entry was deleted | Rebuild here |
 | `… must be a regular file owned by you with mode 0600; refusing it` | Record permissions loosened, or a symlink | Check nobody else wrote it; `chmod 600` only if you're sure it's yours, otherwise delete the record and the VM (`tart delete`) |
 | `… is not owned by you` / `must be a real directory` (state dir) | State dir is a symlink or owned by another user | Investigate before changing anything. Point `RHUBARB_STATE_DIR` at a directory you own |
-| `name … does not match its file` / `unexpected keys` / `invalid …` | Corrupted or hand-edited record | Delete the record (`rm ~/Library/Application Support/RhubarbTart/clones/NAME.json`) and the VM; re-create |
+| `name … does not match its file` / `unexpected keys` / `invalid …` | Corrupted or hand-edited record | Delete the record (`rm "$HOME/Library/Application Support/RhubarbTart/clones/NAME.json"`, or under `RHUBARB_STATE_DIR` if you set it) and the VM; re-create |
 | `SSH refused our key …; keeping the image's password` | Key not loaded in `ssh-agent`, or the image was built for other keys | `ssh-add`, then `rhubarbtart reset NAME --same-image` |
 | `SSH not reachable after 2 boots …; keeping the image's password` | The clone's first boot was slow, or an image with no recorded SSH mode has sshd off | Raise `RHUBARB_SSH_WAIT` and `rhubarbtart reset NAME --same-image`; if the image has no SSH keys, rebuild with `RHUBARB_SSH_PUBKEYS` |
 | `image … was built with SSH disabled (RHUBARB_SSH_PUBKEYS unset) …` | The image's provenance records no authorized keys, so sshd is off. Rotation is refused up front (no boot) | Rebuild the image with `RHUBARB_SSH_PUBKEYS=<pubkey file>`; a retry can't help |
@@ -186,3 +168,13 @@ Delete `debug-1` when done. Once the cause is fixed, rebuild; build.sh replaces 
 | `control-plane service not running at …; start it: rhubarbtart serve` | `herdr arm` needs the service socket | Run `./rhubarbtart serve` in another terminal (same `--socket` if you passed one) |
 | `socket path is too long …` / `… exists and is not a socket; refusing to replace it` | `--socket` path over ~100 bytes, or a file already sits at that path | Pass a shorter `--socket`; investigate the existing file before removing it |
 | `… evidence does not verify …` (`evidence verify`, `vault seal`) | The journal or an item changed after it was written (edit, reorder, deletion) | Treat as tampering or corruption. Don't rewrite the journal; report the listed problems |
+
+## Enrollment
+
+| Message | Cause | Fix |
+|---|---|---|
+| `unsupported key type …` (build) | RSA or another key type in the `RHUBARB_SSH_PUBKEYS` file | Use ed25519 or ecdsa-nistp256 (optionally a hardware `-sk` key); see [Your SSH key](using.md#your-ssh-key) |
+| `no keychain item RhubarbTart-enroll/…` | Secret not stored | Add it as shown in `scripts/enroll.sh` (the `-w` prompt keeps it out of argv) |
+| `no keychain password for <name> (for a clone, pass --image …)` | `scripts/enroll.sh` was run directly on a clone that kept the image's password | Use `rhubarbtart enroll NAME …`, which finds the right keychain entry. Running `enroll.sh` directly on an `inherited` clone needs `--image rbt-<profile>-<sha>` |
+| Tailscale on macOS doesn't connect | System extension not approved | Approve it in the VM (System Settings > General > Login Items & Extensions). Once connected, remove the key: `sudo defaults delete /Library/Preferences/io.tailscale.ipn.macsys AuthKey` |
+| WARP doesn't register | Service token lacks Service Auth enrollment rights, or wrong `--org` | Fix it in the Cloudflare dashboard; re-run enroll |

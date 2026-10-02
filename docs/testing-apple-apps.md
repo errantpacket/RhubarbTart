@@ -8,7 +8,7 @@ out, shows how RhubarbTart addresses each, and names the one it cannot solve (vi
 | A Mac is hard to return to a known-clean state | Work in a **disposable clone**; the sealed image is never booted, and `reset` gives a fresh copy of the image |
 | Test results depend on what was installed | The image is built from **pinned, verified inputs** and named by their hash, so you can state exactly what the test machine contained |
 | Repeating a test from an identical start | Re-clone the same image, or re-provision an engagement; every run starts from the same recorded baseline |
-| Isolating untrusted apps and separating clients | Each test in its own clone with its **own credentials**; clones can't reach each other; an engagement's links are the only path between its clones |
+| Isolating untrusted apps and separating clients | Each test in its own clone with its **own credentials** (by default, for images with key SSH); clones can't reach each other; an engagement's links are the only path between its clones |
 | Hardening must be realistic, not altered | SIP, Gatekeeper and the firewall stay **on**; the build toolchain is pinned and verified; the posture is proven from outside before the image is named |
 | Several macOS versions to cover | A **profile per version** (macOS 26 and 27 today), each pinned and built the same way |
 | iOS can't run in a VM | RhubarbTart gives a clean, reproducible **macOS** host for the iOS toolchain (Xcode, the Simulator, proxies); it does not, and cannot, virtualize iOS |
@@ -54,9 +54,10 @@ Anything you find that was not in the image came from the app under test, not fr
 
 ### Isolation per test and per client
 
-Every clone gets its own random password, kept in the host keychain, never shared between clones
-(see [Using your VMs](using.md)). Clones can't reach each other. An
-[engagement](using.md#engagements) groups one client's clones, and its declared links are the only
+Every clone gets its own random password, kept in the host keychain and never shared between
+clones. That needs an image built with SSH keys; otherwise a clone keeps the image's password,
+and `rhubarbtart list` shows it as `inherited` (see [Using your VMs](using.md)). Clones can't reach each other. An
+[engagement](engagements.md) groups one client's clones, and its declared links are the only
 path between them. One client's work is one engagement.
 
 ### Realistic, hardened macOS
@@ -84,8 +85,8 @@ is a reproducible, throwaway Mac to run the Simulator and the surrounding toolin
 
 Apple apps lean on backends, so testing usually means watching and shaping traffic. Add an
 intercepting proxy to a profile's tool list (ZAP ships as a package today; others can be added, see
-[Define your own guest](profiles.md)). Run the test's commands in an engagement's clone with
-`rhubarbtart exec`, and each one is journaled as tamper-evident [evidence](using.md#engagements) that
+[Define your own guest](profiles.md#define-your-own-guest)). Run the test's commands in an engagement's clone with
+`rhubarbtart exec`, and each one is journaled as tamper-evident [evidence](engagements.md) that
 you can seal into a signed vault. Engagements do not filter a clone's outbound traffic yet; the
 network control today is that clones can't reach each other.
 

@@ -43,7 +43,7 @@ RhubarbTart is built to answer those questions:
 | **Tested before use** | A new image only gets its final name after a temporary copy of it passes a set of security checks run from outside the VM |
 | **Hardened defaults** | No default passwords, no automatic login, no password-free `sudo` for users ([one narrow Kali exception](docs/trust-model.md#security-posture)), SSH by key only or not at all, firewall on, and no machine or VPN identity shared between copies |
 | **Secrets on the host** | Passwords are stored in your macOS keychain. Every copy gets its own password, and VPN sign-in happens per copy, never inside the image |
-| **Evidence you can hand over** | In an engagement, the commands run through `rhubarbtart exec` and the files collected from clones are kept on your Mac in a hash-chained journal. Seal it into a signed vault that can be checked offline on any machine ([Engagements](docs/using.md#engagements)) |
+| **Evidence you can hand over** | In an engagement, the commands run through `rhubarbtart exec` and the files collected from clones are kept on your Mac in a hash-chained journal. Seal it into a signed vault that can be checked offline on any machine ([Engagements](docs/engagements.md)) |
 | **Configured in JSON** | A guest is defined by a short profile: an OS, a list of tools and a few options |
 
 ![The rhubarbtart-tui Provenance tab for an image: build commit, input and lock hashes, the pinned toolchain and the locked base](docs/images/tui-provenance.webp)
@@ -109,7 +109,7 @@ image came from the sample, not from leftover tools.
 NixOS and Kali give you a fully pinned Linux machine for analysis. macOS guests let you study
 Mac malware on the platform it targets. Clones can't reach each other. An engagement can open an
 explicit link between two of them, and a lab target like Juice Shop has no route out
-([Engagements](docs/using.md#engagements)).
+([Engagements](docs/engagements.md)).
 
 </details>
 
@@ -121,7 +121,7 @@ The agents run under [herdr](https://herdr.dev), a terminal workspace manager fo
 agents. Evidence stays on the host, outside the VMs. You can:
 
 - create and remove a whole set of clones for one scope as an
-  [engagement](docs/using.md#engagements);
+  [engagement](docs/engagements.md);
 - record the commands run in its clones and the files they produce as hash-chained evidence, and
   seal that evidence into a signed, portable vault;
 - start the engagement's agents under herdr with `rhubarbtart herdr arm`. Each agent reaches only
@@ -137,8 +137,9 @@ and running each engagement's agents in their own VM instead of on your Mac. The
 
 ## Quick start
 
-On an Apple silicon Mac running macOS 26 or later. The Kali and NixOS profiles also need
+On an Apple silicon Mac running macOS 26 or later. `kali-research` and `nixos-research` also need
 Rosetta; if it isn't installed, run `softwareupdate --install-rosetta --agree-to-license` first.
+Kali needs about 25 GB of free disk space ([Disk space](docs/reference.md#disk-space)).
 
 ```sh
 # 1. Install the pinned tools into ./.toolchain (no Homebrew, no sudo)
@@ -181,12 +182,14 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/rhubarbtart_ed25519.pub ./scripts/build.sh kali-resea
    **Build** installs the OS from the vendor's installer, adds the tools, and **seals** the guest:
    it applies the hardening and checks that each setting took effect. It then starts a temporary
    copy and tests it from the outside. Only if those tests pass does the image get its final name.
-   A build is a full OS install and can take 15 to 45 minutes, so run it in a separate terminal.
+   A build is a full OS install, so run it in a separate terminal. On an M1 Mac with 8 GB of
+   memory, Kali took about 20 minutes and NixOS under 10. The first macOS build of each version
+   took about 25, plus the download of its 18 to 25 GB restore image.
    `./scripts/build.sh --list` lists the available profiles.
 4. **`rhubarbtart new`** creates a clone and gives it its own password, stored in your keychain.
    `rhubarbtart run` starts it in a window and keeps the terminal until the VM shuts down; add
    `--detach` to get the terminal back. [Using your VMs](docs/using.md) covers `ssh`, `enroll`,
-   `reset`, `rm`, engagements and the dashboard.
+   `reset`, `rm` and the dashboard.
 
 </details>
 
@@ -208,7 +211,7 @@ Rosetta enabled can still run x86_64 Linux programs. If none of these fit, you c
 
 A fifth profile, `juiceshop-target`, is a lab target rather than a workstation: a NixOS guest that
 runs OWASP Juice Shop on port 3000 with no route out. The `juiceshop-lab` engagement pairs it with
-a Kali attacker ([Engagements](docs/using.md#engagements)).
+a Kali attacker ([Engagements](docs/engagements.md)).
 
 <details>
 <summary><b>Which one should I pick?</b></summary>
@@ -237,10 +240,10 @@ flowchart TD
 
 ## Documentation
 
-The [documentation index](docs/README.md) lists every page: guides, reference pages and the
-design records. The same pages are published as a searchable site at
-[errantpacket.github.io/RhubarbTart](https://errantpacket.github.io/RhubarbTart/). If you're new, start with [Key concepts](docs/concepts.md), then
-[Using your VMs](docs/using.md).
+The documentation is published as a searchable site at
+[errantpacket.github.io/RhubarbTart](https://errantpacket.github.io/RhubarbTart/), built from
+the [`docs/`](docs/README.md) folder. If you're new, start with the
+[Quick start](docs/quickstart.md) and [Key concepts](docs/concepts.md).
 
 Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). Reporting security issues:
 [`SECURITY.md`](SECURITY.md).

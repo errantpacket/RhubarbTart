@@ -8,7 +8,7 @@ one subdirectory per tool, at the exact `path` named in `config/packages/<id>.js
 vendor/<id>/<file>          e.g. vendor/acme-agent/AcmeAgent.pkg
 ```
 
-**These files are never committed.** `.gitignore` excludes `vendor/**/*.pkg` and `vendor/**/*.cer`
+**These files are never committed.** `.gitignore` excludes `vendor/**/*.pkg`, `vendor/**/*.dmg` and `vendor/**/*.cer`
 because tenant installers are often licensed and always host-specific. Only this README is tracked.
 
 ## Adding one

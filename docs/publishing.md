@@ -9,7 +9,7 @@ New to the terms? See [Key concepts](concepts.md#sharing-images-optional).
 
 | Piece | What it is |
 |---|---|
-| `scripts/registry.sh start\|stop\|status` | A private OCI registry ([zot](https://zotregistry.dev), pinned in `.toolchain`) listening on **127.0.0.1 only**, port 5780 (`RHUBARB_REGISTRY_PORT` changes it). It stores images under the git-ignored `cache/registry/` |
+| `scripts/registry.sh start\|stop\|status` | A private OCI registry ([zot](https://zotregistry.dev), pinned in `config/toolchain.env` and installed into `.toolchain/`) listening on **127.0.0.1 only**, port 5780 (`RHUBARB_REGISTRY_PORT` changes it). It stores images under the git-ignored `cache/registry/` |
 | `scripts/signing-key.sh init\|status` | Creates the **cosign** key pair once. The private key and its passphrase live only in your macOS keychain; the public key is committed at `config/keys/rhubarb-cosign.pub` |
 | `scripts/publish.sh publish <image>` | Pushes a smoke-passed image, signs it, attaches its provenance record as a signed attestation, verifies the result, and records `out/<image>.published.json` |
 | `scripts/publish.sh verify <ref@digest>` | Checks a published image's signature and provenance against the public key |
@@ -73,17 +73,15 @@ images, and only from a registry**, which is why it needs publishing first.
 
 ```sh
 ./scripts/registry.sh stop
-rm -rf cache/registry out/*.published.json      # the registry's storage + its publication records
+rm -rf cache/registry out/*.published.json      # the registry's storage (under RHUBARB_CACHE) + its publication records
 ```
 
 Published images can be recreated any time with `publish.sh publish`. The signing key stays in the
 keychain for next time. The same key also signs sealed evidence vaults
-([Using your VMs](using.md#engagements)).
+([Engagements and evidence](engagements.md)).
 
 </details>
 
 **Not yet supported:** remote registries that require a login ([#74](https://github.com/errantpacket/RhubarbTart/issues/74)).
 `RHUBARB_REGISTRY` can point at another registry, but the digest lookup after pushing doesn't
 authenticate yet, and `--from-registry` assumes the image was built on this Mac.
-
-← back to the [README](https://github.com/errantpacket/RhubarbTart/blob/main/README.md)

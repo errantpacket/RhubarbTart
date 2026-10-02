@@ -29,6 +29,9 @@ release that built it (`rhubarbtart_version`).
   install command instead of a smoke-test timeout on a Mac without Rosetta (#158, #160).
 
 ### Changed
+- New design record `docs/IOS-PLAN.md`: iOS app testing on macOS guests, what the Simulator covers
+  compared with a device, the design for Xcode and the Simulator as verified inputs, and the
+  roadmap (#176).
 - Testing macOS and iOS apps: an iPhone can't be passed to a VM over USB at all (the framework
   refuses it), not only because Tart lacks support; wireless debugging is the route being
   evaluated (#172).

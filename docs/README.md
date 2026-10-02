@@ -53,7 +53,7 @@ The source, issues and releases are on
 | [Troubleshooting](troubleshooting.md) | Build and clone error messages, their causes and fixes |
 | [Development](development.md) | Changing the code safely: `check.sh`, testing without a Mac, the Claude Code skills |
 
-The design records behind the project (the plan, the interface and engagement plans, and the
-herdr charter) are kept in the repository's
+The design records behind the project (the plan, the interface and engagement plans, the herdr
+charter, and the iOS testing plan) are kept in the repository's
 [`docs/` folder](https://github.com/errantpacket/RhubarbTart/tree/main/docs), not on this site.
 They record plans and decisions; these pages describe what is built.

@@ -56,12 +56,53 @@ Useful options:
 - Rosetta, for the Linux profiles that run x86_64 programs (`nixos-research`, `kali-research`):
   `softwareupdate --install-rosetta --agree-to-license`. A new Mac may not have it. The build
   and `rhubarbtart` check for it and stop with this command if it's missing.
-- About 100–150 GB free per built profile: OS images are 3–20 GB and VM disks 60–80 GB (sparse).
+- Free disk space for each profile you build; see [Disk space](#disk-space).
+- 8 GB of memory is enough. Every build and test in these docs ran on an M1 Mac with 8 GB, with
+  guests set to the bases' default of 8 GB.
 - `gpg` on whichever machine resolves NixOS/Kali profiles or runs `toolchain-pin`. Any OS works.
 - Licensing: RhubarbTart is FSL-1.1-ALv2 ([LICENSE.md](https://github.com/errantpacket/RhubarbTart/blob/main/LICENSE.md)). Tart 2.38.0 is also
   FSL-1.1-ALv2 (© OpenAI), so check your use is a "Permitted Purpose". Chrome and WARP are
   proprietary; NixOS allows them only by name. See [THIRD-PARTY-NOTICES.md](https://github.com/errantpacket/RhubarbTart/blob/main/THIRD-PARTY-NOTICES.md).
 
+
+## Disk space
+
+Measured on an M1 Mac with 8 GB of memory (October 2026). Sizes are what `du` reports; a macOS
+image is a copy-on-write clone of its vanilla VM, so the two together can use less than the sum.
+
+| Item | Size | Kept |
+|---|---|---|
+| macOS restore image (download) | 18 GB (macOS 26), 25 GB (macOS 27) | In `cache/` |
+| macOS vanilla VM | 26 to 27 GB | One per macOS build, shared by every macOS profile on that build |
+| macOS image (`tahoe-research`, `goldengate-research`) | 26 to 29 GB | Per profile |
+| Kali installer (download) · `kali-research` image | 3.7 GB · 18 GB | |
+| NixOS installer (download) · `nixos-research` image · `juiceshop-target` image | 1.7 GB · 10 GB · 4 GB | The installer is shared by NixOS profiles |
+| Tool installers (Chrome, ZAP, WARP and so on) | Under 1 GB per profile | In `cache/` |
+
+So plan for about 25 GB for Kali, 12 GB for NixOS, 70 to 85 GB for the first macOS profile on a
+macOS version, and about 30 GB for each further macOS profile on the same version. A clone
+starts as a copy-on-write copy of its image, using almost no space, and grows as you use it, up
+to the profile's disk size (60 to 80 GB; 40 GB for `juiceshop-target`). The smoke test's clone is
+deleted after each build.
+
+Nothing is deleted for you: `rhubarbtart` never deletes images. Space builds up from:
+
+- **Outdated images.** After a lock changes, `./rhubarbtart images` shows the old image as
+  `outdated`. Move its clones on with `rhubarbtart reset NAME`, then delete it with
+  `tart delete rbt-…`. A clone keeps working after its image is deleted; `list` then shows
+  `image-deleted`.
+- **`-unverified` images** left by a failed build. Delete them with `tart delete` once you've
+  looked inside; a new build replaces them anyway.
+- **Old vanilla VMs** (`rbt-<base>-<build>-vanilla`), once no current macOS profile uses that
+  build. The next build of that macOS version reinstalls it.
+- **Old downloads** in `cache/artifacts/`, filed by hash. Delete the folders whose hash no lock
+  in `locks/` mentions. Be careful with the rest: a build downloads what its lock needs again,
+  but some vendors remove old releases (Chrome keeps only recent ones). If a cached file is the
+  only copy left, deleting it means re-resolving the lock before the next build.
+
+Each image also has a keychain entry under its name (service `RhubarbTart`). After deleting an
+image, remove it with `security delete-generic-password -s RhubarbTart -a rbt-…`, unless a clone
+still uses the image's password (`list` shows `inherited`).
 
 ## Toolchain
 

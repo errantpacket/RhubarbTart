@@ -137,8 +137,9 @@ and running each engagement's agents in their own VM instead of on your Mac. The
 
 ## Quick start
 
-On an Apple silicon Mac running macOS 26 or later. The Kali and NixOS profiles also need
+On an Apple silicon Mac running macOS 26 or later. `kali-research` and `nixos-research` also need
 Rosetta; if it isn't installed, run `softwareupdate --install-rosetta --agree-to-license` first.
+Kali needs about 25 GB of free disk space ([Disk space](docs/reference.md#disk-space)).
 
 ```sh
 # 1. Install the pinned tools into ./.toolchain (no Homebrew, no sudo)
@@ -181,7 +182,9 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/rhubarbtart_ed25519.pub ./scripts/build.sh kali-resea
    **Build** installs the OS from the vendor's installer, adds the tools, and **seals** the guest:
    it applies the hardening and checks that each setting took effect. It then starts a temporary
    copy and tests it from the outside. Only if those tests pass does the image get its final name.
-   A build is a full OS install and can take 15 to 45 minutes, so run it in a separate terminal.
+   A build is a full OS install, so run it in a separate terminal. On an M1 Mac with 8 GB of
+   memory, Kali took about 20 minutes and NixOS under 10. The first macOS build of each version
+   took about 25, plus the download of its 18 to 25 GB restore image.
    `./scripts/build.sh --list` lists the available profiles.
 4. **`rhubarbtart new`** creates a clone and gives it its own password, stored in your keychain.
    `rhubarbtart run` starts it in a window and keeps the terminal until the VM shuts down; add

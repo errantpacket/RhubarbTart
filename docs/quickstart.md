@@ -7,10 +7,13 @@ profile; [Guests and profiles](profiles.md) lists them.
 
 - An Apple silicon Mac on macOS 26 or later. The macOS 27 guest needs a macOS 27 host.
 - The Xcode Command Line Tools (`xcode-select --install`). The bootstrap builds GnuPG with them.
-- For the Kali and NixOS profiles, Rosetta:
+- Rosetta, for `kali-research`, `nixos-research` and any profile that sets `"rosetta": true`:
   `softwareupdate --install-rosetta --agree-to-license`. The build checks for it and stops with
   this command if it's missing.
-- About 100 to 150 GB of free disk space per profile you build.
+- Free disk space: about 25 GB for the Kali build on this page, 12 GB for NixOS, and 70 to 85 GB
+  for the first macOS build of a macOS version. Clones need more as you use them.
+  [Disk space](reference.md#disk-space) has the measured sizes and how to reclaim space.
+- Memory: 8 GB is enough. The figures on these pages come from an M1 Mac with 8 GB.
 - A Terminal window on the Mac itself. Builds write passwords to your login keychain, which a
   session started over SSH can't do.
 
@@ -62,7 +65,9 @@ RHUBARB_SSH_PUBKEYS=~/.ssh/rhubarbtart_ed25519.pub ./scripts/build.sh kali-resea
    **Build** installs the OS from the vendor's installer, adds the tools, and **seals** the guest:
    it applies the hardening and checks that each setting took effect. It then starts a temporary
    copy and tests it from the outside. Only if those tests pass does the image get its final name.
-   A build is a full OS install and can take 15 to 45 minutes, so run it in a separate terminal.
+   A build is a full OS install, so run it in a separate terminal. On an M1 Mac with 8 GB of
+   memory, Kali took about 20 minutes and NixOS under 10. The first macOS build of each version
+   took about 25, plus the download of its 18 to 25 GB restore image.
    `./scripts/build.sh --list` lists the available profiles.
 4. **`rhubarbtart new`** creates a clone and gives it its own password, stored in your keychain.
    `rhubarbtart run` starts it in a window and keeps the terminal until the VM shuts down; add

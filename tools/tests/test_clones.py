@@ -753,3 +753,72 @@ def test_rosetta_check() -> None:
             os.environ["PATH"] = saved
             os.environ.pop("TART_RAN", None)
 
+
+def test_vm_start_failure() -> None:
+    """#166: a `tart run` that exits at once (a third macOS VM, a missing VM) is raised with its
+    output instead of being waited out; the VM limit gets a hint; a rotation boot adds how to
+    recover; a log's earlier lines aren't blamed; a clean exit or a VM that keeps running is fine."""
+    from rhubarb import api, hostops
+    from rhubarb.common import VerifyError
+
+    limit = ("The number of VMs exceeds the system limit "
+             "(other running VMs: mac-2, mac-1)")
+    with tempfile.TemporaryDirectory() as tmp:
+        t = Path(tmp)
+        (t / "bin").mkdir()
+        saved = os.environ.get("PATH", "")
+        os.environ["PATH"] = f"{t / 'bin'}:{saved}"
+
+        def err(**kw) -> str:
+            try:
+                hostops.start_vm("mac-3", rosetta=False, headless=True, **kw)
+                return ""
+            except VerifyError as e:
+                return str(e)
+        try:
+            _stub(t / "bin", "tart", f'print({limit!r}, file=sys.stderr); sys.exit(1)\n')
+            e = err()
+            check("start: VM limit -> raised with the limit hint and tart's own text",
+                  "at most two macOS VMs" in e and "mac-2, mac-1" in e and "rhubarbtart stop" in e)
+            log = t / "mac-3.log"
+            log.write_text("Error: an old failure from an earlier run\n")
+            e = err(log=log)
+            check("start: with a log, only this run's output is reported",
+                  "at most two macOS VMs" in e and "earlier run" not in e)
+            _stub(t / "bin", "tart", 'print("Error: VM not found"); sys.exit(2)\n')
+            check("start: any other early exit -> tart's last line",
+                  err() == "mac-3 can't start: tart run exited at once (Error: VM not found)")
+            _stub(t / "bin", "tart", "sys.exit(0)\n")
+            check("start: a clean exit is not an error", err() == "")
+            _stub(t / "bin", "tart", "time.sleep(30)\n")
+            grace, hostops.START_GRACE = hostops.START_GRACE, 0.5
+            try:
+                p = hostops.start_vm("mac-3", rosetta=False, headless=True)
+                check("start: a VM that keeps running is returned", p.poll() is None)
+                p.kill()
+                p.wait()
+            finally:
+                hostops.START_GRACE = grace
+        finally:
+            os.environ["PATH"] = saved
+
+    rec = {"name": "mac-3", "image": "rbt-tahoe-research-000000000000", "rosetta": False,
+           "password_account": "rbt-tahoe-research-000000000000", "family": "macos",
+           "username": "admin"}
+    orig = (api._image_ssh_enabled, api.hostops.keychain_get, api.hostops.start_vm)
+    api._image_ssh_enabled = lambda _img: True
+    api.hostops.keychain_get = lambda _acct: "ImagePassword123"
+
+    def full(*_a, **_k):
+        raise VerifyError(hostops.start_failure("mac-3", limit))
+    api.hostops.start_vm = full
+    try:
+        api._rotate(rec)
+        e = ""
+    except VerifyError as x:
+        e = str(x)
+    finally:
+        api._image_ssh_enabled, api.hostops.keychain_get, api.hostops.start_vm = orig
+    check("rotate: a boot that can't start says the clone keeps the image's password, and how to fix",
+          "at most two macOS VMs" in e and "rhubarbtart reset mac-3 --same-image" in e)
+

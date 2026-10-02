@@ -53,6 +53,10 @@ Useful options:
 ## Requirements
 
 - An Apple silicon Mac on macOS 26 or later. macOS 27 guests need a **macOS 27 host**.
+- At most **two macOS VMs running at once** on one Mac. Apple's licence sets the limit and the
+  Virtualization framework enforces it; Linux VMs don't count, and VMs from other apps (UTM,
+  Parallels) do. A macOS build needs one free slot. `build.sh` and `rhubarbtart` check this and
+  name the VMs that are running.
 - Rosetta, for the Linux profiles that run x86_64 programs (`nixos-research`, `kali-research`):
   `softwareupdate --install-rosetta --agree-to-license`. A new Mac may not have it. The build
   and `rhubarbtart` check for it and stop with this command if it's missing.

@@ -116,13 +116,17 @@ spctl --status | grep -qx 'assessments enabled'
 /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode | grep -Eiq 'stealth mode (is )?(on|enabled)'
 test ! -e /etc/kcpassword
 test -f /Library/RhubarbTart/lock.json
+# Setup Assistant's choices (#63): UTC, en_US, and Country US where Setup Assistant set one.
+case "$(readlink /etc/localtime)" in */zoneinfo/UTC) ;; *) echo "time zone is not UTC" >&2; exit 1 ;; esac
+test "$(defaults read -g AppleLocale)" = en_US
+if c="$(defaults read /Library/Preferences/.GlobalPreferences Country 2>/dev/null)"; then test "$c" = US; fi
 if [ -d "/Applications/Google Chrome.app" ]; then
   test "$(/usr/libexec/PlistBuddy -c 'Print :updatePolicies:com.google.Chrome:UpdateDefault' \
     '/Library/Managed Preferences/com.google.Keystone.plist')" = 2
 fi
 cat /Library/RhubarbTart/installed.txt
 EOF
-    log "ok: SIP, Gatekeeper, firewall on; no auto-login; no passwordless sudo; Chrome auto-update off"
+    log "ok: SIP, Gatekeeper, firewall on; no auto-login; no passwordless sudo; Chrome auto-update off; en_US, UTC"
   else
     "${SSH[@]}" "FAMILY=$FAMILY ROSETTA=${RHUBARB_ROSETTA:-false} bash -s" <<'EOF' || fail "in-guest posture checks failed"
 set -e

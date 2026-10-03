@@ -84,6 +84,29 @@ else
   launchctl disable system/com.openssh.sshd
 fi
 
+# macOS 26 picks UTC in Setup Assistant; macOS 27's provisioning leaves US/Pacific. Use UTC on
+# every guest, as the Linux ones do (#63).
+# systemsetup rejects "UTC" (it accepts only the names it lists), so link the zone file that
+# Setup Assistant itself links on macOS 26.
+say "setting the time zone to UTC"
+ln -sf /var/db/timezone/zoneinfo/UTC /etc/localtime
+
+# --- assertions: Setup Assistant's choices (#63) --------------------------------------------
+# Country and language are picked by typing into searchable lists; a keystroke that lags can
+# select a neighbour (Estonia for "united states") and the build would still pass. macOS 27's
+# provisioning leaves Country and AppleLanguages unset, so those two are checked when present.
+say "asserting locale and time zone"
+[[ "$(readlink /etc/localtime)" == */zoneinfo/UTC ]] || die "time zone is $(readlink /etc/localtime), not UTC"
+rb_locale="$(sudo -u "$RB_USER" defaults read -g AppleLocale 2>/dev/null || true)"
+[[ "$rb_locale" == en_US ]] || die "AppleLocale is '$rb_locale', not en_US (Setup Assistant chose another language or region?)"
+if rb_country="$(defaults read /Library/Preferences/.GlobalPreferences Country 2>/dev/null)"; then
+  [[ "$rb_country" == US ]] || die "Country is '$rb_country', not US (Setup Assistant chose another country?)"
+fi
+if rb_langs="$(sudo -u "$RB_USER" defaults read -g AppleLanguages 2>/dev/null)"; then
+  rb_first="$(tr -d ' \n"()' <<<"$rb_langs" | cut -d, -f1)"
+  [[ "$rb_first" == en-US ]] || die "first language is '$rb_first', not en-US (Setup Assistant chose another language?)"
+fi
+
 # --- assertions: the promised posture --------------------------------------------------
 say "asserting security posture"
 csrutil status | grep -q 'status: enabled\.' || die "SIP is not enabled"

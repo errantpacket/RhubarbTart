@@ -64,7 +64,7 @@ Useful options:
 - 8 GB of memory is enough. Every build and test in these docs ran on an M1 Mac with 8 GB, with
   guests set to the bases' default of 8 GB.
 - `gpg` on whichever machine resolves NixOS/Kali profiles or runs `toolchain-pin`. Any OS works.
-- Licensing: RhubarbTart is FSL-1.1-ALv2 ([LICENSE.md](https://github.com/errantpacket/RhubarbTart/blob/main/LICENSE.md)). Tart 2.38.0 is also
+- Licensing: RhubarbTart is FSL-1.1-ALv2 ([LICENSE.md](https://github.com/errantpacket/RhubarbTart/blob/main/LICENSE.md)). Tart 2.40.1 is also
   FSL-1.1-ALv2 (© OpenAI), so check your use is a "Permitted Purpose". Chrome and WARP are
   proprietary; NixOS allows them only by name. See [THIRD-PARTY-NOTICES.md](https://github.com/errantpacket/RhubarbTart/blob/main/THIRD-PARTY-NOTICES.md).
 

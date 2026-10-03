@@ -29,6 +29,9 @@ release that built it (`rhubarbtart_version`).
   install command instead of a smoke-test timeout on a Mac without Rosetta (#158, #160).
 
 ### Changed
+- Tart 2.38.0 to 2.40.1 (#171). It protects existing VMs during `tart clone`, keeps errors when
+  deleting a running VM, and adds `--net-host`, a host-only network without Softnet, to be
+  evaluated for lab targets (#30).
 - Testing macOS and iOS apps: an iPhone can't be passed to a VM over USB at all (the framework
   refuses it), not only because Tart lacks support; wireless debugging is the route being
   evaluated (#172).

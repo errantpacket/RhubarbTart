@@ -52,13 +52,20 @@ code change that keeps it as strict; see [Development](development.md).
 
 ## macOS stage 1: vanilla install
 
-Stage 1 (macOS) runs with a visible VNC window, not headless. Look at it to see which screen it's stuck on.
+Stage 1 (macOS 26) runs with a visible VNC window, not headless. Look at it to see which screen
+it's stuck on, and don't close or click in it: a closed window stops the build ("VM terminated by
+user action"), and a click can move the keyboard focus the next step relies on.
 
-- **Hangs or times out waiting for SSH**: the Setup Assistant `boot_command` fell out of sync.
-  Usual causes are a slow host (a `<waitNNs>` too short) or Apple changing a screen in a new build.
-  Compare against the latest upstream `vanilla-tahoe.pkr.hcl` in cirruslabs/macos-image-templates,
-  adjust the affected step, and keep the credential typing via `${var.username}` / `${var.password}`.
-  `PACKER_LOG=1` gives detail; the password is masked because the variable is `sensitive`.
+- **`macOS stage 1 didn't finish within …s`**: a Setup Assistant step waits for text on its screen
+  (`<wait 'TEXT'>`) that never appeared. Usually Apple renamed or reordered a screen in a new
+  build. The window shows where it stopped; update that step's text in
+  `packer/macos/vanilla-26.pkr.hcl`. `RHUBARB_STAGE1_DEADLINE` sets the limit (default 3600 s).
+- **Times out waiting for SSH** after "Done typing commands!": the sequence fell out of step on a
+  screen without a text wait, or a screen's layout changed. With `PACKER_LOG=1`, the log shows
+  which `<wait 'TEXT'>` steps were found (the password is masked because the variable is
+  `sensitive`). Compare against the latest upstream `vanilla-tahoe.pkr.hcl` in
+  cirruslabs/macos-image-templates, and keep the credential typing via `${var.username}` /
+  `${var.password}`.
 - `The password must be 20-64 letters or digits…` means `PKR_VAR_password` wasn't set by build.sh.
   Run the build through `scripts/build.sh`, not `packer build` directly.
 - `… exists but its password is not in the keychain` means the vanilla VM predates this keychain

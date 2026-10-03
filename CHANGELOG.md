@@ -13,6 +13,10 @@ release that built it (`rhubarbtart_version`).
 ## [Unreleased]
 
 ### Fixed
+- macOS 26 builds: Setup Assistant automation now waits for each screen to appear before typing,
+  instead of fixed waits. On a busy host the keys could reach the Accessibility screen too early,
+  select "Cognitive", and derail every later step (#63). Stage 1 gets a 60-minute deadline so a
+  renamed screen fails the build instead of hanging it.
 - Clones no longer get the Mac's microphone or a clipboard channel. Tart's defaults pass the host's
   microphone input to the guest and attach a clipboard channel a guest could use with its own
   agent; every VM RhubarbTart starts now uses `--no-audio --no-clipboard`, and `check.sh`

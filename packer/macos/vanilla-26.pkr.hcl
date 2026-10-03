@@ -75,15 +75,17 @@ source "tart-cli" "vanilla" {
     # hello, hola, bonjour, etc.
     "<wait60s><spacebar>",
     # Language: bounce through Italiano so "english" lands on English (US), not English (UK)
-    # Then click the exact "English" entry: typing into a searchable list can land on a
-    # neighbour if a keystroke lags (#63), and the exact entry is only on screen when the search
-    # worked, so a wrong landing waits here until build.sh's stage-1 deadline instead of
-    # continuing with another language.
-    "<wait '^English$'><wait3s>italiano<esc>english<wait3s><click '^English$'><wait2s><enter>",
+    # A wrong language needs no extra check here: the next step waits for English text.
+    "<wait '^English$'><wait3s>italiano<esc>english<enter>",
     # Select Your Country or Region
-    # Type a short prefix, then click the exact entry (#63): "united states" once landed on
-    # Estonia when the search restarted mid-word ("es").
-    "<wait60s><click 'Select Your Country or Region'><wait5s>united<wait3s><click '^United States$'><wait2s><leftShiftOn><tab><leftShiftOff><spacebar>",
+    # Type-to-select can land on a neighbour when a keystroke lags and the search restarts
+    # ("united states" -> Estonia, #63), and a wrong country keeps every later screen in English,
+    # so check where the list landed. No <click> here: the plugin re-reads the screen only while
+    # the text it waits for is absent, so a click can use an outdated picture (it once hit Tonga
+    # after the list scrolled). Instead: "a" puts the list at the top (Afghanistan), then
+    # "Ukraine", absent there, only appears once the list is at United States. If the search
+    # went elsewhere it never appears, and build.sh's stage-1 deadline stops the build.
+    "<wait60s><click 'Select Your Country or Region'><wait5s>a<wait 'Afghanistan'><wait3s>united states<wait 'Ukraine'><wait2s><leftShiftOn><tab><leftShiftOff><spacebar>",
     # From here to account creation each step first waits for text only its own screen shows,
     # then a short settle, instead of a fixed wait (#63). On a busy host a fixed <wait10s> sent
     # the Accessibility keys before that screen had set its focus: Shift-Tab landed on

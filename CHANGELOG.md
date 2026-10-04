@@ -17,6 +17,11 @@ release that built it (`rhubarbtart_version`).
   instead of fixed waits. On a busy host the keys could reach the Accessibility screen too early,
   select "Cognitive", and derail every later step (#63). Stage 1 gets a 60-minute deadline so a
   renamed screen fails the build instead of hanging it.
+- macOS builds check what Setup Assistant chose: the seal asserts UTC, `en_US`, and Country US
+  and first language `en-US` where set, and the smoke test checks the same from outside. A
+  country list that landed on a neighbour (Estonia, Tonga) now fails the build instead of
+  shipping. macOS 27 images were left on US/Pacific by provisioning; every macOS guest now uses
+  UTC, like the Linux ones (#63).
 - Clones no longer get the Mac's microphone or a clipboard channel. Tart's defaults pass the host's
   microphone input to the guest and attach a clipboard channel a guest could use with its own
   agent; every VM RhubarbTart starts now uses `--no-audio --no-clipboard`, and `check.sh`

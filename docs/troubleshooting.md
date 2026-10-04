@@ -66,6 +66,10 @@ user action"), and a click can move the keyboard focus the next step relies on.
   `sensitive`). Compare against the latest upstream `vanilla-tahoe.pkr.hcl` in
   cirruslabs/macos-image-templates, and keep the credential typing via `${var.username}` /
   `${var.password}`.
+- **`Country is 'XX', not US`**, **`AppleLocale is '…', not en_US`** or **`first language is '…'`**
+  (finalize): Setup Assistant's typed language or country selection landed on a neighbour,
+  usually because a keystroke lagged on a busy host. Rebuild with `REBUILD_VANILLA=1`, ideally with
+  nothing else running.
 - `The password must be 20-64 letters or digits…` means `PKR_VAR_password` wasn't set by build.sh.
   Run the build through `scripts/build.sh`, not `packer build` directly.
 - `… exists but its password is not in the keychain` means the vanilla VM predates this keychain

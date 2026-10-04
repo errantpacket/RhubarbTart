@@ -77,11 +77,12 @@ source "tart-cli" "vanilla" {
     # Language: bounce through Italiano so "english" lands on English (US), not English (UK)
     "<wait30s>italiano<esc>english<enter>",
     # Select Your Country or Region
-    # Type-to-select can land on a neighbour when a keystroke lags ("united states" once went to
-    # Estonia, #63). The selection isn't checked here: <wait 'TEXT'> only works right after a key
-    # that changes the screen (the plugin otherwise works from an old picture, and Tart's VNC
-    # server may send no new one), so finalize.sh asserts Country US instead.
-    "<wait60s><click 'Select Your Country or Region'><wait5s>united states<leftShiftOn><tab><leftShiftOff><spacebar>",
+    # Select Your Country or Region: Setup Assistant pins its suggestion at the top of the list,
+    # already selected (United States, after English (US)), so accept it rather than type. Typing
+    # "united states" into this type-to-select list could restart mid-word when a keystroke lagged
+    # and select Estonia (#63). The stage-1 provisioner below fails the build if the country or
+    # locale isn't US, so a different suggestion is never kept.
+    "<wait60s><click 'Select Your Country or Region'><wait5s><leftShiftOn><tab><leftShiftOff><spacebar>",
     # From here to account creation each step first waits for text only its own screen shows,
     # then a short settle, instead of a fixed wait (#63). On a busy host a fixed <wait10s> sent
     # the Accessibility keys before that screen had set its focus: Shift-Tab landed on
@@ -176,6 +177,12 @@ build {
       "spctl --status | grep -qx 'assessments enabled'",
       "test ! -e /etc/kcpassword",
       "test -z \"$(ls /etc/sudoers.d 2>/dev/null)\"",
+      # Setup Assistant's country and locale (#63): fail here, so Packer discards this VM, rather
+      # than keep a vanilla VM that every later build would inherit.
+      "country=\"$(defaults read /Library/Preferences/.GlobalPreferences Country 2>/dev/null || true)\"",
+      "[ \"$country\" = US ] || { echo \"Setup Assistant chose Country '$country', not US\" >&2; exit 1; }",
+      "locale=\"$(sudo -u '${var.username}' defaults read -g AppleLocale 2>/dev/null || true)\"",
+      "[ \"$locale\" = en_US ] || { echo \"Setup Assistant chose AppleLocale '$locale', not en_US\" >&2; exit 1; }",
       "sw_vers",
     ]
   }

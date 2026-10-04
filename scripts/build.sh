@@ -155,6 +155,13 @@ case "$FAMILY" in
       ((have >= need)) || die "$BASE_ID needs a macOS $need host (this host: $(sw_vers -productVersion))"
     fi
     if [[ "${REBUILD_VANILLA:-0}" == 1 ]] && vm_exists "$BASE_VM"; then tart delete "$BASE_VM"; fi
+    # Stage 1 builds under a temporary name and renames only on success, like -unverified images:
+    # a build killed mid-install must never leave a half-made VM that a later build would reuse.
+    BASE_PARTIAL="$BASE_VM-partial"
+    if vm_exists "$BASE_PARTIAL"; then
+      log "removing $BASE_PARTIAL left by an interrupted build"
+      tart delete "$BASE_PARTIAL"
+    fi
     if vm_exists "$BASE_VM"; then
       PKR_VAR_password="$(keychain_get "$BASE_VM")" \
         || die "$BASE_VM exists but its password is not in the keychain; rerun with REBUILD_VANILLA=1"
@@ -168,7 +175,7 @@ case "$FAMILY" in
       if [[ "$SETUP" == provisioning ]]; then
         write_password_file "$PKR_VAR_password"
         PKR_VAR_bootstrap_password="$(random_bootstrap)" PKR_VAR_password_file="$PASSWORD_FILE" \
-          packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER"
+          packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_PARTIAL" "$BASE_PACKER"
       else
         # Setup Assistant steps wait for on-screen text (#63) and would wait forever if Apple
         # renamed a screen, so stage 1 gets a deadline. packer stays in the foreground (Ctrl-C
@@ -178,7 +185,7 @@ case "$FAMILY" in
           pkill -TERM -P "$$" -x packer ) &
         watchdog=$!
         rc=0
-        packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER" || rc=$?
+        packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_PARTIAL" "$BASE_PACKER" || rc=$?
         pkill -P "$watchdog" 2>/dev/null || true; kill "$watchdog" 2>/dev/null || true
         if [[ -e "$deadline_flag" ]]; then
           rm -f "$deadline_flag"
@@ -186,6 +193,8 @@ case "$FAMILY" in
         fi
         ((rc == 0)) || exit "$rc"
       fi
+      tart rename "$BASE_PARTIAL" "$BASE_VM"
+      log "stage 1 complete: $BASE_VM"
     fi
     log "building $CANDIDATE from $BASE_VM"
     packer build -var "base_vm=$BASE_VM" -var "vm_name=$CANDIDATE" -var "stage_dir=$STAGE" \

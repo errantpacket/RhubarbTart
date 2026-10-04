@@ -53,21 +53,34 @@ verify_app() { # <id> <app-path> <team_id>
   assert_team "$observed" "$team" "$id"
 }
 
+# The disk image currently attached, if any. The EXIT trap ejects it and removes its mount
+# folder, so a failed check (set -e exits through die) never leaves an image mounted.
+MOUNTED=""
+eject_dmg() {
+  [[ -n "$MOUNTED" ]] || return 0
+  diskutil eject "$MOUNTED" >/dev/null 2>&1 || true
+  rmdir "$MOUNTED" 2>/dev/null || true
+  MOUNTED=""
+}
+trap eject_dmg EXIT
+
 install_dmg_app() { # <id> <file> <team_id> <app-name> <signed>
-  local id=$1 file=$2 team=$3 app=$4 signed=$5 mnt
-  mnt=$(mktemp -d)
-  hdiutil attach -nobrowse -readonly -noautoopen -mountpoint "$mnt" "$file" >/dev/null
+  local id=$1 file=$2 team=$3 app=$4 signed=$5
+  # `diskutil image` replaces the deprecated `hdiutil attach` (macOS 26 and later).
+  MOUNTED=$(mktemp -d)
+  diskutil image attach --mountOptions nobrowse --readOnly --mountPoint "$MOUNTED" "$file" \
+    >/dev/null || die "$id: could not attach $file"
   # signed=0: the app ships no Apple signature; its integrity is the pinned sha256 already
   # checked against SHA256SUMS above. Signed apps additionally get codesign/Team ID/Gatekeeper.
   if [[ "$signed" == 0 ]]; then
-    say "$id: unsigned — integrity from pinned sha256 (no codesign)"
+    say "$id: unsigned, integrity from the pinned sha256 (no codesign)"
   else
-    verify_app "$id" "$mnt/$app" "$team"
+    verify_app "$id" "$MOUNTED/$app" "$team"
   fi
   say "$id: copying $app to /Applications"
   rm -rf "/Applications/$app"
-  ditto "$mnt/$app" "/Applications/$app"
-  hdiutil detach "$mnt" >/dev/null
+  ditto "$MOUNTED/$app" "/Applications/$app"
+  eject_dmg
 }
 
 while IFS=$'\t' read -r id kind file team app signed _more; do

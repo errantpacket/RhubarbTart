@@ -66,6 +66,13 @@ user action"), and a click can move the keyboard focus the next step relies on.
   `sensitive`). Compare against the latest upstream `vanilla-tahoe.pkr.hcl` in
   cirruslabs/macos-image-templates, and keep the credential typing via `${var.username}` /
   `${var.password}`.
+- **`Setup Assistant chose Country 'XX', not US`** (stage 1, macOS 26): the country screen
+  suggested another country. The build accepts Setup Assistant's suggestion instead of typing,
+  and it's normally United States after English (US). Packer discards this vanilla VM; report
+  what the country screen showed.
+- `removing rbt-…-vanilla-partial left by an interrupted build`: a previous build was killed
+  during stage 1. The vanilla VM is built under a `-partial` name and renamed only when stage 1
+  succeeds, so a half-made one is deleted rather than reused.
 - **`Country is 'XX', not US`**, **`AppleLocale is '…', not en_US`** or **`first language is '…'`**
   (finalize): Setup Assistant's typed language or country selection landed on a neighbour,
   usually because a keystroke lagged on a busy host. Rebuild with `REBUILD_VANILLA=1`, ideally with

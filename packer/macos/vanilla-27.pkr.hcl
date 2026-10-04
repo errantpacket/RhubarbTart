@@ -84,6 +84,10 @@ source "tart-cli" "vanilla" {
     ])}",
   ]
 
+  # A fixed pause after `tart create` returns, before the first boot. The plugin documents it as
+  # a workaround for Virtualization.framework's installation still running in the background for
+  # a while after `tart create` finishes. There is no condition to poll for instead; upstream
+  # (cirruslabs/macos-image-templates) uses the same 30s. The only fixed wait in this path.
   create_grace_time  = "30s"
   recovery_partition = "keep"
 }

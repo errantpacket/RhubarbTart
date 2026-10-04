@@ -151,6 +151,9 @@ source "tart-cli" "vanilla" {
   ]
 
   # Virtualization.framework's install sometimes needs a moment to settle.
+  # A fixed pause after `tart create` returns, before the first boot: the plugin's documented
+  # workaround for Virtualization.framework's installation still running in the background for a
+  # while. There is no condition to poll for instead; upstream uses the same 30s.
   create_grace_time = "30s"
 
   # Keep recoveryOS so `softwareupdate` and csrutil remain possible later.

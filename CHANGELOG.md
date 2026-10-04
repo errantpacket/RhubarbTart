@@ -13,6 +13,13 @@ release that built it (`rhubarbtart_version`).
 ## [Unreleased]
 
 ### Fixed
+- macOS 26 builds accept Setup Assistant's suggested country (United States, pinned and selected
+  at the top of the list) instead of typing "united states", which sometimes selected Estonia.
+  Stage 1 now fails if the country or locale isn't US, and the vanilla VM is built under a
+  `-partial` name and renamed only when stage 1 succeeds, so neither a wrong nor a half-made
+  vanilla VM is kept (#181).
+- macOS guests mount disk images with `diskutil image` (`hdiutil attach` is deprecated on macOS 27)
+  and always eject them, even when a check fails (#181).
 - macOS 26 builds: Setup Assistant automation now waits for each screen to appear before typing,
   instead of fixed waits. On a busy host the keys could reach the Accessibility screen too early,
   select "Cognitive", and derail every later step (#63). Stage 1 gets a 60-minute deadline so a

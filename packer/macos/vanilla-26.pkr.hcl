@@ -77,17 +77,26 @@ source "tart-cli" "vanilla" {
     # Language: bounce through Italiano so "english" lands on English (US), not English (UK)
     "<wait30s>italiano<esc>english<enter>",
     # Select Your Country or Region
+    # Type-to-select can land on a neighbour when a keystroke lags ("united states" once went to
+    # Estonia, #63). The selection isn't checked here: <wait 'TEXT'> only works right after a key
+    # that changes the screen (the plugin otherwise works from an old picture, and Tart's VNC
+    # server may send no new one), so finalize.sh asserts Country US instead.
     "<wait60s><click 'Select Your Country or Region'><wait5s>united states<leftShiftOn><tab><leftShiftOff><spacebar>",
+    # From here to account creation each step first waits for text only its own screen shows,
+    # then a short settle, instead of a fixed wait (#63). On a busy host a fixed <wait10s> sent
+    # the Accessibility keys before that screen had set its focus: Shift-Tab landed on
+    # "Cognitive", and every later step hit the wrong screen. <wait 'TEXT'> polls the screen with
+    # Vision text recognition; build.sh puts a deadline on stage 1 in case a screen's text changes.
     # Transfer Your Data to This Mac -> Not now
-    "<wait10s><tab><tab><tab><spacebar><tab><tab><spacebar>",
+    "<wait 'Transfer Your Data'><wait3s><tab><tab><tab><spacebar><tab><tab><spacebar>",
     # Written and Spoken Languages
-    "<wait10s><leftShiftOn><tab><leftShiftOff><spacebar>",
-    # Accessibility
-    "<wait10s><leftShiftOn><tab><leftShiftOff><spacebar>",
+    "<wait 'Written and Spoken Languages'><wait3s><leftShiftOn><tab><leftShiftOff><spacebar>",
+    # Accessibility ("Cognitive" is one of its four categories, shown on no other screen)
+    "<wait 'Cognitive'><wait3s><leftShiftOn><tab><leftShiftOff><spacebar>",
     # Data & Privacy
-    "<wait10s><leftShiftOn><tab><leftShiftOff><spacebar>",
+    "<wait 'Data & Privacy'><wait3s><leftShiftOn><tab><leftShiftOff><spacebar>",
     # Create a Mac Account: full name, account name, password, verify
-    "<wait10s><tab><tab><tab><tab><tab><tab>RhubarbTart<tab>${var.username}<tab>${var.password}<tab>${var.password}<tab><tab><spacebar><tab><tab><spacebar>",
+    "<wait 'Create a Mac Account'><wait3s><tab><tab><tab><tab><tab><tab>RhubarbTart<tab>${var.username}<tab>${var.password}<tab>${var.password}<tab><tab><spacebar><tab><tab><spacebar>",
     # Enable VoiceOver (makes the remaining screens keyboard-navigable)
     "<wait120s><leftAltOn><f5><leftAltOff>",
     # Sign In with Your Apple ID -> Set up later

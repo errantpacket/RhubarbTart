@@ -116,7 +116,7 @@ spctl --status | grep -qx 'assessments enabled'
 /usr/libexec/ApplicationFirewall/socketfilterfw --getstealthmode | grep -Eiq 'stealth mode (is )?(on|enabled)'
 test ! -e /etc/kcpassword
 test -f /Library/RhubarbTart/lock.json
-# Setup Assistant's choices (#63): UTC, en_US, and Country US where Setup Assistant set one.
+# Locale and time zone (#63): UTC, en_US, and Country US where one is set.
 case "$(readlink /etc/localtime)" in */zoneinfo/UTC) ;; *) echo "time zone is not UTC" >&2; exit 1 ;; esac
 test "$(defaults read -g AppleLocale)" = en_US
 if c="$(defaults read /Library/Preferences/.GlobalPreferences Country 2>/dev/null)"; then test "$c" = US; fi

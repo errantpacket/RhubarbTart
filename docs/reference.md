@@ -35,7 +35,6 @@ Useful options:
 | `RHUBARB_USER` | `admin` | Username for the low-level `scripts/ssh.sh` / `enroll.sh` (`rhubarbtart` reads it from the clone's record) |
 | `REBUILD_VANILLA` | `0` | macOS: `1` reinstalls the vanilla VM from the IPSW and **rotates its password**. New macOS builds get a new vanilla VM automatically |
 | `RHUBARB_HEADLESS` | `true` | Build: `false` shows the VM window instead of running headless (watch a build) |
-| `RHUBARB_STAGE1_DEADLINE` | `3600` | Build, macOS 26: seconds stage 1 (the Setup Assistant automation) may take before the build stops. Its steps wait for on-screen text, so a renamed screen would otherwise wait forever |
 | `RHUBARB_NO_COLOR` / `NO_COLOR` | unset | Build: set either to disable Packer's color (Nix writes progress to stderr, which the colored UI paints red) |
 | `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` (elsewhere `$XDG_STATE_HOME/rhubarbtart`) | Where `rhubarbtart` keeps clone records, `events.log`, run and build logs (`logs/`), the evidence store (`evidence/`) and the control-plane socket (`service.sock`) |
 | `RHUBARB_SSH_WAIT` | `180` | Seconds each rotation (`new`/`reset`/`engagement provision`) waits for a clone's SSH **per boot attempt** (up to two boots) before keeping the inherited password |
@@ -53,7 +52,7 @@ Useful options:
 
 ## Requirements
 
-- An Apple silicon Mac on macOS 26 or later. macOS 27 guests need a **macOS 27 host**.
+- An Apple silicon Mac on macOS 26 or later. macOS guests (macOS 27) need a **macOS 27 host**; an older host builds NixOS and Kali guests only.
 - At most **two macOS VMs running at once** on one Mac. Apple's licence sets the limit and the
   Virtualization framework enforces it; Linux VMs don't count, and VMs from other apps (UTM,
   Parallels) do. A macOS build needs one free slot. `build.sh` and `rhubarbtart` check this and
@@ -77,9 +76,9 @@ image is a copy-on-write clone of its vanilla VM, so the two together can use le
 
 | Item | Size | Kept |
 |---|---|---|
-| macOS restore image (download) | 18 GB (macOS 26), 25 GB (macOS 27) | In `cache/` |
+| macOS restore image (download) | 25 GB | In `cache/` |
 | macOS vanilla VM | 26 to 27 GB | One per macOS build, shared by every macOS profile on that build |
-| macOS image (`tahoe-research`, `goldengate-research`) | 26 to 29 GB | Per profile |
+| macOS image (`goldengate-research`) | 26 to 29 GB | Per profile |
 | Kali installer (download) · `kali-research` image | 3.7 GB · 18 GB | |
 | NixOS installer (download) · `nixos-research` image · `juiceshop-target` image | 1.7 GB · 10 GB · 4 GB | The installer is shared by NixOS profiles |
 | Tool installers (Chrome, ZAP, WARP and so on) | Under 1 GB per profile | In `cache/` |

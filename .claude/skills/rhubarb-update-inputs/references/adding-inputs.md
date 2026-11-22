@@ -100,15 +100,14 @@ Then resolve, review the diff (including the new signer) and build.
 
 ## New OS base or release
 
-- **New macOS release, 26.x → 26.y:** that's just a refresh (see SKILL.md).
+- **New macOS release, 27.x → 27.y:** that's just a refresh (see SKILL.md).
 - **New macOS major:**
   1. Add `config/bases/macos-<major>.json`.
-  2. Pick `setup: keystrokes | provisioning`. Provisioning needs a host of that major.
+  2. Set `setup: provisioning` (the only supported value; the keystroke flow was removed in
+     #184). Provisioning needs a host of that major.
   3. Set `packer` to the stage-1 template; `build.sh` uses whatever the base declares.
-     Provisioning bases also need `requires_host_major`, and can reuse `vanilla-27.pkr.hcl` (it's
-     major-agnostic). A keystroke flow needs its own template, re-validated against upstream
-     cirruslabs templates, that takes the same variables as `vanilla-26.pkr.hcl` (build.sh passes
-     `ipsw_path`, `vm_name` and the `PKR_VAR_*` credentials).
+     The base also needs `requires_host_major`, and can reuse `vanilla-27.pkr.hcl` (it's
+     major-agnostic). build.sh passes `ipsw_path`, `vm_name` and the `PKR_VAR_*` credentials.
   4. Re-check the output strings asserted in `guest/macos/finalize.sh` and `scripts/smoke-test.sh`.
 - **New NixOS release:** add `config/bases/nixos-<ver>.json` with the new channel. Nothing else
   to bump: `system.stateVersion` follows the pinned nixpkgs release automatically, which is

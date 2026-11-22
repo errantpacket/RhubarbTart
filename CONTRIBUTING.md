@@ -44,7 +44,7 @@ need `packer` on PATH, and a check whose tool is missing is reported as SKIPPED.
 Much can be validated **without a Mac**: resolvers (`resolve.py plan/resolve --skip-large`), the
 self-tests, and NixOS config evaluation via Docker against the pinned nixpkgs (recipe in the
 `rhubarb-dev` architecture reference). Call out anything that needs Apple hardware as untested in
-your change: Setup Assistant timing, the macOS 27 provisioning path, real installs, `tart ip`.
+your change: installer keystroke timing, the macOS 27 provisioning path, real installs, `tart ip`.
 
 ## Where things go
 

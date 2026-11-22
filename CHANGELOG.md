@@ -12,7 +12,18 @@ release that built it (`rhubarbtart_version`).
 
 ## [Unreleased]
 
+### Removed
+- macOS 26 guests: the `macos-26` base, the `tahoe-research` profile and its lock, the
+  keystroke-driven Setup Assistant template and `RHUBARB_STAGE1_DEADLINE`. macOS 27's provisioning
+  API creates the account without automating Setup Assistant, and keeping the keystroke path
+  reliable cost more than it returned (#63, #180). macOS guests now need a macOS 27 host; an older
+  host builds NixOS and Kali guests. Entries below about macOS 26 describe code that is gone (#184).
+
 ### Fixed
+- The macOS vanilla VM is built under a `-partial` name and renamed only when stage 1 succeeds, so
+  a build killed mid-install never leaves a half-made vanilla VM for the next build to reuse (#181).
+- macOS guests mount disk images with `diskutil image` (`hdiutil attach` is deprecated on macOS 27)
+  and always eject them, even when a check fails (#181).
 - macOS 26 builds: Setup Assistant automation now waits for each screen to appear before typing,
   instead of fixed waits. On a busy host the keys could reach the Accessibility screen too early,
   select "Cognitive", and derail every later step (#63). Stage 1 gets a 60-minute deadline so a

@@ -466,11 +466,11 @@ def test_stacked_clones() -> None:
     from rhubarb import api
     from rhubarb import clones as cl
     from rhubarb.common import VerifyError
-    ref = "127.0.0.1:5780/rhubarbtart/tahoe-research@sha256:" + "a" * 64
+    ref = "127.0.0.1:5780/rhubarbtart/goldengate-research@sha256:" + "a" * 64
     digest = "sha256:" + "b" * 64
-    mac = {"id": "tahoe-research", "family": "macos", "username": "admin", "options": {}}
+    mac = {"id": "goldengate-research", "family": "macos", "username": "admin", "options": {}}
     kali = {"id": "kali-research", "family": "kali", "username": "kaliresearcher", "options": {}}
-    img = "rbt-tahoe-research-edbb1008a6c0"
+    img = "rbt-goldengate-research-edbb1008a6c0"
 
     def raises(label, fn, needle):
         try:
@@ -587,7 +587,7 @@ def test_reset_keeps_engagement() -> None:
 # ---- api.py: pure logic (no tart / keychain / Mac) -----------------------------------------
 # _profile_of / _current_image derive the image identity and current/outdated status; the
 # expected values below are reasoned from the naming contract and the committed locks/, not
-# read back from what this code returned. Locks present: kali/nixos/goldengate; tahoe has none.
+# read back from what this code returned. Locks present: kali/nixos/goldengate/juiceshop.
 
 def test_api_pure() -> None:
     from rhubarb import api
@@ -802,8 +802,8 @@ def test_vm_start_failure() -> None:
         finally:
             os.environ["PATH"] = saved
 
-    rec = {"name": "mac-3", "image": "rbt-tahoe-research-000000000000", "rosetta": False,
-           "password_account": "rbt-tahoe-research-000000000000", "family": "macos",
+    rec = {"name": "mac-3", "image": "rbt-goldengate-research-000000000000", "rosetta": False,
+           "password_account": "rbt-goldengate-research-000000000000", "family": "macos",
            "username": "admin"}
     orig = (api._image_ssh_enabled, api.hostops.keychain_get, api.hostops.start_vm)
     api._image_ssh_enabled = lambda _img: True

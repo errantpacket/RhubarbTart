@@ -52,24 +52,16 @@ code change that keeps it as strict; see [Development](development.md).
 
 ## macOS stage 1: vanilla install
 
-Stage 1 (macOS 26) runs with a visible VNC window, not headless. Look at it to see which screen
-it's stuck on, and don't close or click in it: a closed window stops the build ("VM terminated by
-user action"), and a click can move the keyboard focus the next step relies on.
+Stage 1 installs macOS from the IPSW and creates the account through Apple's provisioning API
+(macOS 27). Nothing is typed into Setup Assistant. macOS 26 guests, which drove Setup Assistant by
+keystrokes, were removed (#184).
 
-- **`macOS stage 1 didn't finish within …s`**: a Setup Assistant step waits for text on its screen
-  (`<wait 'TEXT'>`) that never appeared. Usually Apple renamed or reordered a screen in a new
-  build. The window shows where it stopped; update that step's text in
-  `packer/macos/vanilla-26.pkr.hcl`. `RHUBARB_STAGE1_DEADLINE` sets the limit (default 3600 s).
-- **Times out waiting for SSH** after "Done typing commands!": the sequence fell out of step on a
-  screen without a text wait, or a screen's layout changed. With `PACKER_LOG=1`, the log shows
-  which `<wait 'TEXT'>` steps were found (the password is masked because the variable is
-  `sensitive`). Compare against the latest upstream `vanilla-tahoe.pkr.hcl` in
-  cirruslabs/macos-image-templates, and keep the credential typing via `${var.username}` /
-  `${var.password}`.
 - **`Country is 'XX', not US`**, **`AppleLocale is '…', not en_US`** or **`first language is '…'`**
-  (finalize): Setup Assistant's typed language or country selection landed on a neighbour,
-  usually because a keystroke lagged on a busy host. Rebuild with `REBUILD_VANILLA=1`, ideally with
-  nothing else running.
+  (finalize): the vanilla VM has a locale the build doesn't expect. Rebuild with
+  `REBUILD_VANILLA=1`.
+- `removing rbt-…-vanilla-partial left by an interrupted build`: a previous build was killed
+  during stage 1. The vanilla VM is built under a `-partial` name and renamed only when stage 1
+  succeeds, so a half-made one is deleted instead of reused.
 - `The password must be 20-64 letters or digits…` means `PKR_VAR_password` wasn't set by build.sh.
   Run the build through `scripts/build.sh`, not `packer build` directly.
 - `… exists but its password is not in the keychain` means the vanilla VM predates this keychain
@@ -79,7 +71,7 @@ user action"), and a click can move the keyboard focus the next step relies on.
 
 ### macOS 27 (provisioning API)
 - `<base> needs a macOS 27 host (this host: …)` (build.sh), or Tart's own error about `--provisioning-opts`:
-  the host is older, and there's no workaround. Use a `macos-26` profile or upgrade the host.
+  the host is older, and there's no workaround. Upgrade the host, or build a NixOS or Kali guest.
 - SSH never comes up: the provisioning API didn't create the account. Check `tart run` output in
   the Packer log; confirm Tart ≥ 2.33 (`tart --version`).
 - `bootstrap password still valid`: the rotation didn't take. Treat it as a failure; investigate

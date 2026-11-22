@@ -81,7 +81,6 @@ rbt-<id>-<inputs12>-unverified ─▶ smoke-test.sh (throwaway clone) ─▶ tar
 
 | Family | Stage | How the password gets there |
 |---|---|---|
-| macOS 26 | vanilla | Typed over VNC into Setup Assistant (`boot_command`); final password from the start |
 | macOS 27 | vanilla | Provisioning API gets a random bootstrap password (host argv). Over SSH, `dscl -passwd` sets the final one from an uploaded 0600 file; `dscl -authonly` proves the bootstrap is dead; the guest powers itself off |
 | macOS | apps | Password SSH to the vanilla clone; root via `echo pw \| sudo -S /usr/bin/env …` |
 | NixOS | live ISO | `boot_command` sets a throwaway password for the live `nixos` user. The final password arrives as a 0600 file → `mkpasswd -m yescrypt -s` → `/var/lib/rhubarbtart/password.hash` (outside the store) → `hashedPasswordFile`, with `mutableUsers = false` |

@@ -1,6 +1,6 @@
 ---
 name: rhubarb-build
-description: Build, run, enroll and troubleshoot RhubarbTart guest VMs (Tart + Packer) from their profiles (macOS 26/27, NixOS and Kali). Covers bootstrapping the pinned toolchain, preflight, scripts/build.sh PROFILE, the smoke test, managing clones with the rhubarbtart CLI (new, run, stop, ssh, exec, enroll, list, reset, rm, per-clone passwords, outdated clones), engagements (define, provision, connect, teardown, evidence, vaults), finding passwords in the keychain, Rosetta, VPN/ZTNA enrollment (Tailscale, Cloudflare WARP), and diagnosing failures (Setup Assistant or provisioning hangs, Kali preseed/GRUB, NixOS install, finalize or smoke-test errors, hash/signature/Team ID mismatches, -unverified images). Use this whenever someone wants to make, rebuild, run, clone, reset, remove, connect to or enroll a research VM, or says a build, bootstrap, enrollment or smoke test failed, even if they don't mention Tart or Packer. For designing a guest use rhubarb-profiles; for refreshing versions use rhubarb-update-inputs.
+description: Build, run, enroll and troubleshoot RhubarbTart guest VMs (Tart + Packer) from their profiles (macOS 27, NixOS and Kali). Covers bootstrapping the pinned toolchain, preflight, scripts/build.sh PROFILE, the smoke test, managing clones with the rhubarbtart CLI (new, run, stop, ssh, exec, enroll, list, reset, rm, per-clone passwords, outdated clones), engagements (define, provision, connect, teardown, evidence, vaults), finding passwords in the keychain, Rosetta, VPN/ZTNA enrollment (Tailscale, Cloudflare WARP), and diagnosing failures (macOS provisioning hangs, Kali preseed/GRUB, NixOS install, finalize or smoke-test errors, hash/signature/Team ID mismatches, -unverified images). Use this whenever someone wants to make, rebuild, run, clone, reset, remove, connect to or enroll a research VM, or says a build, bootstrap, enrollment or smoke test failed, even if they don't mention Tart or Packer. For designing a guest use rhubarb-profiles; for refreshing versions use rhubarb-update-inputs.
 ---
 
 # Building and running RhubarbTart guests
@@ -76,7 +76,7 @@ Built images are templates. All work happens in clones managed by `./rhubarbtart
 ./rhubarbtart images                              # built images, current vs outdated per profile
 ./rhubarbtart new web-1 --profile kali-research   # clone + per-clone password rotation (--no-rotate keeps the image's)
 ./rhubarbtart new web-2 --image rbt-<profile>-<sha>   # clone a specific verified image
-./rhubarbtart new mac-1 --profile tahoe-research --from-registry  # macOS only: stacked on the verified registry copy (#31)
+./rhubarbtart new mac-1 --profile goldengate-research --from-registry  # macOS only: stacked on the verified registry copy (#31)
 ./rhubarbtart run web-1 [--headless] [--detach]   # applies Rosetta etc. from the record
 ./rhubarbtart stop web-1                          # stop a running clone (VM and record stay)
 ./rhubarbtart ssh web-1 [-- CMD]

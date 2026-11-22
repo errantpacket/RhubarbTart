@@ -38,6 +38,9 @@ release that built it (`rhubarbtart_version`).
   install command instead of a smoke-test timeout on a Mac without Rosetta (#158, #160).
 
 ### Changed
+- Tart 2.40.1 to 2.42.0 (#186). `tart stop` no longer fails when the VM exits just before it is
+  killed, listing no longer fails when a VM is deleted during the lookup, and progress output is
+  plain lines when it isn't going to a terminal, which shortens build logs.
 - Tart 2.38.0 to 2.40.1 (#171). It protects existing VMs during `tart clone`, keeps errors when
   deleting a running VM, and adds `--net-host`, a host-only network without Softnet, to be
   evaluated for lab targets (#30).

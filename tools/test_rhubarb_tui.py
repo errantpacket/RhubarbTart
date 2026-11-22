@@ -47,7 +47,7 @@ MOCK_IMAGES = [
               kind="image", status="current", clones=2),
     api.Image(name="rbt-nixos-research-fedcba987654", profile="nixos-research",
               kind="image", status="outdated", clones=0),
-    api.Image(name="macos-tahoe-vanilla", profile="-", kind="vanilla",
+    api.Image(name="macos-goldengate-vanilla", profile="-", kind="vanilla",
               status="vanilla", clones=0),
 ]
 
@@ -745,7 +745,7 @@ def _test_guard() -> None:
             check(label, True)
 
     refuses("guard refuses a built image (rbt-*)", "rbt-kali-research-cc4479ae7492")
-    refuses("guard refuses a vanilla precursor", "macos-tahoe-vanilla")
+    refuses("guard refuses a vanilla precursor", "macos-goldengate-vanilla")
     refuses("guard refuses an unverified precursor", "rbt-kali-research-cc4479ae7492-unverified")
     refuses("guard refuses an empty target", "")
     check("guard allows a managed clone name", actions.require_clone("work-1") == "work-1")
@@ -1020,7 +1020,7 @@ async def _action_writes() -> None:
         await pilot.pause()
 
         # Non-clone guard blocks the destructive reset before any modal appears.
-        app.dispatch_action(reset_mod, name="macos-tahoe-vanilla")
+        app.dispatch_action(reset_mod, name="macos-goldengate-vanilla")
         await pilot.pause()
         check("reset: non-clone guard refuses a vanilla target (no modal, no api.reset)",
               not isinstance(app.screen, ConfirmScreen) and reset_calls == [])

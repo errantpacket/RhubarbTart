@@ -5,7 +5,7 @@ profile; [Guests and profiles](profiles.md) lists them.
 
 ## Requirements
 
-- An Apple silicon Mac on macOS 26 or later. The macOS 27 guest needs a macOS 27 host.
+- An Apple silicon Mac on macOS 26 or later. The macOS guest (macOS 27) needs a macOS 27 host; on an older host, build the NixOS and Kali guests.
 - The Xcode Command Line Tools (`xcode-select --install`). The bootstrap builds GnuPG with them.
 - Rosetta, for `kali-research`, `nixos-research` and any profile that sets `"rosetta": true`:
   `softwareupdate --install-rosetta --agree-to-license`. The build checks for it and stops with

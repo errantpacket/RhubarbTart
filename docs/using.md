@@ -11,7 +11,7 @@ from a registry in [Publishing and stacked clones](publishing.md).
 ```sh
 ./rhubarbtart images                              # built images; which one is current per profile
 ./rhubarbtart new web-1 --profile kali-research   # clone the current image; give it its OWN password
-./rhubarbtart new mac-1 --profile tahoe-research --from-registry   # macOS: stack on the verified registry copy
+./rhubarbtart new mac-1 --profile goldengate-research --from-registry   # macOS: stack on the verified registry copy
 ./rhubarbtart run web-1                           # GUI (Rosetta applied if the profile uses it)
 ./rhubarbtart ssh web-1                           # key-only SSH, host key pinned per clone
 ./rhubarbtart enroll web-1 tailscale              # VPN identity for this clone only

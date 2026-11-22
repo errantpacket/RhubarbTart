@@ -17,7 +17,7 @@
 
 ---
 
-Describe a guest in a short JSON profile: an OS (macOS 26 or 27, NixOS or Kali) and the tools
+Describe a guest in a short JSON profile: an OS (macOS 27, NixOS or Kali) and the tools
 you need. RhubarbTart downloads the vendor installers and checks each one against a pinned hash
 and, where one exists, the vendor's signature. It then builds a hardened [Tart](https://tart.run)
 VM image from them and tests a temporary copy from outside the VM. You work in disposable clones
@@ -200,8 +200,7 @@ clones, provenance and logs. Inside herdr it uses herdr's colour theme.
 
 | Profile | OS | Tools | Suited to |
 |---|---|---|---|
-| `tahoe-research` | macOS 26 | Chrome, ZAP, WARP, Tailscale | macOS app and client testing on any macOS 26 or newer host |
-| `goldengate-research` | macOS 27 | Chrome, ZAP, WARP, Tailscale | The current macOS release; **needs a macOS 27 host** |
+| `goldengate-research` | macOS 27 | Chrome, ZAP, WARP, Tailscale | macOS app and client testing; **needs a macOS 27 host** |
 | `nixos-research` | NixOS 26.05 | Chrome, ZAP, WARP, Tailscale · XFCE · Rosetta | The most reproducible option: the whole OS is pinned to a single commit |
 | `kali-research` | Kali rolling | Chrome, ZAP, WARP, Tailscale · `kali-linux-default` · XFCE · Rosetta | Kali's standard set of security tools |
 
@@ -209,7 +208,7 @@ All guests are arm64, because Tart runs native guests on Apple silicon. Linux pr
 Rosetta enabled can still run x86_64 Linux programs. If none of these fit, you can
 [define your own guest](docs/profiles.md).
 
-A fifth profile, `juiceshop-target`, is a lab target rather than a workstation: a NixOS guest that
+A fourth profile, `juiceshop-target`, is a lab target rather than a workstation: a NixOS guest that
 runs OWASP Juice Shop on port 3000 with no route out. The `juiceshop-lab` engagement pairs it with
 a Kali attacker ([Engagements](docs/engagements.md)).
 
@@ -220,9 +219,7 @@ a Kali attacker ([Engagements](docs/engagements.md)).
 %%{init: {'theme':'base','fontFamily':'ui-sans-serif, system-ui, -apple-system, Helvetica, Arial, sans-serif','themeVariables':{'primaryColor':'#ffffff','primaryTextColor':'#2b2d42','primaryBorderColor':'#c9184a','lineColor':'#8d99ae','edgeLabelBackground':'#ffffff','fontSize':'13px'},'flowchart':{'curve':'basis','nodeSpacing':45,'rankSpacing':55,'padding':8,'useMaxWidth':true}}}%%
 flowchart TD
     Q{"What are you<br/>testing?"}
-    Q -->|"macOS apps<br/>&amp; clients"| H{"Host on<br/>macOS 27?"}
-    H -->|"yes"| GG["<b>goldengate-research</b><br/><i>macOS 27</i>"]
-    H -->|"no"| TH["<b>tahoe-research</b><br/><i>macOS 26</i>"]
+    Q -->|"macOS apps<br/>&amp; clients"| GG["<b>goldengate-research</b><br/><i>macOS 27, needs a<br/>macOS 27 host</i>"]
     Q -->|"Linux<br/>tooling"| P{"What matters<br/>most?"}
     P -->|"Reproducibility<br/>&amp; audit"| NX["<b>nixos-research</b><br/><i>NixOS 26.05</i>"]
     P -->|"Largest<br/>toolset"| KL["<b>kali-research</b><br/><i>Kali rolling</i>"]
@@ -231,8 +228,8 @@ flowchart TD
     classDef q fill:#fff0f3,stroke:#c9184a,stroke-width:1.5px,color:#2b2d42
     classDef guest fill:#c9184a,stroke:#800f2f,stroke-width:1.5px,color:#ffffff
     classDef own fill:#2b2d42,stroke:#2b2d42,color:#ffffff
-    class Q,H,P q
-    class GG,TH,NX,KL guest
+    class Q,P q
+    class GG,NX,KL guest
     class OWN own
 ```
 
@@ -263,7 +260,7 @@ components keep their own licenses, listed in [`THIRD-PARTY-NOTICES.md`](THIRD-P
 ---
 
 <div align="center">
-<sub>Setup Assistant automation adapted from <a href="https://github.com/cirruslabs/macos-image-templates">cirruslabs/macos-image-templates</a> ·
+<sub>macOS templates started from <a href="https://github.com/cirruslabs/macos-image-templates">cirruslabs/macos-image-templates</a> ·
 VMs run on <a href="https://tart.run">Tart</a> · agents run under <a href="https://herdr.dev">herdr</a> ·
 built with Packer, uv and Nix.</sub>
 </div>

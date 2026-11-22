@@ -1,6 +1,6 @@
 ---
 name: rhubarb-profiles
-description: Design, create and customize RhubarbTart guest profiles, i.e. decide what goes into a security-research VM. Covers choosing the OS base (macOS 26, macOS 27, NixOS, Kali), picking tools from the package catalog and which OS each is available on (Chrome, OWASP ZAP, Cloudflare WARP, Tailscale, the Juice Shop lab target), VM size, username, desktop, Rosetta for x86 binaries, Kali metapackages, and validating the profile file. Use this whenever the user wants a new VM or guest for some kind of research or testing, asks what a guest can contain or which OS to pick, wants to change a profile's tools, options or sizes, or wants to copy or compare profiles. For refreshing versions or pins use rhubarb-update-inputs; for building and running use rhubarb-build.
+description: Design, create and customize RhubarbTart guest profiles, i.e. decide what goes into a security-research VM. Covers choosing the OS base (macOS 27, NixOS, Kali), picking tools from the package catalog and which OS each is available on (Chrome, OWASP ZAP, Cloudflare WARP, Tailscale, the Juice Shop lab target), VM size, username, desktop, Rosetta for x86 binaries, Kali metapackages, and validating the profile file. Use this whenever the user wants a new VM or guest for some kind of research or testing, asks what a guest can contain or which OS to pick, wants to change a profile's tools, options or sizes, or wants to copy or compare profiles. For refreshing versions or pins use rhubarb-update-inputs; for building and running use rhubarb-build.
 ---
 
 # Designing RhubarbTart guest profiles
@@ -14,8 +14,7 @@ valid profile, and be clear about the trade-offs of each choice.
 
 | Base | Pick it when | Trade-offs |
 |---|---|---|
-| `macos-26` | Testing macOS clients/apps; any macOS 26+ host | Setup Assistant automated by keystrokes (timing-sensitive) |
-| `macos-27` | Latest macOS; user has a **macOS 27 host** | Needs that host; cleanest setup (Apple's provisioning API) |
+| `macos-27` | Testing macOS clients/apps; user has a **macOS 27 host** | Needs that host (Apple's provisioning API creates the account). The only macOS base: macOS 26 was removed (#184) |
 | `nixos-26.05` | Reproducibility matters most; declarative, auditable config | Whole OS pinned to one nixpkgs commit; smaller curated toolset than Kali |
 | `kali-rolling` | Broad offensive-security toolset out of the box | Rolling: the ISO and vendor tools are pinned, but Kali-archive packages are "current at build time", with versions recorded in the image |
 

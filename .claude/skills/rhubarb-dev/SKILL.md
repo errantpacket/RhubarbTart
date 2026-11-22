@@ -124,7 +124,7 @@ Then, for the change itself:
      For example, `sudo -S` reads the password byte by byte and leaves the rest of stdin for the
      command it runs.
 5. Report precisely: what you verified (and how) versus what only a real build on the Mac can
-   confirm (keystroke timing, provisioning API, installer flows, sshd/launchd/systemd runtime
+   confirm (VNC keystroke timing on Linux installers, provisioning API, installer flows, sshd/launchd/systemd runtime
    state).
 
 ## Writing docs and skills

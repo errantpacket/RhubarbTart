@@ -26,7 +26,7 @@ flowchart LR
 OS **base**, a list of **packages** (tools), and a few options such as the desktop, VM size,
 username or Rosetta. It's the only file you normally write. See [Define your own guest](profiles.md#define-your-own-guest).
 
-**Base.** The operating system a profile starts from: macOS 26, macOS 27, NixOS or Kali
+**Base.** The operating system a profile starts from: macOS 27, NixOS or Kali
 (`config/bases/*.json`). A base says where the vendor's installer comes from and how it's verified.
 
 **Package.** One tool that can go into a guest, such as Chrome, ZAP, WARP or Tailscale
@@ -77,7 +77,7 @@ yields a new one. An image is a **template**: you never boot it, so it stays exa
 <details>
 <summary><b>How a build gets there: vanilla VM, seal, smoke test, provenance</b></summary>
 
-- **Vanilla VM** (macOS only). A plain macOS install that has been through Setup Assistant
+- **Vanilla VM** (macOS only). A plain macOS install with its account created by Apple's provisioning API
   (`rbt-macos-27-<build>-vanilla`). It's built once per macOS build and reused by later
   rebuilds, which then only add the apps. `REBUILD_VANILLA=1` forces a fresh one.
 - **Re-verification in the guest.** Every staged file is checked against the lock again *inside*

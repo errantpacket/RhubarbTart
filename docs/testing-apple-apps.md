@@ -13,7 +13,7 @@ allows.
 | Repeating a test from an identical start | Re-clone the same image, or re-provision an engagement; every run starts from the same recorded baseline |
 | Isolating untrusted apps and separating clients | Each test in its own clone with its **own credentials** (by default, for images with key SSH); clones can't reach each other; an engagement's links are the only path between its clones |
 | Hardening must be realistic, not altered | SIP, Gatekeeper and the firewall stay **on**; the build toolchain is pinned and verified; the posture is proven from outside before the image is named |
-| Several macOS versions to cover | A **profile per version** (macOS 26 and 27 today), each pinned and built the same way |
+| Several macOS versions to cover | A **profile per version** (macOS 27 today), each pinned and built the same way |
 | iOS can't run in a VM | Not solved yet. No VM can run iOS. Xcode and the Simulator would run in a macOS guest, but they aren't in the package catalog yet ([iOS apps today](#ios-apps-today)) |
 | Apps talk to backends you need to observe | Add intercepting proxies as packages; commands run through an engagement are journaled as evidence and can be sealed into a signed vault |
 
@@ -72,8 +72,9 @@ real, hardened Mac rather than a loosened test rig ([Trust model](trust-model.md
 
 ### Several macOS versions, built the same way
 
-Each macOS version is its own profile (macOS 26 and 27 today, more as Apple ships them), pinned to a
-specific build and produced by the same verified pipeline. Testing across versions is a matter of
+Each macOS version is its own profile (macOS 27 today, more as Apple ships them), pinned to a
+specific build and produced by the same verified pipeline. macOS 26 was removed
+([Profiles](profiles.md)). Testing across versions is a matter of
 picking the profile, not maintaining a rack of hand-configured Macs.
 
 ### Backends and traffic interception

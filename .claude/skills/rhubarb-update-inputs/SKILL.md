@@ -32,8 +32,8 @@ Review against this checklist and summarize it for the user:
 - **Base image:**
   - **macOS:** a newer build of the *same* major; URL on `updates.cdn-apple.com`; `hash_sources`
     lists Apple's CDN and ipsw.me. A new build gets a new vanilla VM automatically (its name
-    includes the build), so no `REBUILD_VANILLA` is needed. Do re-check the keystroke flow (26)
-    on the next build, and delete the old vanilla VM when it's no longer needed.
+    includes the build), so no `REBUILD_VANILLA` is needed. Delete the old vanilla VM when it's
+    no longer needed.
   - **NixOS:** new `release` and `nixpkgs.rev` that belong together (the ISO name contains the
     short rev); `nar_sha256` present.
   - **Kali:** new `version`; `hash_sources` says signed by `827C8569…`.

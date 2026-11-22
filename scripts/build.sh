@@ -147,14 +147,24 @@ write_password_file() { umask 077; printf '%s' "$1" > "$PASSWORD_FILE"; }
 
 case "$FAMILY" in
   macos)
+    # macOS guests are set up by Virtualization.framework's provisioning API, which needs a host
+    # of the base's major version. The keystroke-driven Setup Assistant path (macOS 26) was
+    # removed (#184).
     SETUP="$(json_field setup "$BASE_JSON")"
+    [[ "$SETUP" == provisioning ]] \
+      || die "config/bases/$BASE_ID.json: setup '$SETUP' is not supported (only 'provisioning')"
     BASE_VM="rbt-${BASE_ID}-${OS_BUILD}-vanilla"
-    if [[ "$SETUP" == provisioning ]]; then
-      need="$(json_field requires_host_major "$BASE_JSON")"
-      have="$(sw_vers -productVersion | cut -d. -f1)"
-      ((have >= need)) || die "$BASE_ID needs a macOS $need host (this host: $(sw_vers -productVersion))"
-    fi
+    need="$(json_field requires_host_major "$BASE_JSON")"
+    have="$(sw_vers -productVersion | cut -d. -f1)"
+    ((have >= need)) || die "$BASE_ID needs a macOS $need host (this host: $(sw_vers -productVersion))"
     if [[ "${REBUILD_VANILLA:-0}" == 1 ]] && vm_exists "$BASE_VM"; then tart delete "$BASE_VM"; fi
+    # Stage 1 builds under a temporary name and renames only on success, like -unverified images:
+    # a build killed mid-install must never leave a half-made VM that a later build would reuse.
+    BASE_PARTIAL="$BASE_VM-partial"
+    if vm_exists "$BASE_PARTIAL"; then
+      log "removing $BASE_PARTIAL left by an interrupted build"
+      tart delete "$BASE_PARTIAL"
+    fi
     if vm_exists "$BASE_VM"; then
       PKR_VAR_password="$(keychain_get "$BASE_VM")" \
         || die "$BASE_VM exists but its password is not in the keychain; rerun with REBUILD_VANILLA=1"
@@ -164,28 +174,12 @@ case "$FAMILY" in
       PKR_VAR_password="$(random_password)"
       export PKR_VAR_password
       keychain_put "$BASE_VM" "$PKR_VAR_password"
-      log "installing macOS $OS_BUILD from $IMAGE -> $BASE_VM ($SETUP)"
-      if [[ "$SETUP" == provisioning ]]; then
-        write_password_file "$PKR_VAR_password"
-        PKR_VAR_bootstrap_password="$(random_bootstrap)" PKR_VAR_password_file="$PASSWORD_FILE" \
-          packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER"
-      else
-        # Setup Assistant steps wait for on-screen text (#63) and would wait forever if Apple
-        # renamed a screen, so stage 1 gets a deadline. packer stays in the foreground (Ctrl-C
-        # keeps working); the watchdog sends SIGTERM, which packer handles by cleaning up the VM.
-        deadline_flag="$(mktemp -u)"
-        ( sleep "${RHUBARB_STAGE1_DEADLINE:-3600}"; touch "$deadline_flag"
-          pkill -TERM -P "$$" -x packer ) &
-        watchdog=$!
-        rc=0
-        packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER" || rc=$?
-        pkill -P "$watchdog" 2>/dev/null || true; kill "$watchdog" 2>/dev/null || true
-        if [[ -e "$deadline_flag" ]]; then
-          rm -f "$deadline_flag"
-          die "macOS stage 1 didn't finish within ${RHUBARB_STAGE1_DEADLINE:-3600}s; Setup Assistant may be on a screen whose text the boot_command waits for has changed (look at the VM window; see #63)"
-        fi
-        ((rc == 0)) || exit "$rc"
-      fi
+      log "installing macOS $OS_BUILD from $IMAGE -> $BASE_PARTIAL"
+      write_password_file "$PKR_VAR_password"
+      PKR_VAR_bootstrap_password="$(random_bootstrap)" PKR_VAR_password_file="$PASSWORD_FILE" \
+        packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_PARTIAL" "$BASE_PACKER"
+      tart rename "$BASE_PARTIAL" "$BASE_VM"
+      log "stage 1 complete: $BASE_VM"
     fi
     log "building $CANDIDATE from $BASE_VM"
     packer build -var "base_vm=$BASE_VM" -var "vm_name=$CANDIDATE" -var "stage_dir=$STAGE" \

@@ -6,8 +6,9 @@ terms.
 
 ## Code adapted into this repository
 
-**cirruslabs/macos-image-templates**: MIT License. The macOS Setup Assistant `boot_command`
-keystroke sequence in `packer/macos/*.pkr.hcl` was adapted from this project.
+**cirruslabs/macos-image-templates**: MIT License. The macOS Packer templates in
+`packer/macos/` started from this project's templates. The Setup Assistant `boot_command` keystroke
+sequence adapted from it was removed with macOS 26 support (#184) and remains in the Git history.
 
 ```
 MIT License

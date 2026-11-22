@@ -1,6 +1,6 @@
 # Stage 1 for macOS 27+: vanilla macOS from a locally verified Apple IPSW, with the user
 # account created by Virtualization.framework's guest provisioning API (Tart 2.33+,
-# macOS 27 host AND guest) instead of Setup Assistant keystrokes.
+# macOS 27 host AND guest). Nothing is typed into Setup Assistant.
 #
 # Tart only accepts the provisioning password on its command line (host process list),
 # so the account is provisioned with a random *bootstrap* password that is rotated to

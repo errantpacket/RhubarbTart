@@ -20,8 +20,8 @@ New to the terms? See [Key concepts](concepts.md#sharing-images-optional).
 ```sh
 ./scripts/signing-key.sh init                      # once per publisher; commit the public key
 ./scripts/registry.sh start                        # localhost-only registry
-./scripts/publish.sh publish rbt-tahoe-research-edbb1008a6c0
-./rhubarbtart new mac-1 --profile tahoe-research --from-registry
+./scripts/publish.sh publish rbt-goldengate-research-edbb1008a6c0
+./rhubarbtart new mac-1 --profile goldengate-research --from-registry
 ./rhubarbtart list                                     # IMAGE column: current / outdated / base-missing
 ./rhubarbtart rm mac-1                                 # also frees the pulled base once nothing uses it
 ./scripts/registry.sh stop

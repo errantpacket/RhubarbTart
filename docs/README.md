@@ -1,7 +1,7 @@
 # 🍎 RhubarbTart
 
 RhubarbTart builds security-research VMs for Apple silicon from verified vendor installers. You
-describe a guest in a short JSON profile: an OS (macOS 26 or 27, NixOS or Kali) and the tools you
+describe a guest in a short JSON profile: an OS (macOS 27, NixOS or Kali) and the tools you
 need. RhubarbTart downloads the installers, checks each one against a pinned hash and, where one
 exists, the vendor's signature, and builds a hardened [Tart](https://tart.run) VM image. A
 temporary copy of the image is tested from outside the VM before the image gets its final name.

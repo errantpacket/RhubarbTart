@@ -35,6 +35,7 @@ Useful options:
 | `RHUBARB_USER` | `admin` | Username for the low-level `scripts/ssh.sh` / `enroll.sh` (`rhubarbtart` reads it from the clone's record) |
 | `REBUILD_VANILLA` | `0` | macOS: `1` reinstalls the vanilla VM from the IPSW and **rotates its password**. New macOS builds get a new vanilla VM automatically |
 | `RHUBARB_HEADLESS` | `true` | Build: `false` shows the VM window instead of running headless (watch a build) |
+| `RHUBARB_STAGE1_DEADLINE` | `3600` | Build, macOS 26: seconds stage 1 (the Setup Assistant automation) may take before the build stops. Its steps wait for on-screen text, so a renamed screen would otherwise wait forever |
 | `RHUBARB_NO_COLOR` / `NO_COLOR` | unset | Build: set either to disable Packer's color (Nix writes progress to stderr, which the colored UI paints red) |
 | `RHUBARB_STATE_DIR` | `~/Library/Application Support/RhubarbTart` (elsewhere `$XDG_STATE_HOME/rhubarbtart`) | Where `rhubarbtart` keeps clone records, `events.log`, run and build logs (`logs/`), the evidence store (`evidence/`) and the control-plane socket (`service.sock`) |
 | `RHUBARB_SSH_WAIT` | `180` | Seconds each rotation (`new`/`reset`/`engagement provision`) waits for a clone's SSH **per boot attempt** (up to two boots) before keeping the inherited password |
@@ -64,7 +65,7 @@ Useful options:
 - 8 GB of memory is enough. Every build and test in these docs ran on an M1 Mac with 8 GB, with
   guests set to the bases' default of 8 GB.
 - `gpg` on whichever machine resolves NixOS/Kali profiles or runs `toolchain-pin`. Any OS works.
-- Licensing: RhubarbTart is FSL-1.1-ALv2 ([LICENSE.md](https://github.com/errantpacket/RhubarbTart/blob/main/LICENSE.md)). Tart 2.38.0 is also
+- Licensing: RhubarbTart is FSL-1.1-ALv2 ([LICENSE.md](https://github.com/errantpacket/RhubarbTart/blob/main/LICENSE.md)). Tart 2.40.1 is also
   FSL-1.1-ALv2 (© OpenAI), so check your use is a "Permitted Purpose". Chrome and WARP are
   proprietary; NixOS allows them only by name. See [THIRD-PARTY-NOTICES.md](https://github.com/errantpacket/RhubarbTart/blob/main/THIRD-PARTY-NOTICES.md).
 

@@ -13,6 +13,15 @@ release that built it (`rhubarbtart_version`).
 ## [Unreleased]
 
 ### Fixed
+- macOS 26 builds: Setup Assistant automation now waits for each screen to appear before typing,
+  instead of fixed waits. On a busy host the keys could reach the Accessibility screen too early,
+  select "Cognitive", and derail every later step (#63). Stage 1 gets a 60-minute deadline so a
+  renamed screen fails the build instead of hanging it.
+- macOS builds check what Setup Assistant chose: the seal asserts UTC, `en_US`, and Country US
+  and first language `en-US` where set, and the smoke test checks the same from outside. A
+  country list that landed on a neighbour (Estonia, Tonga) now fails the build instead of
+  shipping. macOS 27 images were left on US/Pacific by provisioning; every macOS guest now uses
+  UTC, like the Linux ones (#63).
 - Clones no longer get the Mac's microphone or a clipboard channel. Tart's defaults pass the host's
   microphone input to the guest and attach a clipboard channel a guest could use with its own
   agent; every VM RhubarbTart starts now uses `--no-audio --no-clipboard`, and `check.sh`
@@ -29,6 +38,9 @@ release that built it (`rhubarbtart_version`).
   install command instead of a smoke-test timeout on a Mac without Rosetta (#158, #160).
 
 ### Changed
+- Tart 2.38.0 to 2.40.1 (#171). It protects existing VMs during `tart clone`, keeps errors when
+  deleting a running VM, and adds `--net-host`, a host-only network without Softnet, to be
+  evaluated for lab targets (#30).
 - New design record `docs/IOS-PLAN.md`: iOS app testing on macOS guests, what the Simulator covers
   compared with a device, the design for Xcode and the Simulator as verified inputs, and the
   roadmap (#176).

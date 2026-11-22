@@ -170,7 +170,21 @@ case "$FAMILY" in
         PKR_VAR_bootstrap_password="$(random_bootstrap)" PKR_VAR_password_file="$PASSWORD_FILE" \
           packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER"
       else
-        packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER"
+        # Setup Assistant steps wait for on-screen text (#63) and would wait forever if Apple
+        # renamed a screen, so stage 1 gets a deadline. packer stays in the foreground (Ctrl-C
+        # keeps working); the watchdog sends SIGTERM, which packer handles by cleaning up the VM.
+        deadline_flag="$(mktemp -u)"
+        ( sleep "${RHUBARB_STAGE1_DEADLINE:-3600}"; touch "$deadline_flag"
+          pkill -TERM -P "$$" -x packer ) &
+        watchdog=$!
+        rc=0
+        packer build -var "ipsw_path=$IMAGE" -var "vm_name=$BASE_VM" "$BASE_PACKER" || rc=$?
+        pkill -P "$watchdog" 2>/dev/null || true; kill "$watchdog" 2>/dev/null || true
+        if [[ -e "$deadline_flag" ]]; then
+          rm -f "$deadline_flag"
+          die "macOS stage 1 didn't finish within ${RHUBARB_STAGE1_DEADLINE:-3600}s; Setup Assistant may be on a screen whose text the boot_command waits for has changed (look at the VM window; see #63)"
+        fi
+        ((rc == 0)) || exit "$rc"
       fi
     fi
     log "building $CANDIDATE from $BASE_VM"

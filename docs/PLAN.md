@@ -39,6 +39,9 @@ drive each one, under an explicit engagement scope, with all evidence captured a
 - Isolation between engagements strong enough that one test cannot see or reach another.
 - Evidence capture and a secure, per-engagement vault outside the VMs.
 
+iOS app testing (Xcode and the Simulator in macOS guests, and physical devices) has its own
+design record, [IOS-PLAN.md](IOS-PLAN.md) (#176).
+
 **Non-goals (explicitly out):**
 
 - **No unauthorized targeting.** The platform refuses to run against anything outside a signed,

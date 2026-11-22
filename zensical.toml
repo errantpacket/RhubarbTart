@@ -93,4 +93,4 @@ pymdownx.superfences.custom_fences = [
 # Zensical doesn't support MkDocs' exclude_docs yet; its own exclude plugin drops these from the
 # site and the search index.
 [project.plugins.exclude]
-glob = ["PLAN.md", "INTERFACE-PLAN.md", "ENGAGEMENT-PLAN.md", "HERDR-CHARTER.md", "history-rewrite.md"]
+glob = ["PLAN.md", "INTERFACE-PLAN.md", "ENGAGEMENT-PLAN.md", "HERDR-CHARTER.md", "IOS-PLAN.md", "history-rewrite.md"]

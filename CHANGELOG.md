@@ -41,6 +41,9 @@ release that built it (`rhubarbtart_version`).
 - Tart 2.38.0 to 2.40.1 (#171). It protects existing VMs during `tart clone`, keeps errors when
   deleting a running VM, and adds `--net-host`, a host-only network without Softnet, to be
   evaluated for lab targets (#30).
+- New design record `docs/IOS-PLAN.md`: iOS app testing on macOS guests, what the Simulator covers
+  compared with a device, the design for Xcode and the Simulator as verified inputs, and the
+  roadmap (#176).
 - Testing macOS and iOS apps: an iPhone can't be passed to a VM over USB at all (the framework
   refuses it), not only because Tart lacks support; wireless debugging is the route being
   evaluated (#172).
